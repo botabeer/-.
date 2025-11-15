@@ -8,7 +8,7 @@ class CompatibilityGame:
     
     def start_game(self):
         return TextSendMessage(
-            text="▪️ لعبة التوافق\n\nاكتب اسمين مفصولين بمسافة\nمثال: أحمد فاطمة"
+            text="▪️ لعبة التوافق\n\naكتب اسمين مفصولين بمسافة\nمثال: أحمد فاطمة"
         )
     
     def check_answer(self, answer, user_id, display_name):
@@ -46,7 +46,7 @@ class CompatibilityGame:
         
         return {
             'response': TextSendMessage(
-                text=f"▪️ نسبة التوافق\n\n{name1} ↔️ {name2}\n\n▫️ {compatibility}%\n\n{message}"
+                text=f"▪️ نسبة التوافق\n\n{name1} ▪️ {name2}\n\n▫️ {compatibility}%\n\n{message}"
             ),
             'points': 5,
             'correct': True,
