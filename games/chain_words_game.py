@@ -108,16 +108,28 @@ class ChainWordsGame:
             winner = sorted_players[0][1]
             all_scores = [(data['name'], data['score']) for uid, data in sorted_players]
             
-            from app import get_winner_card
-            winner_card = get_winner_card(winner['name'], winner['score'], all_scores)
-            
-            return {
-                'points': 0,
-                'correct': False,
-                'won': True,
-                'game_over': True,
-                'winner_card': winner_card
-            }
+            try:
+                import sys
+                import os
+                sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+                from app import get_winner_card
+                winner_card = get_winner_card(winner['name'], winner['score'], all_scores)
+                
+                return {
+                    'points': 0,
+                    'correct': False,
+                    'won': True,
+                    'game_over': True,
+                    'winner_card': winner_card
+                }
+            except:
+                return {
+                    'response': TextSendMessage(text=f"▪️ انتهت اللعبة\n\nالفائز: {winner['name']}\nالنقاط: {winner['score']}"),
+                    'points': 0,
+                    'correct': False,
+                    'won': False,
+                    'game_over': True
+                }
         else:
             return {
                 'response': TextSendMessage(text="انتهت اللعبة"),
