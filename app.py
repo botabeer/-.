@@ -1047,113 +1047,242 @@ def health_check():
 
 @app.route("/callback", methods=['POST'])
 def callback():
+    """
+    معالج Webhook من LINE Platform
+    يجب دائماً إرجاع 200 OK لتجنب إعادة إرسال LINE للطلب
+    """
     signature = request.headers.get('X-Line-Signature')
-    if not signature:
-        logger.warning("طلب بدون توقيع")
-        abort(400)
-    
     body = request.get_data(as_text=True)
     
-    try:
-        handler.handle(body, signature)
-    except InvalidSignatureError:
-        logger.error("توقيع غير صالح")
-        abort(400)
-    except Exception as e:
-        logger.error(f"خطأ في معالجة الحدث: {e}", exc_info=True)
-        log_error('webhook', e, {'body_length': len(body)})
+    # تسجيل الطلب الوارد
+    logger.info(f"استلام webhook - الحجم: {len(body)} بايت")
     
-    return 'OK', 200
+    # التحقق من وجود التوقيع
+    if not signature:
+        logger.warning("طلب بدون توقيع - تم الرفض")
+        # إرجاع 200 لمنع إعادة المحاولة من LINE
+        return jsonify({'status': 'error', 'message': 'Missing signature'}), 200
+    
+    try:
+        # معالجة الحدث
+        handler.handle(body, signature)
+        logger.info("تمت معالجة الحدث بنجاح")
+        return jsonify({'status': 'success'}), 200
+        
+    except InvalidSignatureError as e:
+        # توقيع غير صالح - سجل وأرجع 200
+        logger.error(f"توقيع غير صالح: {e}")
+        log_error('invalid_signature', e, {
+            'body_length': len(body),
+            'has_signature': bool(signature)
+        })
+        return jsonify({'status': 'error', 'message': 'Invalid signature'}), 200
+        
+    except Exception as e:
+        # أي خطأ آخر - سجل وأرجع 200
+        logger.error(f"خطأ في معالجة webhook: {e}", exc_info=True)
+        log_error('webhook_error', e, {
+            'body_length': len(body),
+            'error_type': type(e).__name__
+        })
+        return jsonify({'status': 'error', 'message': 'Internal error'}), 200
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
+    """
+    معالج الرسائل النصية من LINE
+    """
+    # تهيئة المتغيرات
     user_id = None
     text = None
     display_name = None
     game_id = None
     
     try:
+        # استخراج البيانات الأساسية
         user_id = event.source.user_id
         text = event.message.text.strip() if event.message.text else ""
         
-        if not user_id or not text:
+        # التحقق من صحة البيانات
+        if not user_id:
+            logger.warning("محاولة معالجة رسالة بدون user_id")
+            return
+            
+        if not text:
+            logger.warning(f"رسالة فارغة من {user_id[-4:]}")
             return
         
-        ensure_user_exists(user_id)
+        # التأكد من وجود المستخدم في قاعدة البيانات
+        try:
+            ensure_user_exists(user_id)
+        except Exception as e:
+            logger.error(f"خطأ في ensure_user_exists للمستخدم {user_id[-4:]}: {e}")
+            # استمر في المعالجة حتى لو فشل التسجيل
         
+        # فحص معدل الرسائل
         if not check_rate_limit(user_id):
+            logger.warning(f"تجاوز معدل الرسائل: {user_id[-4:]}")
             return
         
-        display_name = get_user_profile_safe(user_id)
+        # جلب اسم المستخدم بطريقة آمنة
+        try:
+            display_name = get_user_profile_safe(user_id)
+        except Exception as e:
+            logger.error(f"خطأ في جلب الاسم: {e}")
+            display_name = f"لاعب_{user_id[-4:]}"
+        
+        # تحديد معرف اللعبة
         game_id = getattr(event.source, 'group_id', user_id)
         
-        logger.info(f"{display_name} ({user_id[-4:]}): {text[:50]}")
+        logger.info(f"رسالة: {display_name} ({user_id[-4:]}): {text[:50]}")
         
+        # التحقق من حالة التسجيل
         with players_lock:
             is_registered = user_id in registered_players
         
-        # الأوامر الأساسية
+        # معالجة الأوامر الأساسية (متاحة للجميع)
         if text in ['البداية', 'ابدأ', 'start', 'البوت']:
-            line_bot_api.reply_message(event.reply_token,
-                FlexSendMessage(alt_text=f"مرحباً {display_name}",
-                    contents=get_welcome_card(display_name),
-                    quick_reply=get_quick_reply()))
+            try:
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    FlexSendMessage(
+                        alt_text=f"مرحباً {display_name}",
+                        contents=get_welcome_card(display_name),
+                        quick_reply=get_quick_reply()
+                    )
+                )
+            except Exception as e:
+                logger.error(f"خطأ في إرسال الترحيب: {e}")
             return
         
         elif text in ['مساعدة', 'help']:
-            line_bot_api.reply_message(event.reply_token,
-                FlexSendMessage(alt_text="المساعدة", 
-                    contents=get_help_carousel(), quick_reply=get_quick_reply()))
+            try:
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    FlexSendMessage(
+                        alt_text="المساعدة",
+                        contents=get_help_carousel(),
+                        quick_reply=get_quick_reply()
+                    )
+                )
+            except Exception as e:
+                logger.error(f"خطأ في إرسال المساعدة: {e}")
             return
         
         elif text in ['انضم', 'تسجيل', 'join']:
             with players_lock:
                 if user_id in registered_players:
-                    line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text=f"أنت مسجل بالفعل يا {display_name}",
-                            quick_reply=get_quick_reply()))
+                    try:
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(
+                                text=f"أنت مسجل بالفعل يا {display_name}",
+                                quick_reply=get_quick_reply()
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(f"خطأ في الرد على التسجيل: {e}")
                 else:
                     registered_players.add(user_id)
-                    line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text=f"تم التسجيل بنجاح\nمرحباً {display_name}", 
-                            quick_reply=get_quick_reply()))
                     logger.info(f"انضم: {display_name}")
+                    try:
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(
+                                text=f"تم التسجيل بنجاح\nمرحباً {display_name}",
+                                quick_reply=get_quick_reply()
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(f"خطأ في تأكيد التسجيل: {e}")
             return
         
         elif text in ['انسحب', 'خروج']:
             with players_lock:
                 if user_id in registered_players:
                     registered_players.remove(user_id)
-                    line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text=f"تم الانسحاب\nنتمنى رؤيتك مرة أخرى",
-                            quick_reply=get_quick_reply()))
                     logger.info(f"انسحب: {display_name}")
+                    try:
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(
+                                text=f"تم الانسحاب\nنتمنى رؤيتك مرة أخرى",
+                                quick_reply=get_quick_reply()
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(f"خطأ في تأكيد الانسحاب: {e}")
                 else:
-                    line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text="أنت غير مسجل", quick_reply=get_quick_reply()))
+                    try:
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(
+                                text="أنت غير مسجل",
+                                quick_reply=get_quick_reply()
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(f"خطأ في الرد على الانسحاب: {e}")
             return
         
         # التحقق من التسجيل للأوامر الأخرى
         if not is_registered:
-            # تجاهل الرسائل العادية من غير المسجلين
-            if text not in ['نقاطي', 'الصدارة', 'إيقاف']:
+            # السماح ببعض الأوامر للزوار
+            if text in ['نقاطي', 'الصدارة']:
+                try:
+                    if text in ['نقاطي']:
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            FlexSendMessage(
+                                alt_text="إحصائياتك",
+                                contents=get_stats_card(user_id, display_name),
+                                quick_reply=get_quick_reply()
+                            )
+                        )
+                    elif text in ['الصدارة']:
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            FlexSendMessage(
+                                alt_text="الصدارة",
+                                contents=get_leaderboard_card(),
+                                quick_reply=get_quick_reply()
+                            )
+                        )
+                except Exception as e:
+                    logger.error(f"خطأ في عرض الإحصائيات: {e}")
                 return
             
-            line_bot_api.reply_message(event.reply_token,
-                TextSendMessage(text=f"يجب التسجيل أولاً\nاكتب: انضم", 
-                    quick_reply=get_quick_reply()))
+            # تجاهل باقي الرسائل من غير المسجلين
+            logger.info(f"تم تجاهل رسالة من غير مسجل: {user_id[-4:]}")
             return
         
+        # معالجة أوامر المسجلين
         if text in ['نقاطي', 'إحصائياتي', 'احصائياتي']:
-            line_bot_api.reply_message(event.reply_token,
-                FlexSendMessage(alt_text="إحصائياتك", 
-                    contents=get_stats_card(user_id, display_name), quick_reply=get_quick_reply()))
+            try:
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    FlexSendMessage(
+                        alt_text="إحصائياتك",
+                        contents=get_stats_card(user_id, display_name),
+                        quick_reply=get_quick_reply()
+                    )
+                )
+            except Exception as e:
+                logger.error(f"خطأ في عرض النقاط: {e}")
             return
         
         elif text in ['الصدارة', 'المتصدرين']:
-            line_bot_api.reply_message(event.reply_token,
-                FlexSendMessage(alt_text="الصدارة", 
-                    contents=get_leaderboard_card(), quick_reply=get_quick_reply()))
+            try:
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    FlexSendMessage(
+                        alt_text="الصدارة",
+                        contents=get_leaderboard_card(),
+                        quick_reply=get_quick_reply()
+                    )
+                )
+            except Exception as e:
+                logger.error(f"خطأ في عرض الصدارة: {e}")
             return
         
         elif text in ['إيقاف', 'stop', 'ايقاف']:
@@ -1161,35 +1290,76 @@ def handle_message(event):
                 if game_id in active_games:
                     game_type = active_games[game_id]['type']
                     del active_games[game_id]
-                    line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text=f"تم إيقاف لعبة {game_type}", quick_reply=get_quick_reply()))
+                    try:
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(
+                                text=f"تم إيقاف لعبة {game_type}",
+                                quick_reply=get_quick_reply()
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(f"خطأ في تأكيد الإيقاف: {e}")
                 else:
-                    return  # تجاهل إذا لم تكن هناك لعبة
+                    # تجاهل إذا لم تكن هناك لعبة نشطة
+                    pass
             return
         
         # الألعاب الترفيهية (بدون نقاط)
         elif text in ['سؤال', 'سوال']:
             if QUESTIONS:
-                line_bot_api.reply_message(event.reply_token,
-                    TextSendMessage(text=random.choice(QUESTIONS), quick_reply=get_quick_reply()))
+                try:
+                    line_bot_api.reply_message(
+                        event.reply_token,
+                        TextSendMessage(
+                            text=random.choice(QUESTIONS),
+                            quick_reply=get_quick_reply()
+                        )
+                    )
+                except Exception as e:
+                    logger.error(f"خطأ في إرسال سؤال: {e}")
             return
         
         elif text in ['تحدي', 'challenge']:
             if CHALLENGES:
-                line_bot_api.reply_message(event.reply_token,
-                    TextSendMessage(text=random.choice(CHALLENGES), quick_reply=get_quick_reply()))
+                try:
+                    line_bot_api.reply_message(
+                        event.reply_token,
+                        TextSendMessage(
+                            text=random.choice(CHALLENGES),
+                            quick_reply=get_quick_reply()
+                        )
+                    )
+                except Exception as e:
+                    logger.error(f"خطأ في إرسال تحدي: {e}")
             return
         
         elif text in ['اعتراف', 'confession']:
             if CONFESSIONS:
-                line_bot_api.reply_message(event.reply_token,
-                    TextSendMessage(text=random.choice(CONFESSIONS), quick_reply=get_quick_reply()))
+                try:
+                    line_bot_api.reply_message(
+                        event.reply_token,
+                        TextSendMessage(
+                            text=random.choice(CONFESSIONS),
+                            quick_reply=get_quick_reply()
+                        )
+                    )
+                except Exception as e:
+                    logger.error(f"خطأ في إرسال اعتراف: {e}")
             return
         
         elif text in ['منشن', 'mention']:
             if MENTION_QUESTIONS:
-                line_bot_api.reply_message(event.reply_token,
-                    TextSendMessage(text=random.choice(MENTION_QUESTIONS), quick_reply=get_quick_reply()))
+                try:
+                    line_bot_api.reply_message(
+                        event.reply_token,
+                        TextSendMessage(
+                            text=random.choice(MENTION_QUESTIONS),
+                            quick_reply=get_quick_reply()
+                        )
+                    )
+                except Exception as e:
+                    logger.error(f"خطأ في إرسال منشن: {e}")
             return
         
         # بدء الألعاب
@@ -1207,10 +1377,19 @@ def handle_message(event):
         if text in games_map:
             game_class, game_type = games_map[text]
             
+            # معالجة خاصة للعبة التوافق
             if text == 'توافق':
                 if CompatibilityGame is None:
-                    line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text="لعبة التوافق غير متوفرة حالياً", quick_reply=get_quick_reply()))
+                    try:
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(
+                                text="لعبة التوافق غير متوفرة حالياً",
+                                quick_reply=get_quick_reply()
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(f"خطأ في الرد على توافق: {e}")
                     return
                 
                 with games_lock:
@@ -1218,6 +1397,233 @@ def handle_message(event):
                         participants = registered_players.copy()
                         participants.add(user_id)
                     game = CompatibilityGame(line_bot_api)
+                    active_games[game_id] = {
+                        'game': game,
+                        'type': 'توافق',
+                        'created_at': datetime.now(),
+                        'participants': participants,
+                        'answered_users': set(),
+                        'last_game': text,
+                        'waiting_for_names': True
+                    }
+                try:
+                    line_bot_api.reply_message(
+                        event.reply_token,
+                        TextSendMessage(
+                            text="▫️ لعبة التوافق\n\nاكتب اسمين مفصولين بمسافة\nنص فقط بدون @ أو رموز\n\nمثال: ميش عبير",
+                            quick_reply=get_quick_reply()
+                        )
+                    )
+                except Exception as e:
+                    logger.error(f"خطأ في بدء لعبة التوافق: {e}")
+                logger.info("بدأت لعبة توافق")
+                return
+            
+            if game_id in active_games:
+                active_games[game_id]['last_game'] = text
+            
+            try:
+                start_game(game_id, game_class, game_type, user_id, event)
+            except Exception as e:
+                logger.error(f"خطأ في بدء لعبة {game_type}: {e}")
+                try:
+                    line_bot_api.reply_message(
+                        event.reply_token,
+                        TextSendMessage(
+                            text="حدث خطأ في بدء اللعبة",
+                            quick_reply=get_quick_reply()
+                        )
+                    )
+                except:
+                    pass
+            return
+        
+        # معالجة الإجابات في الألعاب النشطة
+        if game_id in active_games:
+            game_data = active_games[game_id]
+            
+            # معالجة خاصة للعبة التوافق
+            if game_data.get('type') == 'توافق' and game_data.get('waiting_for_names'):
+                cleaned_text = text.replace('@', '').strip()
+                
+                if '@' in text:
+                    try:
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(
+                                text="اكتب الأسماء بدون @\nمثال: ميش عبير",
+                                quick_reply=get_quick_reply()
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(f"خطأ في الرد على @: {e}")
+                    return
+                
+                names = cleaned_text.split()
+                
+                if len(names) < 2:
+                    try:
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(
+                                text="يجب كتابة اسمين مفصولين بمسافة\nمثال: ميش عبير",
+                                quick_reply=get_quick_reply()
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(f"خطأ في الرد على الأسماء: {e}")
+                    return
+                
+                name1 = names[0].strip()
+                name2 = names[1].strip()
+                
+                if not name1 or not name2:
+                    try:
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(
+                                text="الأسماء يجب أن تكون نصوص صحيحة",
+                                quick_reply=get_quick_reply()
+                            )
+                        )
+                    except Exception as e:
+                        logger.error(f"خطأ في التحقق من الأسماء: {e}")
+                    return
+                
+                game = game_data['game']
+                try:
+                    result = game.check_answer(f"{name1} {name2}", user_id, display_name)
+                    
+                    with games_lock:
+                        game_data['waiting_for_names'] = False
+                        if game_id in active_games:
+                            del active_games[game_id]
+                    
+                    if result and result.get('response'):
+                        response = result['response']
+                        if isinstance(response, TextSendMessage):
+                            response.quick_reply = get_quick_reply()
+                        try:
+                            line_bot_api.reply_message(event.reply_token, response)
+                        except Exception as e:
+                            logger.error(f"خطأ في إرسال نتيجة التوافق: {e}")
+                    return
+                except Exception as e:
+                    logger.error(f"خطأ في لعبة التوافق: {e}")
+                    log_error('compatibility_game', e, {'user': user_id[-4:]})
+                    try:
+                        line_bot_api.reply_message(
+                            event.reply_token,
+                            TextSendMessage(
+                                text="حدث خطأ. حاول مرة أخرى بكتابة: توافق",
+                                quick_reply=get_quick_reply()
+                            )
+                        )
+                    except:
+                        pass
+                    return
+            
+            # معالجة إجابات الألعاب الأخرى
+            if 'answered_users' in game_data and user_id in game_data['answered_users']:
+                # المستخدم أجاب بالفعل على هذا السؤال
+                return
+            
+            game = game_data['game']
+            game_type = game_data['type']
+            
+            try:
+                result = game.check_answer(text, user_id, display_name)
+                
+                if result:
+                    # تسجيل الإجابة الصحيحة
+                    with games_lock:
+                        if result.get('correct', False):
+                            if 'answered_users' not in game_data:
+                                game_data['answered_users'] = set()
+                            game_data['answered_users'].add(user_id)
+                    
+                    # تطبيق نظام النقاط
+                    points = result.get('points', 0)
+                    if game_type not in NO_POINTS_GAMES and points != 0:
+                        try:
+                            update_user_points(
+                                user_id,
+                                display_name,
+                                points,
+                                result.get('won', False),
+                                game_type
+                            )
+                        except Exception as e:
+                            logger.error(f"خطأ في تحديث النقاط: {e}")
+                    
+                    # الانتقال للسؤال التالي
+                    if result.get('next_question', False):
+                        with games_lock:
+                            game_data['answered_users'] = set()
+                        try:
+                            next_q = game.next_question()
+                            if next_q:
+                                if isinstance(next_q, TextSendMessage):
+                                    next_q.quick_reply = get_quick_reply()
+                                line_bot_api.reply_message(event.reply_token, next_q)
+                        except Exception as e:
+                            logger.error(f"خطأ في السؤال التالي: {e}")
+                        return
+                    
+                    # نهاية اللعبة
+                    if result.get('game_over', False):
+                        with games_lock:
+                            if game_id in active_games:
+                                del active_games[game_id]
+                        
+                        try:
+                            if result.get('winner_card'):
+                                winner_card = result['winner_card']
+                                line_bot_api.reply_message(
+                                    event.reply_token,
+                                    FlexSendMessage(
+                                        alt_text="الفائز",
+                                        contents=winner_card,
+                                        quick_reply=get_quick_reply()
+                                    )
+                                )
+                            else:
+                                response = result.get('response', TextSendMessage(text=result.get('message', '')))
+                                if isinstance(response, TextSendMessage):
+                                    response.quick_reply = get_quick_reply()
+                                line_bot_api.reply_message(event.reply_token, response)
+                        except Exception as e:
+                            logger.error(f"خطأ في إرسال نتيجة اللعبة: {e}")
+                        return
+                    
+                    # إرسال الرد
+                    try:
+                        response = result.get('response', TextSendMessage(text=result.get('message', '')))
+                        if isinstance(response, TextSendMessage):
+                            response.quick_reply = get_quick_reply()
+                        elif isinstance(response, list):
+                            for r in response:
+                                if isinstance(r, TextSendMessage):
+                                    r.quick_reply = get_quick_reply()
+                        line_bot_api.reply_message(event.reply_token, response)
+                    except Exception as e:
+                        logger.error(f"خطأ في إرسال الرد: {e}")
+                return
+                
+            except Exception as e:
+                logger.error(f"خطأ معالجة إجابة: {e}")
+                log_error('check_answer', e, {'user': user_id[-4:], 'game': game_type})
+                return
+    
+    except Exception as e:
+        # معالجة أي خطأ غير متوقع
+        logger.error(f"خطأ في handle_message: {e}", exc_info=True)
+        log_error('handle_message', e, {
+            'user_id': user_id[-4:] if user_id else 'Unknown',
+            'text': text[:100] if text else 'Unknown',
+            'display_name': display_name if display_name else 'Unknown'
+        })
+        # لا نرسل رد للمستخدم لتجنب إزعاجه بالأخطاء CompatibilityGame(line_bot_api)
                     active_games[game_id] = {
                         'game': game,
                         'type': 'توافق',
@@ -1371,7 +1777,8 @@ def cleanup_old_games():
         try:
             time.sleep(300)  # كل 5 دقائق
             now = datetime.now()
-                        # حذف الألعاب القديمة
+            
+            # حذف الألعاب القديمة
             to_delete = []
             with games_lock:
                 for game_id, game_data in active_games.items():
@@ -1399,5 +1806,4 @@ def cleanup_old_games():
                 conn.close()
                 if deleted_count > 0:
                     logger.info(f"حذف {deleted_count} مستخدم غير نشط")
-            except Exception as e:
-                logger.error(f"خطأ أثناء حذف المستخدمين غير النشطين: {e}")
+            except Exception
