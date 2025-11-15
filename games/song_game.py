@@ -50,7 +50,7 @@ class SongGame:
     def start_game(self):
         self.current_song = random.choice(self.all_songs)
         self.answered = False
-        return TextSendMessage(text=f"لعبة الأغنية\n\nأغنية: {self.current_song['lyrics']}\n\nمن المغني؟")
+        return TextSendMessage(text=f"🎵 لعبة الأغنية\n\nأغنية:\n{self.current_song['lyrics']}\n\nمن المغني؟")
 
     def check_answer(self, text, user_id, display_name):
         if self.answered:
@@ -60,7 +60,14 @@ class SongGame:
         singer_normalized = self.normalize_text(self.current_song['singer'])
 
         if text in ['لمح', 'تلميح']:
-            return {'correct': False, 'response': TextSendMessage(text=f"تلميح: {self.current_song['lyrics']}")}
+            singer = self.current_song['singer']
+            words = singer.split()
+            word_count = "كلمة واحدة" if len(words) == 1 else "كلمتين"
+            first_letter = singer[0]
+            char_count = len(singer.replace(' ', ''))
+            
+            hint = f"تلميح:\n• يبدأ بحرف: {first_letter}\n• عدد الحروف: {char_count}\n• الاسم مكون من: {word_count}"
+            return {'correct': False, 'response': TextSendMessage(text=hint)}
         
         if text in ['جاوب', 'الجواب', 'الحل']:
             self.answered = True
@@ -68,7 +75,7 @@ class SongGame:
                 'correct': False,
                 'game_over': True,
                 'response': TextSendMessage(
-                    text=f"الإجابة الصحيحة:\n{self.current_song['singer']}\n\nأغنية: {self.current_song['lyrics']}"
+                    text=f"الإجابة الصحيحة:\n{self.current_song['singer']}\n\nأغنية:\n{self.current_song['lyrics']}"
                 )
             }
         
@@ -84,7 +91,7 @@ class SongGame:
                 'won': True,
                 'game_over': True,
                 'response': TextSendMessage(
-                    text=f"إجابة صحيحة يا {display_name}\n+{points} نقطة\n\nالمغني: {self.current_song['singer']}\nأغنية: {self.current_song['lyrics']}"
+                    text=f"✓ إجابة صحيحة يا {display_name}\n+{points} نقطة\n\nالمغني: {self.current_song['singer']}\nأغنية: {self.current_song['lyrics']}"
                 )
             }
         return None
