@@ -7,9 +7,7 @@ class CompatibilityGame:
         self.waiting_for_names = True
     
     def start_game(self):
-        return TextSendMessage(
-            text="▪️ لعبة التوافق\n\naكتب اسمين مفصولين بمسافة\nمثال: أحمد فاطمة"
-        )
+        return TextSendMessage(text="▪️ لعبة التوافق\n\nاكتب اسمين مفصولين بمسافة\nنص فقط بدون رموز\n\nمثال: محمد فاطمة")
     
     def check_answer(self, answer, user_id, display_name):
         if not self.waiting_for_names:
@@ -19,9 +17,7 @@ class CompatibilityGame:
         
         if len(parts) < 2:
             return {
-                'response': TextSendMessage(
-                    text="يجب كتابة اسمين مفصولين بمسافة"
-                ),
+                'response': TextSendMessage(text="▫️ يجب كتابة اسمين مفصولين بمسافة\n\nمثال: محمد فاطمة"),
                 'points': 0,
                 'correct': False,
                 'won': False,
@@ -31,24 +27,25 @@ class CompatibilityGame:
         name1 = parts[0]
         name2 = ' '.join(parts[1:])
         
-        compatibility = random.randint(50, 100)
+        # حساب نسبة التوافق
+        compatibility = random.randint(60, 100)
         
         if compatibility >= 90:
-            message = "توافق مثالي"
-        elif compatibility >= 75:
-            message = "توافق ممتاز"
-        elif compatibility >= 60:
-            message = "توافق جيد"
+            status = "توافق مثالي "
+        elif compatibility >= 80:
+            status = "توافق ممتاز "
+        elif compatibility >= 70:
+            status = "توافق جيد "
         else:
-            message = "توافق متوسط"
+            status = "توافق متوسط "
         
         self.waiting_for_names = False
         
         return {
             'response': TextSendMessage(
-                text=f"▪️ نسبة التوافق\n\n{name1} 🖤 {name2}\n\n▫️ {compatibility}%\n\n{message}"
+                text=f"▪️ نسبة التوافق\n\n{name1} 🖤 {name2}\n\n▫️ {compatibility}%\n\n{status}\n\nملاحظة: هذه اللعبة للتسلية فقط"
             ),
-            'points': 5,
+            'points': 0,  # لا نقاط لهذه اللعبة
             'correct': True,
             'won': True,
             'game_over': True
