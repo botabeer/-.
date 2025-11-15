@@ -3,6 +3,7 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError, LineBotApiError
 from linebot.models import (
     MessageEvent, TextMessage, TextSendMessage,
+    QuickReply, QuickReplyButton, MessageAction,
     FlexSendMessage
 )
 import os
@@ -143,7 +144,17 @@ names_cache_lock = threading.Lock()
 error_log_lock = threading.Lock()
 
 DB_NAME = 'game_scores.db'
-INACTIVE_DAYS = 45  # حذف المستخدمين غير النشطين بعد 45 يوم
+
+# نظام النقاط الجديد
+POINTS_CONFIG = {
+    'correct_answer': 2,
+    'hint_penalty': -1,
+    'show_answer': 0,
+    'skip': 0
+}
+
+# الألعاب التي لا تحسب نقاط
+NO_POINTS_GAMES = ['اختلاف', 'توافق', 'سؤال', 'اعتراف', 'تحدي', 'منشن']
 
 def normalize_text(text):
     if not text:
@@ -168,7 +179,7 @@ def init_db():
         c.execute('''CREATE TABLE IF NOT EXISTS users
                      (user_id TEXT PRIMARY KEY, display_name TEXT,
                       total_points INTEGER DEFAULT 0, games_played INTEGER DEFAULT 0,
-                      wins INTEGER DEFAULT 0, last_active TEXT,
+                      wins INTEGER DEFAULT 0, last_played TEXT,
                       registered_at TEXT DEFAULT CURRENT_TIMESTAMP)''')
         c.execute('''CREATE TABLE IF NOT EXISTS game_history
                      (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT,
@@ -176,7 +187,6 @@ def init_db():
                       played_at TEXT DEFAULT CURRENT_TIMESTAMP,
                       FOREIGN KEY (user_id) REFERENCES users(user_id))''')
         c.execute('''CREATE INDEX IF NOT EXISTS idx_user_points ON users(total_points DESC)''')
-        c.execute('''CREATE INDEX IF NOT EXISTS idx_last_active ON users(last_active)''')
         conn.commit()
         conn.close()
         logger.info("قاعدة البيانات جاهزة")
@@ -185,83 +195,29 @@ def init_db():
 
 init_db()
 
-def update_user_activity(user_id, display_name):
-    """تحديث نشاط المستخدم"""
-    try:
-        conn = get_db_connection()
-        c = conn.cursor()
-        now = datetime.now().isoformat()
-        
-        c.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
-        user = c.fetchone()
-        
-        if user:
-            c.execute('UPDATE users SET last_active = ?, display_name = ? WHERE user_id = ?',
-                     (now, display_name, user_id))
-        else:
-            c.execute('''INSERT INTO users (user_id, display_name, total_points, 
-                         games_played, wins, last_active) VALUES (?, ?, 0, 0, 0, ?)''',
-                     (user_id, display_name, now))
-        
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        logger.error(f"خطأ في تحديث النشاط: {e}")
-        return False
-
-def cleanup_inactive_users():
-    """حذف المستخدمين غير النشطين"""
-    try:
-        conn = get_db_connection()
-        c = conn.cursor()
-        cutoff_date = (datetime.now() - timedelta(days=INACTIVE_DAYS)).isoformat()
-        
-        c.execute('SELECT COUNT(*) FROM users WHERE last_active < ?', (cutoff_date,))
-        count = c.fetchone()[0]
-        
-        if count > 0:
-            c.execute('DELETE FROM users WHERE last_active < ?', (cutoff_date,))
-            c.execute('DELETE FROM game_history WHERE user_id NOT IN (SELECT user_id FROM users)')
-            conn.commit()
-            logger.info(f"تم حذف {count} مستخدم غير نشط")
-        
-        conn.close()
-    except Exception as e:
-        logger.error(f"خطأ في تنظيف المستخدمين: {e}")
-
 def update_user_points(user_id, display_name, points, won=False, game_type=""):
-    """تحديث نقاط المستخدم - نظام النقاط الجديد"""
-    # الألعاب التي لا تحسب نقاط
-    no_points_games = ['اختلاف', 'توافق', 'سؤال', 'اعتراف', 'تحدي', 'منشن']
-    
-    if game_type in no_points_games:
-        points = 0
-    
     try:
         conn = get_db_connection()
         c = conn.cursor()
-        now = datetime.now().isoformat()
-        
         c.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
         user = c.fetchone()
         
         if user:
             c.execute('''UPDATE users SET total_points = ?, games_played = ?, wins = ?, 
-                         last_active = ?, display_name = ? WHERE user_id = ?''',
+                         last_played = ?, display_name = ? WHERE user_id = ?''',
                       (user['total_points'] + points, user['games_played'] + 1,
-                       user['wins'] + (1 if won else 0), now,
+                       user['wins'] + (1 if won else 0), datetime.now().isoformat(),
                        display_name, user_id))
             
             if user['display_name'] != display_name:
                 logger.info(f"تحديث اسم: {user['display_name']} → {display_name}")
         else:
             c.execute('''INSERT INTO users (user_id, display_name, total_points, 
-                         games_played, wins, last_active) VALUES (?, ?, ?, ?, ?, ?)''',
-                      (user_id, display_name, points, 1, 1 if won else 0, now))
+                         games_played, wins, last_played) VALUES (?, ?, ?, ?, ?, ?)''',
+                      (user_id, display_name, points, 1, 1 if won else 0, datetime.now().isoformat()))
             logger.info(f"إضافة مستخدم جديد: {display_name}")
         
-        if game_type and points > 0:
+        if game_type:
             c.execute('''INSERT INTO game_history (user_id, game_type, points, won) 
                          VALUES (?, ?, ?, ?)''', (user_id, game_type, points, 1 if won else 0))
         
@@ -339,8 +295,31 @@ def log_error(error_type, message, details=None):
     except:
         pass
 
+def ensure_user_exists(user_id):
+    try:
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute('SELECT user_id FROM users WHERE user_id = ?', (user_id,))
+        
+        if not c.fetchone():
+            display_name = f"لاعب_{user_id[-4:]}"
+            c.execute('''INSERT INTO users (user_id, display_name, total_points, 
+                         games_played, wins, last_played) 
+                         VALUES (?, ?, 0, 0, 0, ?)''',
+                      (user_id, display_name, datetime.now().isoformat()))
+            conn.commit()
+            logger.info(f"إنشاء سجل جديد: {display_name}")
+        
+        conn.close()
+        return True
+    except Exception as e:
+        logger.error(f"خطأ في ensure_user_exists: {e}")
+        return False
+
 def get_user_profile_safe(user_id):
-    """جلب اسم المستخدم بشكل آمن مع معالجة خطأ 404"""
+    """
+    جلب اسم المستخدم بطريقة آمنة مع معالجة خطأ 404
+    """
     with names_cache_lock:
         if user_id in user_names_cache:
             cached_name = user_names_cache[user_id]
@@ -392,7 +371,7 @@ def get_user_profile_safe(user_id):
         fallback_name = f"لاعب_{user_id[-4:] if user_id else 'xxxx'}"
         
         if e.status_code == 404:
-            logger.warning(f"ملف مستخدم غير موجود (404): {user_id[-4:]}")
+            logger.warning(f"ملف مستخدم غير موجود: {user_id[-4:]}")
         else:
             logger.error(f"خطأ LINE API ({e.status_code}): {e.message}")
         
@@ -423,8 +402,25 @@ def get_user_profile_safe(user_id):
         
         return fallback_name
 
-def get_simple_welcome_card(display_name):
-    """بطاقة ترحيب بسيطة بأسلوب iOS"""
+def get_quick_reply():
+    """أزرار سريعة - iOS Style مبسط"""
+    return QuickReply(items=[
+        QuickReplyButton(action=MessageAction(label="أغنية", text="أغنية")),
+        QuickReplyButton(action=MessageAction(label="لعبة", text="لعبة")),
+        QuickReplyButton(action=MessageAction(label="سلسلة", text="سلسلة")),
+        QuickReplyButton(action=MessageAction(label="أسرع", text="أسرع")),
+        QuickReplyButton(action=MessageAction(label="ضد", text="ضد")),
+        QuickReplyButton(action=MessageAction(label="تكوين", text="تكوين")),
+        QuickReplyButton(action=MessageAction(label="اختلاف", text="اختلاف")),
+        QuickReplyButton(action=MessageAction(label="توافق", text="توافق")),
+        QuickReplyButton(action=MessageAction(label="سؤال", text="سؤال")),
+        QuickReplyButton(action=MessageAction(label="تحدي", text="تحدي")),
+        QuickReplyButton(action=MessageAction(label="اعتراف", text="اعتراف")),
+        QuickReplyButton(action=MessageAction(label="منشن", text="منشن"))
+    ])
+
+def get_welcome_card(display_name):
+    """بطاقة الترحيب - iOS Style نظيف"""
     return {
         "type": "bubble",
         "body": {
@@ -433,75 +429,19 @@ def get_simple_welcome_card(display_name):
             "contents": [
                 {
                     "type": "text",
-                    "text": "بوت الحُوت",
+                    "text": "بوت الألعاب",
                     "size": "xl",
                     "weight": "bold",
                     "color": "#1C1C1E",
                     "align": "center"
-                },
-                {
-                    "type": "text",
-                    "text": "منصة ألعاب تفاعلية",
-                    "size": "sm",
-                    "color": "#8E8E93",
-                    "align": "center",
-                    "margin": "sm"
-                },
-                {
-                    "type": "separator",
-                    "margin": "xl",
-                    "color": "#F2F2F7"
                 },
                 {
                     "type": "text",
                     "text": f"مرحباً {display_name}",
                     "size": "lg",
-                    "weight": "bold",
-                    "color": "#1C1C1E",
+                    "color": "#8E8E93",
                     "align": "center",
-                    "margin": "xl"
-                },
-                {
-                    "type": "box",
-                    "layout": "vertical",
-                    "contents": [
-                        {
-                            "type": "text",
-                            "text": "ابدأ",
-                            "size": "md",
-                            "color": "#1C1C1E",
-                            "weight": "bold",
-                            "action": {"type": "message", "text": "انضم"}
-                        }
-                    ],
-                    "backgroundColor": "#F2F2F7",
-                    "cornerRadius": "12px",
-                    "paddingAll": "16px",
-                    "margin": "xl",
-                    "action": {"type": "message", "text": "انضم"}
-                }
-            ],
-            "backgroundColor": "#FFFFFF",
-            "paddingAll": "24px",
-            "spacing": "md"
-        }
-    }
-
-def get_help_card():
-    """بطاقة مساعدة محسّنة"""
-    return {
-        "type": "bubble",
-        "body": {
-            "type": "box",
-            "layout": "vertical",
-            "contents": [
-                {
-                    "type": "text",
-                    "text": "المساعدة",
-                    "size": "xl",
-                    "weight": "bold",
-                    "color": "#1C1C1E",
-                    "align": "center"
+                    "margin": "lg"
                 },
                 {
                     "type": "separator",
@@ -509,52 +449,135 @@ def get_help_card():
                     "color": "#F2F2F7"
                 },
                 {
-                    "type": "box",
-                    "layout": "vertical",
-                    "contents": [
-                        {
-                            "type": "text",
-                            "text": "▫️ انضم - التسجيل في البوت\n▫️ انسحب - إلغاء التسجيل\n▫️ نقاطي - عرض إحصائياتك\n▫️ الصدارة - أفضل اللاعبين\n▫️ إيقاف - إنهاء اللعبة",
-                            "size": "sm",
-                            "color": "#1C1C1E",
-                            "wrap": True
-                        }
-                    ],
-                    "backgroundColor": "#F2F2F7",
-                    "cornerRadius": "12px",
-                    "paddingAll": "16px",
-                    "margin": "xl"
-                },
-                {
-                    "type": "box",
-                    "layout": "vertical",
-                    "contents": [
-                        {
-                            "type": "text",
-                            "text": "أثناء اللعب:",
-                            "size": "md",
-                            "weight": "bold",
-                            "color": "#1C1C1E",
-                            "margin": "xl"
-                        },
-                        {
-                            "type": "text",
-                            "text": "▫️ لمح - تلميح (-1 نقطة)\n▫️ جاوب - عرض الحل (0 نقاط)",
-                            "size": "sm",
-                            "color": "#1C1C1E",
-                            "wrap": True,
-                            "margin": "md"
-                        }
-                    ]
+                    "type": "text",
+                    "text": "استخدم الأزرار أدناه للعب",
+                    "size": "sm",
+                    "color": "#8E8E93",
+                    "align": "center",
+                    "margin": "xl",
+                    "wrap": True
                 }
             ],
-            "backgroundColor": "#FFFFFF",
-            "paddingAll": "24px"
+            "paddingAll": "24px",
+            "backgroundColor": "#FFFFFF"
+        },
+        "styles": {
+            "body": {
+                "separator": True
+            }
         }
     }
 
+def get_help_carousel():
+    """دليل الاستخدام - Carousel iOS Style"""
+    bubbles = []
+    
+    # البطاقة الأولى - الأوامر الأساسية
+    bubbles.append({
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": "الأوامر الأساسية",
+                    "size": "lg",
+                    "weight": "bold",
+                    "color": "#1C1C1E"
+                },
+                {
+                    "type": "separator",
+                    "margin": "lg",
+                    "color": "#F2F2F7"
+                },
+                {
+                    "type": "text",
+                    "text": "▫️ انضم - التسجيل في البوت\n▫️ انسحب - إلغاء التسجيل\n▫️ نقاطي - عرض إحصائياتك\n▫️ الصدارة - أفضل اللاعبين\n▫️ إيقاف - إنهاء اللعبة الحالية",
+                    "size": "sm",
+                    "color": "#8E8E93",
+                    "wrap": True,
+                    "margin": "lg"
+                }
+            ],
+            "paddingAll": "20px",
+            "backgroundColor": "#FFFFFF"
+        }
+    })
+    
+    # البطاقة الثانية - أثناء اللعب
+    bubbles.append({
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": "أثناء اللعب",
+                    "size": "lg",
+                    "weight": "bold",
+                    "color": "#1C1C1E"
+                },
+                {
+                    "type": "separator",
+                    "margin": "lg",
+                    "color": "#F2F2F7"
+                },
+                {
+                    "type": "text",
+                    "text": "▫️ لمح - الحصول على تلميح (-1 نقطة)\n▫️ جاوب - عرض الإجابة (0 نقاط)\n\nمثال:\nلمح → يبدأ بحرف: ك\nعدد الحروف: 4",
+                    "size": "sm",
+                    "color": "#8E8E93",
+                    "wrap": True,
+                    "margin": "lg"
+                }
+            ],
+            "paddingAll": "20px",
+            "backgroundColor": "#FFFFFF"
+        }
+    })
+    
+    # البطاقة الثالثة - نظام النقاط
+    bubbles.append({
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": "نظام النقاط",
+                    "size": "lg",
+                    "weight": "bold",
+                    "color": "#1C1C1E"
+                },
+                {
+                    "type": "separator",
+                    "margin": "lg",
+                    "color": "#F2F2F7"
+                },
+                {
+                    "type": "text",
+                    "text": "إجابة صحيحة: +2 نقطة\nطلب لمح: -1 نقطة\nطلب جاوب: 0 نقاط\n\nملاحظة: ألعاب الاختلاف والتوافق والأسئلة للترفيه فقط",
+                    "size": "sm",
+                    "color": "#8E8E93",
+                    "wrap": True,
+                    "margin": "lg"
+                }
+            ],
+            "paddingAll": "20px",
+            "backgroundColor": "#FFFFFF"
+        }
+    })
+    
+    return {
+        "type": "carousel",
+        "contents": bubbles
+    }
+
 def get_stats_card(user_id, display_name):
-    """بطاقة إحصائيات محسّنة"""
+    """بطاقة الإحصائيات - iOS Style"""
     stats = get_user_stats(user_id)
     
     with players_lock:
@@ -679,16 +702,16 @@ def get_stats_card(user_id, display_name):
                     "backgroundColor": "#F2F2F7",
                     "cornerRadius": "12px",
                     "paddingAll": "16px",
-                    "margin": "xl"
+                    "margin": "lg"
                 }
             ],
             "backgroundColor": "#FFFFFF",
-            "paddingAll": "24px"
+            "paddingAll": "20px"
         }
     }
 
 def get_leaderboard_card():
-    """لوحة صدارة محسّنة"""
+    """لوحة الصدارة - iOS Style"""
     leaders = get_leaderboard()
     if not leaders:
         return {
@@ -699,7 +722,7 @@ def get_leaderboard_card():
                 "contents": [
                     {
                         "type": "text",
-                        "text": "🏆 لوحة الصدارة",
+                        "text": "لوحة الصدارة",
                         "size": "xl",
                         "weight": "bold",
                         "color": "#1C1C1E",
@@ -726,10 +749,10 @@ def get_leaderboard_card():
             bg_color = "#F2F2F7"
         elif i == 2:
             rank_emoji = "🥈"
-            bg_color = "#FAFAFA"
+            bg_color = "#F2F2F7"
         elif i == 3:
             rank_emoji = "🥉"
-            bg_color = "#FAFAFA"
+            bg_color = "#F2F2F7"
         else:
             rank_emoji = f"{i}"
             bg_color = "#FFFFFF"
@@ -779,7 +802,7 @@ def get_leaderboard_card():
             "contents": [
                 {
                     "type": "text",
-                    "text": "🏆 لوحة الصدارة",
+                    "text": "لوحة الصدارة",
                     "size": "xl",
                     "weight": "bold",
                     "color": "#1C1C1E",
@@ -802,11 +825,11 @@ def get_leaderboard_card():
                     "type": "box",
                     "layout": "vertical",
                     "contents": player_items,
-                    "margin": "xl"
+                    "margin": "lg"
                 }
             ],
             "backgroundColor": "#FFFFFF",
-            "paddingAll": "24px"
+            "paddingAll": "20px"
         }
     }
 
@@ -815,7 +838,7 @@ def start_game(game_id, game_class, game_type, user_id, event):
         try:
             line_bot_api.reply_message(
                 event.reply_token,
-                TextSendMessage(text=f"لعبة {game_type} غير متوفرة حالياً")
+                TextSendMessage(text=f"لعبة {game_type} غير متوفرة حالياً", quick_reply=get_quick_reply())
             )
         except:
             pass
@@ -841,6 +864,13 @@ def start_game(game_id, game_class, game_type, user_id, event):
             }
         
         response = game.start_game()
+        if isinstance(response, TextSendMessage):
+            response.quick_reply = get_quick_reply()
+        elif isinstance(response, list):
+            for r in response:
+                if isinstance(r, TextSendMessage):
+                    r.quick_reply = get_quick_reply()
+        
         line_bot_api.reply_message(event.reply_token, response)
         logger.info(f"بدأت لعبة {game_type} للمستخدم {user_id[-4:]}")
         return True
@@ -850,7 +880,7 @@ def start_game(game_id, game_class, game_type, user_id, event):
         try:
             line_bot_api.reply_message(
                 event.reply_token,
-                TextSendMessage(text="حدث خطأ في بدء اللعبة")
+                TextSendMessage(text="حدث خطأ في بدء اللعبة", quick_reply=get_quick_reply())
             )
         except:
             pass
@@ -872,7 +902,7 @@ def home():
     <!DOCTYPE html>
     <html>
     <head>
-        <title>بوت الحُوت</title>
+        <title>بوت الألعاب</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta charset="utf-8">
         <style>
@@ -910,18 +940,18 @@ def home():
                 display: flex;
                 justify-content: space-between;
                 padding: 10px 0;
-                border-bottom: 1px solid #E5E5E5;
+                border-bottom: 1px solid rgba(142, 142, 147, 0.2);
             }}
             .status-item:last-child {{ border-bottom: none; }}
             .label {{ color: #8E8E93; }}
-            .value {{ color: #1C1C1E; font-weight: 600; }}
+            .value {{ color: #1C1C1E; font-weight: bold; }}
             .games-list {{
-                background: #FAFAFA;
+                background: #F2F2F7;
                 border-radius: 12px;
                 padding: 12px;
                 margin-top: 10px;
                 font-size: 0.85em;
-                color: #1C1C1E;
+                color: #8E8E93;
             }}
             .footer {{ 
                 text-align: center; 
@@ -937,18 +967,17 @@ def home():
                 text-decoration: none;
                 border-radius: 12px;
                 margin: 5px;
-                transition: all 0.3s;
+                transition: background 0.3s;
                 font-weight: 600;
             }}
-            .btn:hover {{ 
-                background: #3A3A3C;
-                transform: translateY(-2px);
-            }}
+            .btn:hover {{ background: #3A3A3C; }}
+            .btn-secondary {{ background: #8E8E93; }}
+            .btn-secondary:hover {{ background: #A8A8AC; }}
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>بوت الحُوت</h1>
+            <h1>بوت الألعاب</h1>
             <div class="status">
                 <div class="status-item">
                     <span class="label">حالة الخادم</span>
@@ -976,128 +1005,18 @@ def home():
                 {', '.join(games_status) if games_status else 'لا توجدألعاب متوفرة'}
             </div>
             <div style="text-align: center; margin-top: 20px;">
-                <a href="/errors" class="btn">
+                <a href="/errors" class="btn {'btn-secondary' if not error_log else ''}">
                     عرض الأخطاء ({len(error_log)})
                 </a>
-                <a href="/health" class="btn">
+                <a href="/health" class="btn btn-secondary">
                     فحص الصحة
                 </a>
             </div>
-            <div class="footer">بوت الحُوت - منصة ألعاب تفاعلية</div>
+            <div class="footer">بوت الألعاب - منصة ألعاب تفاعلية</div>
         </div>
     </body>
     </html>
     """
-
-@app.route("/errors", methods=['GET'])
-def view_errors():
-    with error_log_lock:
-        errors = list(reversed(error_log))
-    
-    html = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>سجل الأخطاء</title>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                background: #F2F2F7;
-                padding: 20px;
-            }
-            .container {
-                max-width: 1200px;
-                margin: 0 auto;
-                background: white;
-                border-radius: 16px;
-                padding: 30px;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-            }
-            h1 {
-                color: #1C1C1E;
-                margin-bottom: 20px;
-                padding-bottom: 15px;
-                border-bottom: 2px solid #F2F2F7;
-            }
-            .error-item {
-                background: #F2F2F7;
-                border-left: 4px solid #8E8E93;
-                padding: 15px;
-                margin: 15px 0;
-                border-radius: 8px;
-            }
-            .error-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 10px;
-            }
-            .error-type {
-                font-weight: bold;
-                color: #1C1C1E;
-            }
-            .error-time {
-                color: #8E8E93;
-                font-size: 0.9em;
-            }
-            .error-message {
-                color: #1C1C1E;
-                margin: 10px 0;
-                padding: 10px;
-                background: white;
-                border-radius: 8px;
-                font-family: monospace;
-                font-size: 0.9em;
-            }
-            .no-errors {
-                text-align: center;
-                padding: 40px;
-                color: #8E8E93;
-            }
-            .back-link {
-                display: inline-block;
-                margin-top: 20px;
-                color: white;
-                text-decoration: none;
-                padding: 12px 24px;
-                background: #1C1C1E;
-                border-radius: 12px;
-            }
-            .back-link:hover {
-                background: #3A3A3C;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>سجل الأخطاء</h1>
-    """
-    
-    if not errors:
-        html += '<div class="no-errors">لا توجد أخطاء مسجلة</div>'
-    else:
-        for error in errors:
-            html += f"""
-            <div class="error-item">
-                <div class="error-header">
-                    <span class="error-type">{error.get('type', 'Unknown')}</span>
-                    <span class="error-time">{error.get('timestamp', 'Unknown')}</span>
-                </div>
-                <div class="error-message">{error.get('message', 'No message')}</div>
-            </div>
-            """
-    
-    html += """
-            <a href="/" class="back-link">العودة للرئيسية</a>
-        </div>
-    </body>
-    </html>
-    """
-    
-    return html
 
 @app.route("/health", methods=['GET'])
 def health_check():
@@ -1134,16 +1053,12 @@ def callback():
         abort(400)
     
     body = request.get_data(as_text=True)
-    logger.info(f"استلام webhook - الطول: {len(body)} بايت")
     
     try:
         handler.handle(body, signature)
-        logger.info("تم معالجة الحدث بنجاح")
-    
     except InvalidSignatureError:
         logger.error("توقيع غير صالح")
         abort(400)
-    
     except Exception as e:
         logger.error(f"خطأ في معالجة الحدث: {e}", exc_info=True)
         log_error('webhook', e, {'body_length': len(body)})
@@ -1164,48 +1079,44 @@ def handle_message(event):
         if not user_id or not text:
             return
         
+        ensure_user_exists(user_id)
+        
         if not check_rate_limit(user_id):
             return
         
         display_name = get_user_profile_safe(user_id)
         game_id = getattr(event.source, 'group_id', user_id)
         
-        # تحديث نشاط المستخدم
-        update_user_activity(user_id, display_name)
-        
         logger.info(f"{display_name} ({user_id[-4:]}): {text[:50]}")
         
         with players_lock:
             is_registered = user_id in registered_players
         
-        # الأوامر الأساسية (متاحة للجميع)
+        # الأوامر الأساسية
         if text in ['البداية', 'ابدأ', 'start', 'البوت']:
             line_bot_api.reply_message(event.reply_token,
                 FlexSendMessage(alt_text=f"مرحباً {display_name}",
-                    contents=get_simple_welcome_card(display_name)))
+                    contents=get_welcome_card(display_name),
+                    quick_reply=get_quick_reply()))
             return
         
         elif text in ['مساعدة', 'help']:
             line_bot_api.reply_message(event.reply_token,
                 FlexSendMessage(alt_text="المساعدة", 
-                    contents=get_help_card()))
+                    contents=get_help_carousel(), quick_reply=get_quick_reply()))
             return
         
         elif text in ['انضم', 'تسجيل', 'join']:
             with players_lock:
                 if user_id in registered_players:
                     line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text=f"أنت مسجل بالفعل يا {display_name}"))
+                        TextSendMessage(text=f"أنت مسجل بالفعل يا {display_name}",
+                            quick_reply=get_quick_reply()))
                 else:
                     registered_players.add(user_id)
-                    with games_lock:
-                        for gid, game_data in active_games.items():
-                            if 'participants' not in game_data:
-                                game_data['participants'] = set()
-                            game_data['participants'].add(user_id)
-                    
                     line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text=f"✓ تم التسجيل\n\nمرحباً {display_name}\nيمكنك الآن اللعب وجمع النقاط"))
+                        TextSendMessage(text=f"تم التسجيل بنجاح\nمرحباً {display_name}", 
+                            quick_reply=get_quick_reply()))
                     logger.info(f"انضم: {display_name}")
             return
         
@@ -1214,83 +1125,74 @@ def handle_message(event):
                 if user_id in registered_players:
                     registered_players.remove(user_id)
                     line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text=f"تم الانسحاب\n\nنتمنى رؤيتك مرة أخرى يا {display_name}"))
+                        TextSendMessage(text=f"تم الانسحاب\nنتمنى رؤيتك مرة أخرى",
+                            quick_reply=get_quick_reply()))
                     logger.info(f"انسحب: {display_name}")
                 else:
                     line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text="أنت غير مسجل"))
+                        TextSendMessage(text="أنت غير مسجل", quick_reply=get_quick_reply()))
             return
         
-        # الأوامر المتاحة للجميع (مسجلين وغير مسجلين)
+        # التحقق من التسجيل للأوامر الأخرى
+        if not is_registered:
+            # تجاهل الرسائل العادية من غير المسجلين
+            if text not in ['نقاطي', 'الصدارة', 'إيقاف']:
+                return
+            
+            line_bot_api.reply_message(event.reply_token,
+                TextSendMessage(text=f"يجب التسجيل أولاً\nاكتب: انضم", 
+                    quick_reply=get_quick_reply()))
+            return
+        
         if text in ['نقاطي', 'إحصائياتي', 'احصائياتي']:
             line_bot_api.reply_message(event.reply_token,
                 FlexSendMessage(alt_text="إحصائياتك", 
-                    contents=get_stats_card(user_id, display_name)))
+                    contents=get_stats_card(user_id, display_name), quick_reply=get_quick_reply()))
             return
         
         elif text in ['الصدارة', 'المتصدرين']:
             line_bot_api.reply_message(event.reply_token,
                 FlexSendMessage(alt_text="الصدارة", 
-                    contents=get_leaderboard_card()))
+                    contents=get_leaderboard_card(), quick_reply=get_quick_reply()))
             return
         
-        # التحقق من التسجيل قبل اللعب
-        if not is_registered:
-            line_bot_api.reply_message(event.reply_token,
-                TextSendMessage(text=f"يجب التسجيل أولاً\nاكتب: انضم"))
-            return
-        
-        # أوامر اللعبة (للمسجلين فقط)
-        if text in ['إيقاف', 'stop', 'ايقاف']:
+        elif text in ['إيقاف', 'stop', 'ايقاف']:
             with games_lock:
                 if game_id in active_games:
                     game_type = active_games[game_id]['type']
                     del active_games[game_id]
                     line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text=f"تم إيقاف لعبة {game_type}"))
+                        TextSendMessage(text=f"تم إيقاف لعبة {game_type}", quick_reply=get_quick_reply()))
                 else:
-                    line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text="لا توجد لعبة نشطة"))
+                    return  # تجاهل إذا لم تكن هناك لعبة
             return
         
         # الألعاب الترفيهية (بدون نقاط)
         elif text in ['سؤال', 'سوال']:
             if QUESTIONS:
                 line_bot_api.reply_message(event.reply_token,
-                    TextSendMessage(text=random.choice(QUESTIONS)))
-            else:
-                line_bot_api.reply_message(event.reply_token,
-                    TextSendMessage(text="ملف الأسئلة غير متوفر"))
+                    TextSendMessage(text=random.choice(QUESTIONS), quick_reply=get_quick_reply()))
             return
         
         elif text in ['تحدي', 'challenge']:
             if CHALLENGES:
                 line_bot_api.reply_message(event.reply_token,
-                    TextSendMessage(text=random.choice(CHALLENGES)))
-            else:
-                line_bot_api.reply_message(event.reply_token,
-                    TextSendMessage(text="ملف التحديات غير متوفر"))
+                    TextSendMessage(text=random.choice(CHALLENGES), quick_reply=get_quick_reply()))
             return
         
         elif text in ['اعتراف', 'confession']:
             if CONFESSIONS:
                 line_bot_api.reply_message(event.reply_token,
-                    TextSendMessage(text=random.choice(CONFESSIONS)))
-            else:
-                line_bot_api.reply_message(event.reply_token,
-                    TextSendMessage(text="ملف الاعترافات غير متوفر"))
+                    TextSendMessage(text=random.choice(CONFESSIONS), quick_reply=get_quick_reply()))
             return
         
         elif text in ['منشن', 'mention']:
             if MENTION_QUESTIONS:
                 line_bot_api.reply_message(event.reply_token,
-                    TextSendMessage(text=random.choice(MENTION_QUESTIONS)))
-            else:
-                line_bot_api.reply_message(event.reply_token,
-                    TextSendMessage(text="ملف المنشن غير متوفر"))
+                    TextSendMessage(text=random.choice(MENTION_QUESTIONS), quick_reply=get_quick_reply()))
             return
         
-        # خريطة الألعاب
+        # بدء الألعاب
         games_map = {
             'أغنية': (SongGame, 'أغنية'),
             'لعبة': (HumanAnimalPlantGame, 'لعبة'),
@@ -1305,11 +1207,10 @@ def handle_message(event):
         if text in games_map:
             game_class, game_type = games_map[text]
             
-            # معالجة خاصة للعبة التوافق
             if text == 'توافق':
                 if CompatibilityGame is None:
                     line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text="لعبة التوافق غير متوفرة حالياً"))
+                        TextSendMessage(text="لعبة التوافق غير متوفرة حالياً", quick_reply=get_quick_reply()))
                     return
                 
                 with games_lock:
@@ -1327,7 +1228,8 @@ def handle_message(event):
                         'waiting_for_names': True
                     }
                 line_bot_api.reply_message(event.reply_token,
-                    TextSendMessage(text="▪️ لعبة التوافق\n\nاكتب اسمين مفصولين بمسافة\nنص فقط بدون رموز\n\nمثال: اسم اسم"))
+                    TextSendMessage(text="▫️ لعبة التوافق\n\nاكتب اسمين مفصولين بمسافة\nنص فقط بدون @ أو رموز\n\nمثال: ميش عبير",
+                        quick_reply=get_quick_reply()))
                 logger.info("بدأت لعبة توافق")
                 return
             
@@ -1337,7 +1239,7 @@ def handle_message(event):
             start_game(game_id, game_class, game_type, user_id, event)
             return
         
-        # معالجة إجابات لعبة التوافق
+        # معالجة الإجابات
         if game_id in active_games:
             game_data = active_games[game_id]
             
@@ -1346,14 +1248,16 @@ def handle_message(event):
                 
                 if '@' in text:
                     line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text="اكتب الأسماء بدون @\nمثال: اسم اسم"))
+                        TextSendMessage(text="اكتب الأسماء بدون @\nمثال: ميش عبير",
+                            quick_reply=get_quick_reply()))
                     return
                 
                 names = cleaned_text.split()
                 
                 if len(names) < 2:
                     line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text="يجب كتابة اسمين مفصولين بمسافة\nمثال: اسم اسم"))
+                        TextSendMessage(text="يجب كتابة اسمين مفصولين بمسافة\nمثال: ميش عبير",
+                            quick_reply=get_quick_reply()))
                     return
                 
                 name1 = names[0].strip()
@@ -1361,7 +1265,8 @@ def handle_message(event):
                 
                 if not name1 or not name2:
                     line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text="الأسماء يجب أن تكون نصوص صحيحة"))
+                        TextSendMessage(text="الأسماء يجب أن تكون نصوص صحيحة",
+                            quick_reply=get_quick_reply()))
                     return
                 
                 game = game_data['game']
@@ -1375,14 +1280,16 @@ def handle_message(event):
                     
                     if result and result.get('response'):
                         response = result['response']
-                        # لا تحسب نقاط للعبة التوافق
+                        if isinstance(response, TextSendMessage):
+                            response.quick_reply = get_quick_reply()
                         line_bot_api.reply_message(event.reply_token, response)
                     return
                 except Exception as e:
                     logger.error(f"خطأ في لعبة التوافق: {e}")
                     log_error('compatibility_game', e, {'user': user_id[-4:]})
                     line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text="حدث خطأ. حاول مرة أخرى بكتابة: توافق"))
+                        TextSendMessage(text="حدث خطأ. حاول مرة أخرى بكتابة: توافق",
+                            quick_reply=get_quick_reply()))
                     return
         
         # معالجة إجابات الألعاب الأخرى
@@ -1404,14 +1311,9 @@ def handle_message(event):
                                 game_data['answered_users'] = set()
                             game_data['answered_users'].add(user_id)
                     
-                    # حساب النقاط حسب النظام الجديد
+                    # تطبيق نظام النقاط الجديد
                     points = result.get('points', 0)
-                    
-                    # الألعاب التي لا تحسب نقاط
-                    if game_type in ['اختلاف', 'توافق']:
-                        points = 0
-                    
-                    if points > 0:
+                    if game_type not in NO_POINTS_GAMES and points != 0:
                         update_user_points(user_id, display_name, points,
                             result.get('won', False), game_type)
                     
@@ -1420,6 +1322,8 @@ def handle_message(event):
                             game_data['answered_users'] = set()
                         next_q = game.next_question()
                         if next_q:
+                            if isinstance(next_q, TextSendMessage):
+                                next_q.quick_reply = get_quick_reply()
                             line_bot_api.reply_message(event.reply_token, next_q)
                         return
                     
@@ -1432,13 +1336,21 @@ def handle_message(event):
                             winner_card = result['winner_card']
                             line_bot_api.reply_message(event.reply_token,
                                 FlexSendMessage(alt_text="الفائز", 
-                                    contents=winner_card))
+                                    contents=winner_card, quick_reply=get_quick_reply()))
                         else:
                             response = result.get('response', TextSendMessage(text=result.get('message', '')))
+                            if isinstance(response, TextSendMessage):
+                                response.quick_reply = get_quick_reply()
                             line_bot_api.reply_message(event.reply_token, response)
                         return
                     
                     response = result.get('response', TextSendMessage(text=result.get('message', '')))
+                    if isinstance(response, TextSendMessage):
+                        response.quick_reply = get_quick_reply()
+                    elif isinstance(response, list):
+                        for r in response:
+                            if isinstance(r, TextSendMessage):
+                                r.quick_reply = get_quick_reply()
                     line_bot_api.reply_message(event.reply_token, response)
                 return
             except Exception as e:
@@ -1448,26 +1360,13 @@ def handle_message(event):
     
     except Exception as e:
         logger.error(f"خطأ في handle_message: {e}", exc_info=True)
-        
-        error_details = {
+        log_error('handle_message', e, {
             'user_id': user_id[-4:] if user_id else 'Unknown',
-            'text': text[:100] if text else 'Unknown',
-            'display_name': display_name if display_name else 'Unknown'
-        }
-        
-        log_error('handle_message', e, error_details)
-        
-        try:
-            if hasattr(event, 'reply_token') and event.reply_token:
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="حدث خطأ مؤقت. حاول مرة أخرى")
-                )
-        except:
-            pass
+            'text': text[:100] if text else 'Unknown'
+        })
 
 def cleanup_old_games():
-    """تنظيف الألعاب القديمة والمستخدمين غير النشطين"""
+    """تنظيف الألعاب القديمة وحذف المستخدمين غير النشطين"""
     while True:
         try:
             time.sleep(300)  # كل 5 دقائق
@@ -1490,57 +1389,15 @@ def cleanup_old_games():
                     logger.info(f"تنظيف ذاكرة الأسماء: {len(user_names_cache)} → 0")
                     user_names_cache.clear()
             
-            # حذف المستخدمين غير النشطين كل 6 ساعات
-            if now.hour % 6 == 0 and now.minute < 5:
-                cleanup_inactive_users()
-        
-        except Exception as e:
-            logger.error(f"خطأ التنظيف: {e}")
-
-cleanup_thread = threading.Thread(target=cleanup_old_games, daemon=True)
-cleanup_thread.start()
-
-@app.errorhandler(InvalidSignatureError)
-def handle_invalid_signature(error):
-    logger.error(f"توقيع غير صالح: {error}")
-    return 'Invalid Signature', 400
-
-@app.errorhandler(400)
-def bad_request(error):
-    logger.warning(f"طلب غير صالح: {error}")
-    return 'Bad Request', 400
-
-@app.errorhandler(404)
-def not_found(error):
-    return 'Not Found', 404
-
-@app.errorhandler(Exception)
-def handle_error(error):
-    logger.error(f"خطأ غير متوقع: {error}", exc_info=True)
-    if request.path == '/callback':
-        return 'OK', 200
-    return 'Internal Server Error', 500
-
-if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 5000))
-    logger.info("="*50)
-    logger.info("بوت الألعاب - بدء التشغيل")
-    logger.info(f"المنفذ: {port}")
-    logger.info(f"Gemini AI: {'مُفعَّل' if USE_AI else 'مُعطَّل'}")
-    logger.info(f"اللاعبون: {len(registered_players)}")
-    logger.info(f"الألعاب: {len(active_games)}")
-    
-    games_loaded = []
-    if SongGame: games_loaded.append("أغنية")
-    if HumanAnimalPlantGame: games_loaded.append("لعبة")
-    if ChainWordsGame: games_loaded.append("سلسلة")
-    if FastTypingGame: games_loaded.append("أسرع")
-    if OppositeGame: games_loaded.append("ضد")
-    if LettersWordsGame: games_loaded.append("تكوين")
-    if DifferencesGame: games_loaded.append("اختلاف")
-    if CompatibilityGame: games_loaded.append("توافق")
-    
-    logger.info(f"الألعاب المتوفرة ({len(games_loaded)}/8): {', '.join(games_loaded)}")
-    logger.info("="*50)
-    
-    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+            # حذف المستخدمين غير النشطين (45 يوم)
+            try:
+                conn = get_db_connection()
+                c = conn.cursor()
+                cutoff_date = (now - timedelta(days=45)).isoformat()
+                c.execute('DELETE FROM users WHERE last_played < ?', (cutoff_date,))
+                deleted_count = c.rowcount
+                conn.commit()
+                conn.close()
+                if deleted_count > 0:
+                    logger.info(f"حذف {deleted_count} مستخدم غير نشط")
+            except Exception
