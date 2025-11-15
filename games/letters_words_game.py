@@ -13,21 +13,21 @@ class LettersWordsGame:
         self.words_needed = 3
         self.scores = {}
 
-        # تحديات اللعبة: كل مجموعة حروف مع الكلمات الصحيحة الممكنة
+        # تحديات اللعبة: 6 حروف + كلمات صحيحة
         self.challenges = [
-            {"letters": "ق ل م ع ر ب", "words": ["قلم", "عمر", "رقم", "قلب", "لعب", "عرب", "عمل", "قمل"]},
-            {"letters": "ك ت ا ب ل م", "words": ["كتاب", "كتب", "كلم", "ملك", "تلك", "بلك"]},
-            {"letters": "م د ر س ه ل", "words": ["مدرسه", "درس", "مدر", "سرد", "سهل", "درسه"]},
-            {"letters": "ش ج ر ه ق ف", "words": ["شجره", "جرش", "شجر", "قشر", "فجر", "شرف"]},
-            {"letters": "ح د ي ق ه ل", "words": ["حديقه", "حديق", "قديح", "دقيق", "حقل", "قلد"]},
-            {"letters": "ب ي ت ك ر م", "words": ["بيت", "كبير", "ترك", "كرم", "تبي", "ريم"]},
-            {"letters": "ن و ر س م ا", "words": ["نور", "سمر", "مان", "نار", "سور", "مرس"]},
-            {"letters": "ف ل ج ر ب ح", "words": ["فجر", "حرب", "فلج", "جرح", "حفل", "برج"]},
-            {"letters": "س ل ا م و ن", "words": ["سلام", "سلم", "سما", "لوم", "ماس", "سوم", "لام", "منل"]}
+            {"letters": "ق ل م ع ر ب", "words": ["قلم", "عمر", "رقم", "قلب", "لعب", "عرب", "عمل", "ملك", "برق", "قرب"]},
+            {"letters": "ك ت ا ب ل م", "words": ["كتاب", "كتب", "كلم", "ملك", "تلك", "بلك", "كلب", "تبل", "مكتب"]},
+            {"letters": "م د ر س ه ل", "words": ["مدرسه", "درس", "مدر", "سرد", "سهل", "درسه", "سدر", "هدم", "مسد"]},
+            {"letters": "ش ج ر ه ق ف", "words": ["شجره", "جرش", "شجر", "قشر", "فجر", "شرف", "جرف", "شفق", "رشق"]},
+            {"letters": "ح د ي ق ه ل", "words": ["حديقه", "حديق", "قديح", "دقيق", "حقل", "قلد", "حيد", "لحد", "حلق"]},
+            {"letters": "ب ي ت ك ر م", "words": ["بيت", "كبير", "ترك", "كرم", "تبي", "ريم", "بكر", "كتم", "تكبير"]},
+            {"letters": "ن و ر س م ا", "words": ["نور", "سمر", "مان", "نار", "سور", "مرس", "نسر", "سمان", "نوار"]},
+            {"letters": "ف ل ج ر ب ح", "words": ["فجر", "حرب", "فلج", "جرح", "حفل", "برج", "فرج", "جرف", "حبر"]},
+            {"letters": "س ل ا م و ن", "words": ["سلام", "سلم", "سما", "لوم", "ماس", "سوم", "لام", "منل", "سامن"]}
         ]
 
     def normalize_text(self, text):
-        """تطبيع النصوص لتسهيل المقارنة"""
+        """تطبيع النصوص"""
         if not text:
             return ""
         text = text.strip().lower()
@@ -39,18 +39,18 @@ class LettersWordsGame:
         return text
 
     def can_form_word(self, word, letters):
-        """التحقق من إمكانية تكوين الكلمة من الحروف المتاحة"""
-        letters_list = letters.replace(' ', '')
+        """التحقق من إمكانية تكوين الكلمة"""
+        letters_list = list(letters.replace(' ', ''))
         word_letters = list(word)
         for char in word_letters:
             if char in letters_list:
-                letters_list = letters_list.replace(char, '', 1)
+                letters_list.remove(char)
             else:
                 return False
         return True
 
     def verify_word_with_ai(self, word):
-        """التحقق من صحة الكلمة باستخدام AI إذا مفعل"""
+        """التحقق من صحة الكلمة بواسطة AI"""
         if not self.use_ai or not self.ask_ai:
             return True
         try:
@@ -61,7 +61,7 @@ class LettersWordsGame:
             return True
 
     def start_game(self):
-        """بدء لعبة جديدة واختيار تحدي عشوائي"""
+        """بدء لعبة جديدة"""
         challenge = random.choice(self.challenges)
         self.current_letters = challenge['letters']
         self.valid_words = [self.normalize_text(w) for w in challenge['words']]
@@ -69,34 +69,59 @@ class LettersWordsGame:
         self.scores = {}
 
         return TextSendMessage(
-            text=f"▪️ لعبة تكوين الكلمات\n\nالحروف: {self.current_letters}\nكوّن {self.words_needed} كلمات من هذه الحروف\nاكتب كلمة واحدة في كل رسالة"
+            text=f"لعبة تكوين الكلمات\n\nالحروف: {self.current_letters}\n\nكوّن {self.words_needed} كلمات من هذه الحروف\n\nاكتب كلمة واحدة في كل رسالة\n\nجاوب - لعرض الحل"
         )
 
     def check_answer(self, text, user_id, display_name):
         text = text.strip()
 
-        # أوامر خاصة لعرض الإجابة
-        if text in ['جاوب', 'الحل']:
+        # أمر عرض الحل
+        if text in ['جاوب', 'الحل', 'الجواب']:
+            sample_words = self.valid_words[:5]
+            original_words = []
+            for w in sample_words:
+                # محاولة إيجاد الكلمة الأصلية من قائمة التحديات
+                for challenge in self.challenges:
+                    if self.current_letters == challenge['letters']:
+                        for word in challenge['words']:
+                            if self.normalize_text(word) == w:
+                                original_words.append(word)
+                                break
+                        break
+            
+            if not original_words:
+                original_words = sample_words
+            
             return {
                 'correct': False,
                 'game_over': True,
                 'response': TextSendMessage(
-                    text=f"▪️ بعض الكلمات الصحيحة:\n{', '.join(self.valid_words[:5])}"
+                    text=f"بعض الكلمات الصحيحة:\n\n{', '.join(original_words)}"
                 )
             }
 
         word_normalized = self.normalize_text(text)
 
-        # تجاهل الكلمات المكررة
+        # تجاهل الكلمات المكررة للمستخدم نفسه
         if user_id in self.found_words and word_normalized in self.found_words[user_id]:
+            return None
+
+        # التحقق من طول الكلمة
+        if len(word_normalized) < 2:
             return None
 
         # التحقق من إمكانية تكوين الكلمة من الحروف
         if not self.can_form_word(word_normalized, self.current_letters):
             return None
 
-        # التحقق من صحة الكلمة
-        is_valid = word_normalized in self.valid_words or self.verify_word_with_ai(text)
+        # التحقق من صحة الكلمة (في القائمة أو عبر AI)
+        is_valid = word_normalized in self.valid_words
+        
+        # إذا لم تكن في القائمة، استخدم AI للتحقق
+        if not is_valid and self.use_ai:
+            is_valid = self.verify_word_with_ai(text)
+        
+        # تجاهل الكلمات الخاطئة بصمت
         if not is_valid:
             return None
 
@@ -113,6 +138,7 @@ class LettersWordsGame:
 
         words_count = len(self.found_words[user_id])
 
+        # التحقق من الفوز
         if words_count >= self.words_needed:
             return {
                 'correct': True,
@@ -120,7 +146,7 @@ class LettersWordsGame:
                 'won': True,
                 'game_over': True,
                 'response': TextSendMessage(
-                    text=f"▪️ {display_name} فاز!\nالكلمات: {', '.join(self.found_words[user_id])}\nإجمالي النقاط: {self.scores[user_id]['score']}"
+                    text=f"{display_name} فاز\n\nالكلمات: {', '.join(self.found_words[user_id])}\n\nإجمالي النقاط: {self.scores[user_id]['score']}"
                 )
             }
 
@@ -128,6 +154,6 @@ class LettersWordsGame:
             'correct': True,
             'points': points,
             'response': TextSendMessage(
-                text=f"▪️ {display_name}\nكلمة صحيحة: {text}\n+{points} نقطة\nالكلمات المتبقية: {self.words_needed - words_count}"
+                text=f"{display_name}\n\nكلمة صحيحة: {text}\n+{points} نقطة\n\nالكلمات المتبقية: {self.words_needed - words_count}"
             )
         }
