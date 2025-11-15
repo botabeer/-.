@@ -1,10 +1,5 @@
-# ============================================
-# opposite_game.py - لعبة الأضداد
-# ============================================
-
 from linebot.models import TextSendMessage
-import random
-import re
+import random, re
 
 class OppositeGame:
     def __init__(self, line_bot_api):
@@ -28,16 +23,11 @@ class OppositeGame:
         self.total_questions = 5
         self.player_scores = {}
     
-    def normalize_text(self, text):
-        if not text:
-            return ""
+    def normalize(self, text):
+        if not text: return ""
         text = text.strip().lower()
-        text = text.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا')
-        text = text.replace('ؤ', 'و').replace('ئ', 'ي').replace('ء', '')
-        text = text.replace('ة', 'ه').replace('ى', 'ي')
-        text = re.sub(r'[\u064B-\u065F]', '', text)
-        text = re.sub(r'\s+', '', text)
-        return text
+        text = text.replace('أ','ا').replace('إ','ا').replace('آ','ا').replace('ؤ','و').replace('ئ','ي').replace('ء','').replace('ة','ه').replace('ى','ي')
+        return re.sub(r'[\u064B-\u065F]', '', re.sub(r'\s+', '', text))
     
     def start_game(self):
         self.questions = random.sample(self.all_words, self.total_questions)
@@ -49,16 +39,12 @@ class OppositeGame:
         self.question_number += 1
         self.current_word = self.questions[self.question_number - 1]
         self.hints_used = 0
-        return TextSendMessage(
-            text=f"▪️ لعبة الأضداد\n\n▫️ سؤال {self.question_number} من {self.total_questions}\n\n▫️ ما عكس: {self.current_word['word']}\n\n▪️ مثال: كبير → صغير\n▪️ لمح - تلميح\n▪️ جاوب - الحل"
-        )
+        return TextSendMessage(text=f"▪️ لعبة الأضداد\n\n▫️ سؤال {self.question_number} من {self.total_questions}\n\n▫️ ما عكس: {self.current_word['word']}\n\n▪️ مثال: كبير → صغير\n▪️ لمح - تلميح\n▪️ جاوب - الحل")
     
     def next_question(self):
-        if self.question_number < self.total_questions:
-            return self._next_question()
-        return None
+        return self._next_question() if self.question_number < self.total_questions else None
     
-    def check_answer(self, answer, user_id, display_name):
+    def check_answer(self, answer, user_id, name):
         if not self.current_word:
             return None
         
@@ -67,30 +53,24 @@ class OppositeGame:
         if answer_lower in ['لمح', 'تلميح']:
             if self.hints_used == 0:
                 opposite = self.current_word['opposite']
-                hint = f"▫️ يبدأ بحرف: {opposite[0]}\n▫️ عدد الحروف: {len(opposite)}"
                 self.hints_used += 1
-                return {'response': TextSendMessage(text=hint), 'points': 0, 'correct': False, 'won': False, 'game_over': False}
-            else:
-                return {'response': TextSendMessage(text="▫️ استخدمت التلميح"), 'points': 0, 'correct': False, 'won': False, 'game_over': False}
+                return {'response': TextSendMessage(text=f"▫️ يبدأ بحرف: {opposite[0]}\n▫️ عدد الحروف: {len(opposite)}"), 'points': 0, 'correct': False}
+            return {'response': TextSendMessage(text="▫️ استخدمت التلميح"), 'points': 0, 'correct': False}
         
         if answer_lower in ['جاوب', 'الجواب', 'الحل']:
-            response_text = f"▪️ الإجابة: {self.current_word['opposite']}"
-            return {'response': TextSendMessage(text=response_text), 'points': 0, 'correct': False, 'won': False, 'game_over': False, 'next_question': True}
+            return {'response': TextSendMessage(text=f"▪️ الإجابة: {self.current_word['opposite']}"), 'points': 0, 'correct': False, 'next_question': True}
         
-        if self.normalize_text(answer) == self.normalize_text(self.current_word['opposite']):
+        if self.normalize(answer) == self.normalize(self.current_word['opposite']):
             points = 15 - (self.hints_used * 3)
             
             if user_id not in self.player_scores:
-                self.player_scores[user_id] = {'name': display_name, 'score': 0}
+                self.player_scores[user_id] = {'name': name, 'score': 0}
             self.player_scores[user_id]['score'] += points
             
             if self.question_number < self.total_questions:
-                return {
-                    'response': TextSendMessage(text=f"▪️ صحيح {display_name}\n\n▫️ {self.current_word['word']} ↔️ {self.current_word['opposite']}\n▫️ +{points} نقطة"),
-                    'points': points, 'correct': True, 'won': True, 'game_over': False, 'next_question': True
-                }
-            else:
-                return self._end_game()
+                return {'response': TextSendMessage(text=f"▪️ صحيح {name}\n\n▫️ {self.current_word['word']} ↔️ {self.current_word['opposite']}\n▫️ +{points} نقطة"), 'points': points, 'correct': True, 'won': True, 'next_question': True}
+            
+            return self._end_game()
         
         return None
     
@@ -98,8 +78,5 @@ class OppositeGame:
         if self.player_scores:
             sorted_players = sorted(self.player_scores.items(), key=lambda x: x[1]['score'], reverse=True)
             winner = sorted_players[0][1]
-            all_scores = [(data['name'], data['score']) for uid, data in sorted_players]
-            message = f"▪️ انتهت اللعبة\n\n▫️ الفائز: {winner['name']}\n▫️ النقاط: {winner['score']}"
-            return {'response': TextSendMessage(text=message), 'points': 0, 'correct': False, 'won': False, 'game_over': True}
-        else:
-            return {'response': TextSendMessage(text="▪️ انتهت اللعبة"), 'points': 0, 'correct': False, 'won': False, 'game_over': True}
+            return {'response': TextSendMessage(text=f"▪️ انتهت اللعبة\n\n▫️ الفائز: {winner['name']}\n▫️ النقاط: {winner['score']}"), 'points': 0, 'game_over': True}
+        return {'response': TextSendMessage(text="▪️ انتهت اللعبة"), 'points': 0, 'game_over': True}
