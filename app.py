@@ -17,13 +17,10 @@ import re
 import logging
 import sys
 
-# إعداد Logger
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger("game-bot")
 
@@ -48,7 +45,6 @@ try:
         logger.info(f"Gemini AI جاهز - {len(GEMINI_API_KEYS)} مفاتيح")
         
         def ask_gemini(prompt, max_retries=2):
-            """سؤال Gemini AI"""
             for attempt in range(max_retries):
                 try:
                     response = model.generate_content(prompt)
@@ -150,7 +146,6 @@ error_log_lock = threading.Lock()
 DB_NAME = 'game_scores.db'
 
 def normalize_text(text):
-    """تطبيع النص"""
     if not text:
         return ""
     text = text.strip().lower()
@@ -190,7 +185,6 @@ def init_db():
 init_db()
 
 def update_user_points(user_id, display_name, points, won=False, game_type=""):
-    """تحديث نقاط المستخدم"""
     try:
         conn = get_db_connection()
         c = conn.cursor()
@@ -276,7 +270,6 @@ CONFESSIONS = load_text_file('confessions.txt')
 MENTION_QUESTIONS = load_text_file('more_questions.txt')
 
 def log_error(error_type, message, details=None):
-    """تسجيل الأخطاء"""
     try:
         with error_log_lock:
             error_entry = {
@@ -292,7 +285,6 @@ def log_error(error_type, message, details=None):
         pass
 
 def ensure_user_exists(user_id):
-    """التأكد من وجود سجل المستخدم"""
     try:
         conn = get_db_connection()
         c = conn.cursor()
@@ -314,7 +306,6 @@ def ensure_user_exists(user_id):
         return False
 
 def get_user_profile_safe(user_id):
-    """الحصول على اسم المستخدم بأمان"""
     with names_cache_lock:
         if user_id in user_names_cache:
             cached_name = user_names_cache[user_id]
@@ -398,7 +389,6 @@ def get_user_profile_safe(user_id):
         return fallback_name
 
 def get_quick_reply():
-    """الأزرار الثابتة"""
     return QuickReply(items=[
         QuickReplyButton(action=MessageAction(label="سؤال", text="سؤال")),
         QuickReplyButton(action=MessageAction(label="تحدي", text="تحدي")),
@@ -414,8 +404,7 @@ def get_quick_reply():
         QuickReplyButton(action=MessageAction(label="توافق", text="توافق"))
     ])
 
-def get_simple_registration_card(display_name):
-    """بطاقة التسجيل"""
+def get_simple_welcome_card(display_name):
     return {
         "type": "bubble",
         "body": {
@@ -428,11 +417,20 @@ def get_simple_registration_card(display_name):
                     "contents": [
                         {
                             "type": "text",
-                            "text": "تم التسجيل بنجاح",
+                            "text": "بوت الحُوت",
                             "size": "xl",
                             "weight": "bold",
-                            "color": "#333333",
-                            "align": "center"
+                            "color": "#555555",
+                            "align": "center",
+                            "margin": "md"
+                        },
+                        {
+                            "type": "text",
+                            "text": "منصة ألعاب تفاعلية",
+                            "size": "xs",
+                            "color": "#999999",
+                            "align": "center",
+                            "margin": "sm"
                         }
                     ],
                     "backgroundColor": "#F5F5F5",
@@ -445,7 +443,7 @@ def get_simple_registration_card(display_name):
                     "contents": [
                         {
                             "type": "text",
-                            "text": display_name,
+                            "text": f"مرحباً {display_name}",
                             "size": "lg",
                             "weight": "bold",
                             "color": "#555555",
@@ -455,6 +453,87 @@ def get_simple_registration_card(display_name):
                             "type": "separator",
                             "margin": "lg",
                             "color": "#E0E0E0"
+                        },
+                        {
+                            "type": "text",
+                            "text": "استخدم الأزرار أدناه للعب\nأو اكتب اسم اللعبة مباشرة",
+                            "size": "sm",
+                            "color": "#888888",
+                            "align": "center",
+                            "margin": "lg",
+                            "wrap": True
+                        }
+                    ],
+                    "margin": "xl"
+                },
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": "© جميع الحقوق محفوظة",
+                            "size": "xxs",
+                            "color": "#CCCCCC",
+                            "align": "center"
+                        },
+                        {
+                            "type": "text",
+                            "text": "بوت الحُوت 2025",
+                            "size": "xxs",
+                            "color": "#CCCCCC",
+                            "align": "center",
+                            "margin": "xs"
+                        }
+                    ],
+                    "margin": "xl"
+                }
+            ],
+            "backgroundColor": "#FFFFFF",
+            "paddingAll": "24px"
+        }
+    }
+
+def get_simple_registration_card(display_name):
+    return {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": "✓",
+                    "size": "xxl",
+                    "color": "#666666",
+                    "align": "center",
+                    "weight": "bold"
+                },
+                {
+                    "type": "text",
+                    "text": "تم التسجيل بنجاح",
+                    "size": "xl",
+                    "weight": "bold",
+                    "color": "#555555",
+                    "align": "center",
+                    "margin": "md"
+                },
+                {
+                    "type": "separator",
+                    "margin": "xl",
+                    "color": "#E0E0E0"
+                },
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": display_name,
+                            "size": "lg",
+                            "weight": "bold",
+                            "color": "#555555",
+                            "align": "center"
                         },
                         {
                             "type": "text",
@@ -462,7 +541,7 @@ def get_simple_registration_card(display_name):
                             "size": "sm",
                             "color": "#888888",
                             "align": "center",
-                            "margin": "lg",
+                            "margin": "md",
                             "wrap": True
                         }
                     ],
@@ -470,27 +549,11 @@ def get_simple_registration_card(display_name):
                 }
             ],
             "backgroundColor": "#FFFFFF",
-            "paddingAll": "24px"
-        },
-        "footer": {
-            "type": "box",
-            "layout": "horizontal",
-            "contents": [
-                {
-                    "type": "button",
-                    "action": {"type": "message", "label": "ابدأ اللعب", "text": "أغنية"},
-                    "style": "primary",
-                    "color": "#666666",
-                    "height": "sm"
-                }
-            ],
-            "backgroundColor": "#FAFAFA",
-            "paddingAll": "16px"
+            "paddingAll": "30px"
         }
     }
 
 def get_simple_withdrawal_card(display_name):
-    """بطاقة الانسحاب"""
     return {
         "type": "bubble",
         "body": {
@@ -498,21 +561,24 @@ def get_simple_withdrawal_card(display_name):
             "layout": "vertical",
             "contents": [
                 {
-                    "type": "box",
-                    "layout": "vertical",
-                    "contents": [
-                        {
-                            "type": "text",
-                            "text": "تم الانسحاب",
-                            "size": "xl",
-                            "weight": "bold",
-                            "color": "#333333",
-                            "align": "center"
-                        }
-                    ],
-                    "backgroundColor": "#F5F5F5",
-                    "cornerRadius": "12px",
-                    "paddingAll": "24px"
+                    "type": "text",
+                    "text": "🔘",
+                    "size": "xxl",
+                    "align": "center"
+                },
+                {
+                    "type": "text",
+                    "text": "تم الانسحاب",
+                    "size": "xl",
+                    "weight": "bold",
+                    "color": "#555555",
+                    "align": "center",
+                    "margin": "md"
+                },
+                {
+                    "type": "separator",
+                    "margin": "xl",
+                    "color": "#E0E0E0"
                 },
                 {
                     "type": "box",
@@ -525,11 +591,6 @@ def get_simple_withdrawal_card(display_name):
                             "weight": "bold",
                             "color": "#555555",
                             "align": "center"
-                        },
-                        {
-                            "type": "separator",
-                            "margin": "lg",
-                            "color": "#E0E0E0"
                         },
                         {
                             "type": "text",
@@ -537,101 +598,18 @@ def get_simple_withdrawal_card(display_name):
                             "size": "sm",
                             "color": "#888888",
                             "align": "center",
-                            "margin": "lg"
+                            "margin": "md"
                         }
                     ],
                     "margin": "xl"
                 }
             ],
             "backgroundColor": "#FFFFFF",
-            "paddingAll": "24px"
-        }
-    }
-
-def get_simple_welcome_card(display_name):
-    """بطاقة البداية"""
-    return {
-        "type": "bubble",
-        "body": {
-            "type": "box",
-            "layout": "vertical",
-            "contents": [
-                {
-                    "type": "box",
-                    "layout": "vertical",
-                    "contents": [
-                        {
-                            "type": "text",
-                            "text": "مرحباً بك",
-                            "size": "xl",
-                            "weight": "bold",
-                            "color": "#333333",
-                            "align": "center"
-                        }
-                    ],
-                    "backgroundColor": "#F5F5F5",
-                    "cornerRadius": "12px",
-                    "paddingAll": "24px"
-                },
-                {
-                    "type": "box",
-                    "layout": "vertical",
-                    "contents": [
-                        {
-                            "type": "text",
-                            "text": display_name,
-                            "size": "lg",
-                            "weight": "bold",
-                            "color": "#555555",
-                            "align": "center"
-                        },
-                        {
-                            "type": "separator",
-                            "margin": "lg",
-                            "color": "#E0E0E0"
-                        },
-                        {
-                            "type": "text",
-                            "text": "استخدم الأزرار أدناه للعب",
-                            "size": "sm",
-                            "color": "#888888",
-                            "align": "center",
-                            "margin": "lg",
-                            "wrap": True
-                        }
-                    ],
-                    "margin": "xl"
-                }
-            ],
-            "backgroundColor": "#FFFFFF",
-            "paddingAll": "24px"
-        },
-        "footer": {
-            "type": "box",
-            "layout": "horizontal",
-            "contents": [
-                {
-                    "type": "button",
-                    "action": {"type": "message", "label": "انضم", "text": "انضم"},
-                    "style": "primary",
-                    "color": "#666666",
-                    "height": "sm"
-                },
-                {
-                    "type": "button",
-                    "action": {"type": "message", "label": "مساعدة", "text": "مساعدة"},
-                    "style": "secondary",
-                    "height": "sm"
-                }
-            ],
-            "spacing": "sm",
-            "backgroundColor": "#FAFAFA",
-            "paddingAll": "16px"
+            "paddingAll": "30px"
         }
     }
 
 def get_help_card():
-    """بطاقة المساعدة"""
     return {
         "type": "bubble",
         "body": {
@@ -714,40 +692,15 @@ def get_help_card():
             ],
             "backgroundColor": "#FFFFFF",
             "paddingAll": "20px"
-        },
-        "footer": {
-            "type": "box",
-            "layout": "horizontal",
-            "contents": [
-                {
-                    "type": "button",
-                    "action": {"type": "message", "label": "انضم", "text": "انضم"},
-                    "style": "primary",
-                    "color": "#666666",
-                    "height": "sm"
-                },
-                {
-                    "type": "button",
-                    "action": {"type": "message", "label": "نقاطي", "text": "نقاطي"},
-                    "style": "secondary",
-                    "height": "sm"
-                },
-                {
-                    "type": "button",
-                    "action": {"type": "message", "label": "الصدارة", "text": "الصدارة"},
-                    "style": "secondary",
-                    "height": "sm"
-                }
-            ],
-            "spacing": "sm",
-            "backgroundColor": "#FAFAFA",
-            "paddingAll": "16px"
         }
     }
 
 def get_stats_card(user_id, display_name):
-    """بطاقة الإحصائيات"""
     stats = get_user_stats(user_id)
+    
+    with players_lock:
+        is_registered = user_id in registered_players
+    
     if not stats:
         return {
             "type": "bubble",
@@ -760,8 +713,16 @@ def get_stats_card(user_id, display_name):
                         "text": "إحصائياتك",
                         "size": "xl",
                         "weight": "bold",
-                        "color": "#333333",
+                        "color": "#555555",
                         "align": "center"
+                    },
+                    {
+                        "type": "text",
+                        "text": display_name,
+                        "size": "md",
+                        "color": "#888888",
+                        "align": "center",
+                        "margin": "sm"
                     },
                     {
                         "type": "separator",
@@ -769,18 +730,37 @@ def get_stats_card(user_id, display_name):
                         "color": "#CCCCCC"
                     },
                     {
-                        "type": "text",
-                        "text": "لم تبدأ بعد",
-                        "size": "md",
-                        "color": "#888888",
-                        "align": "center",
+                        "type": "box",
+                        "layout": "horizontal",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": "الحالة:",
+                                "size": "sm",
+                                "color": "#888888",
+                                "flex": 1
+                            },
+                            {
+                                "type": "text",
+                                "text": "مسجل ✓" if is_registered else "غير مسجل",
+                                "size": "sm",
+                                "color": "#666666" if is_registered else "#999999",
+                                "flex": 1,
+                                "align": "end",
+                                "weight": "bold"
+                            }
+                        ],
+                        "backgroundColor": "#F5F5F5",
+                        "cornerRadius": "8px",
+                        "paddingAll": "12px",
                         "margin": "xl"
                     },
                     {
-                        "type": "button",
-                        "action": {"type": "message", "label": "ابدأ الآن", "text": "انضم"},
-                        "style": "primary",
-                        "color": "#666666",
+                        "type": "text",
+                        "text": "لم تبدأ بعد" if is_registered else "يجب التسجيل أولاً",
+                        "size": "md",
+                        "color": "#888888",
+                        "align": "center",
                         "margin": "xl"
                     }
                 ],
@@ -802,7 +782,7 @@ def get_stats_card(user_id, display_name):
                     "text": "إحصائياتك",
                     "size": "xl",
                     "weight": "bold",
-                    "color": "#333333",
+                    "color": "#555555",
                     "align": "center"
                 },
                 {
@@ -817,6 +797,32 @@ def get_stats_card(user_id, display_name):
                     "type": "separator",
                     "margin": "xl",
                     "color": "#CCCCCC"
+                },
+                {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": "الحالة:",
+                            "size": "sm",
+                            "color": "#888888",
+                            "flex": 1
+                        },
+                        {
+                            "type": "text",
+                            "text": "مسجل ✓" if is_registered else "غير مسجل",
+                            "size": "sm",
+                            "color": "#666666" if is_registered else "#999999",
+                            "flex": 1,
+                            "align": "end",
+                            "weight": "bold"
+                        }
+                    ],
+                    "backgroundColor": "#F5F5F5",
+                    "cornerRadius": "8px",
+                    "paddingAll": "10px",
+                    "margin": "xl"
                 },
                 {
                     "type": "box",
@@ -866,30 +872,15 @@ def get_stats_card(user_id, display_name):
                     "backgroundColor": "#FAFAFA",
                     "cornerRadius": "10px",
                     "paddingAll": "16px",
-                    "margin": "xl"
+                    "margin": "lg"
                 }
             ],
             "backgroundColor": "#FFFFFF",
             "paddingAll": "20px"
-        },
-        "footer": {
-            "type": "box",
-            "layout": "vertical",
-            "contents": [
-                {
-                    "type": "button",
-                    "action": {"type": "message", "label": "الصدارة", "text": "الصدارة"},
-                    "style": "secondary",
-                    "height": "sm"
-                }
-            ],
-            "backgroundColor": "#FAFAFA",
-            "paddingAll": "12px"
         }
     }
 
 def get_leaderboard_card():
-    """لوحة الصدارة"""
     leaders = get_leaderboard()
     if not leaders:
         return {
@@ -923,34 +914,53 @@ def get_leaderboard_card():
     player_items = []
     for i, leader in enumerate(leaders, 1):
         if i == 1:
+            rank_emoji = "🥇"
             bg_color = "#F5F5F5"
-            text_color = "#333333"
-            rank = "1"
         elif i == 2:
+            rank_emoji = "🥈"
             bg_color = "#FAFAFA"
-            text_color = "#555555"
-            rank = "2"
         elif i == 3:
+            rank_emoji = "🥉"
             bg_color = "#FAFAFA"
-            text_color = "#555555"
-            rank = "3"
         else:
+            rank_emoji = f"{i}"
             bg_color = "#FAFAFA"
-            text_color = "#666666"
-            rank = str(i)
         
         player_items.append({
             "type": "box",
             "layout": "horizontal",
             "contents": [
-                {"type": "text", "text": rank, "size": "sm", "color": text_color, "flex": 0, "weight": "bold"},
-                {"type": "text", "text": leader['display_name'], "size": "sm", "color": text_color, "flex": 3, "margin": "md", "wrap": True},
-                {"type": "text", "text": str(leader['total_points']), "size": "sm", "color": text_color, "flex": 1, "align": "end", "weight": "bold"}
+                {
+                    "type": "text",
+                    "text": rank_emoji,
+                    "size": "md",
+                    "color": "#555555",
+                    "flex": 0,
+                    "weight": "bold"
+                },
+                {
+                    "type": "text",
+                    "text": leader['display_name'],
+                    "size": "sm",
+                    "color": "#555555",
+                    "flex": 3,
+                    "margin": "md",
+                    "wrap": True
+                },
+                {
+                    "type": "text",
+                    "text": f"{leader['total_points']}",
+                    "size": "md",
+                    "color": "#555555",
+                    "flex": 1,
+                    "align": "end",
+                    "weight": "bold"
+                }
             ],
             "backgroundColor": bg_color,
             "cornerRadius": "8px",
             "paddingAll": "12px",
-            "margin": "sm" if i > 1 else "md"
+            "margin": "sm" if i > 1 else "none"
         })
     
     return {
@@ -993,24 +1003,19 @@ def get_leaderboard_card():
     }
 
 def get_winner_card(winner_name, winner_score, all_scores):
-    """بطاقة الفائز"""
     score_items = []
     for i, (name, score) in enumerate(all_scores, 1):
         if i == 1:
-            rank_text = "المركز الأول"
-            text_color = "#333333"
+            rank_emoji = "🥇"
             bg_color = "#F5F5F5"
         elif i == 2:
-            rank_text = "المركز الثاني"
-            text_color = "#555555"
+            rank_emoji = "🥈"
             bg_color = "#FAFAFA"
         elif i == 3:
-            rank_text = "المركز الثالث"
-            text_color = "#666666"
+            rank_emoji = "🥉"
             bg_color = "#FAFAFA"
         else:
-            rank_text = f"المركز {i}"
-            text_color = "#888888"
+            rank_emoji = f"{i}"
             bg_color = "#FAFAFA"
         
         score_items.append({
@@ -1018,22 +1023,30 @@ def get_winner_card(winner_name, winner_score, all_scores):
             "layout": "horizontal",
             "contents": [
                 {
-                    "type": "box",
-                    "layout": "vertical",
-                    "contents": [
-                        {"type": "text", "text": rank_text, "size": "xs", "color": "#999999"},
-                        {"type": "text", "text": name, "size": "sm", "color": text_color, "weight": "bold", "wrap": True}
-                    ],
-                    "flex": 3
+                    "type": "text",
+                    "text": rank_emoji,
+                    "size": "md",
+                    "color": "#555555",
+                    "flex": 0,
+                    "weight": "bold"
+                },
+                {
+                    "type": "text",
+                    "text": name,
+                    "size": "sm",
+                    "color": "#555555",
+                    "flex": 3,
+                    "margin": "md",
+                    "wrap": True
                 },
                 {
                     "type": "text",
                     "text": f"{score}",
-                    "size": "lg",
-                    "color": text_color,
-                    "weight": "bold",
+                    "size": "md",
+                    "color": "#555555",
+                    "flex": 1,
                     "align": "end",
-                    "flex": 1
+                    "weight": "bold"
                 }
             ],
             "backgroundColor": bg_color,
@@ -1049,26 +1062,24 @@ def get_winner_card(winner_name, winner_score, all_scores):
             "layout": "vertical",
             "contents": [
                 {
-                    "type": "box",
-                    "layout": "vertical",
-                    "contents": [
-                        {
-                            "type": "text",
-                            "text": "انتهت اللعبة",
-                            "size": "xl",
-                            "weight": "bold",
-                            "color": "#333333",
-                            "align": "center"
-                        }
-                    ],
-                    "backgroundColor": "#F5F5F5",
-                    "cornerRadius": "12px",
-                    "paddingAll": "24px"
+                    "type": "text",
+                    "text": "🏆",
+                    "size": "xxl",
+                    "align": "center"
+                },
+                {
+                    "type": "text",
+                    "text": "انتهت اللعبة",
+                    "size": "xl",
+                    "weight": "bold",
+                    "color": "#555555",
+                    "align": "center",
+                    "margin": "md"
                 },
                 {
                     "type": "separator",
                     "margin": "xl",
-                    "color": "#E5E5E5"
+                    "color": "#E0E0E0"
                 },
                 {
                     "type": "box",
@@ -1092,18 +1103,12 @@ def get_winner_card(winner_name, winner_score, all_scores):
                             "wrap": True
                         },
                         {
-                            "type": "box",
-                            "layout": "horizontal",
-                            "contents": [
-                                {
-                                    "type": "text",
-                                    "text": f"{winner_score} نقطة",
-                                    "size": "md",
-                                    "weight": "bold",
-                                    "color": "#888888",
-                                    "align": "center"
-                                }
-                            ],
+                            "type": "text",
+                            "text": f"{winner_score} نقطة",
+                            "size": "md",
+                            "weight": "bold",
+                            "color": "#888888",
+                            "align": "center",
                             "margin": "md"
                         }
                     ],
@@ -1112,7 +1117,7 @@ def get_winner_card(winner_name, winner_score, all_scores):
                 {
                     "type": "separator",
                     "margin": "xl",
-                    "color": "#E5E5E5"
+                    "color": "#E0E0E0"
                 },
                 {
                     "type": "text",
@@ -1131,33 +1136,10 @@ def get_winner_card(winner_name, winner_score, all_scores):
             ],
             "backgroundColor": "#FFFFFF",
             "paddingAll": "24px"
-        },
-        "footer": {
-            "type": "box",
-            "layout": "horizontal",
-            "contents": [
-                {
-                    "type": "button",
-                    "action": {"type": "message", "label": "لعب مرة أخرى", "text": "أغنية"},
-                    "style": "primary",
-                    "color": "#666666",
-                    "height": "sm"
-                },
-                {
-                    "type": "button",
-                    "action": {"type": "message", "label": "الصدارة", "text": "الصدارة"},
-                    "style": "secondary",
-                    "height": "sm"
-                }
-            ],
-            "spacing": "sm",
-            "backgroundColor": "#FAFAFA",
-            "paddingAll": "16px"
         }
     }
 
 def start_game(game_id, game_class, game_type, user_id, event):
-    """بدء لعبة جديدة"""
     if game_class is None:
         try:
             line_bot_api.reply_message(
@@ -1300,7 +1282,7 @@ def home():
     </head>
     <body>
         <div class="container">
-            <h1>بوت الحُوت</h1>
+            <h1>بوت الألعاب</h1>
             <div class="status">
                 <div class="status-item">
                     <span class="label">حالة الخادم</span>
@@ -1308,7 +1290,7 @@ def home():
                 </div>
                 <div class="status-item">
                     <span class="label">Gemini AI</span>
-                    <span class="value">{'مفعّل' if USE_AI else 'معطّل'}</span>
+                    <span class="value">{'مُفعَّل' if USE_AI else 'مُعطَّل'}</span>
                 </div>
                 <div class="status-item">
                     <span class="label">اللاعبون</span>
@@ -1343,7 +1325,7 @@ def home():
                     فحص الصحة
                 </a>
             </div>
-            <div class="footer">بوت الحُوت - منصة ألعاب تفاعلية</div>
+            <div class="footer">بوت الألعاب - منصة ألعاب تفاعلية</div>
         </div>
     </body>
     </html>
@@ -1351,7 +1333,6 @@ def home():
 
 @app.route("/errors", methods=['GET'])
 def view_errors():
-    """عرض آخر الأخطاء"""
     with error_log_lock:
         errors = list(reversed(error_log))
     
@@ -1477,7 +1458,6 @@ def view_errors():
 
 @app.route("/health", methods=['GET'])
 def health_check():
-    """فحص صحة البوت"""
     with error_log_lock:
         error_count = len(error_log)
         last_error = error_log[-1] if error_log else None
@@ -1505,7 +1485,6 @@ def health_check():
 
 @app.route("/callback", methods=['POST'])
 def callback():
-    """معالج Webhook"""
     signature = request.headers.get('X-Line-Signature')
     if not signature:
         logger.warning("طلب بدون توقيع")
@@ -1530,7 +1509,6 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    """معالج الرسائل الرئيسي"""
     user_id = None
     text = None
     display_name = None
@@ -1543,10 +1521,8 @@ def handle_message(event):
         if not user_id or not text:
             return
         
-        # إنشاء سجل المستخدم إذا لم يكن موجوداً
         ensure_user_exists(user_id)
         
-        # التحقق من حد المعدل
         if not check_rate_limit(user_id):
             try:
                 line_bot_api.reply_message(event.reply_token,
@@ -1555,17 +1531,14 @@ def handle_message(event):
                 pass
             return
         
-        # جلب اسم المستخدم
         display_name = get_user_profile_safe(user_id)
         game_id = getattr(event.source, 'group_id', user_id)
         
         logger.info(f"{display_name} ({user_id[-4:]}): {text[:50]}")
         
-        # التحقق من التسجيل
         with players_lock:
             is_registered = user_id in registered_players
         
-        # الأوامر التي لا تحتاج تسجيل
         if text in ['البداية', 'ابدأ', 'start', 'البوت']:
             line_bot_api.reply_message(event.reply_token,
                 FlexSendMessage(alt_text=f"مرحباً {display_name}",
@@ -1614,14 +1587,12 @@ def handle_message(event):
                         TextSendMessage(text="أنت غير مسجل", quick_reply=get_quick_reply()))
             return
         
-        # باقي الأوامر تحتاج تسجيل
         if not is_registered:
             line_bot_api.reply_message(event.reply_token,
                 TextSendMessage(text=f"يجب التسجيل أولاً\nاكتب: انضم", 
                     quick_reply=get_quick_reply()))
             return
         
-        # الأوامر المسجلة
         if text in ['نقاطي', 'إحصائياتي', 'احصائياتي']:
             line_bot_api.reply_message(event.reply_token,
                 FlexSendMessage(alt_text="إحصائياتك", 
@@ -1646,7 +1617,6 @@ def handle_message(event):
                         TextSendMessage(text="لا توجد لعبة نشطة", quick_reply=get_quick_reply()))
             return
         
-        # الأوامر النصية
         elif text in ['سؤال', 'سوال']:
             if QUESTIONS:
                 line_bot_api.reply_message(event.reply_token,
@@ -1683,7 +1653,6 @@ def handle_message(event):
                     TextSendMessage(text="ملف المنشن غير متوفر", quick_reply=get_quick_reply()))
             return
         
-        # بدء الألعاب
         games_map = {
             'أغنية': (SongGame, 'أغنية'),
             'لعبة': (HumanAnimalPlantGame, 'لعبة'),
@@ -1698,7 +1667,6 @@ def handle_message(event):
         if text in games_map:
             game_class, game_type = games_map[text]
             
-            # معالجة خاصة للتوافق
             if text == 'توافق':
                 if CompatibilityGame is None:
                     line_bot_api.reply_message(event.reply_token,
@@ -1725,14 +1693,12 @@ def handle_message(event):
                 logger.info("بدأت لعبة توافق")
                 return
             
-            # حفظ نوع اللعبة الأخيرة
             if game_id in active_games:
                 active_games[game_id]['last_game'] = text
             
             start_game(game_id, game_class, game_type, user_id, event)
             return
         
-        # معالجة لعبة التوافق
         if game_id in active_games:
             game_data = active_games[game_id]
             
@@ -1785,7 +1751,6 @@ def handle_message(event):
                             quick_reply=get_quick_reply()))
                     return
         
-        # معالجة إجابات الألعاب النشطة
         if game_id in active_games:
             game_data = active_games[game_id]
             
@@ -1827,11 +1792,6 @@ def handle_message(event):
                         
                         if result.get('winner_card'):
                             winner_card = result['winner_card']
-                            if 'footer' in winner_card and 'contents' in winner_card['footer']:
-                                for button in winner_card['footer']['contents']:
-                                    if button.get('type') == 'button' and 'لعب مرة أخرى' in button.get('action', {}).get('label', ''):
-                                        button['action']['text'] = last_game_type
-                            
                             line_bot_api.reply_message(event.reply_token,
                                 FlexSendMessage(alt_text="الفائز", 
                                     contents=winner_card, quick_reply=get_quick_reply()))
@@ -1880,7 +1840,6 @@ def handle_message(event):
             pass
 
 def cleanup_old_games():
-    """تنظيف الألعاب القديمة"""
     while True:
         try:
             time.sleep(300)
@@ -1909,24 +1868,20 @@ cleanup_thread.start()
 
 @app.errorhandler(InvalidSignatureError)
 def handle_invalid_signature(error):
-    """معالج التوقيع غير الصالح"""
     logger.error(f"توقيع غير صالح: {error}")
     return 'Invalid Signature', 400
 
 @app.errorhandler(400)
 def bad_request(error):
-    """معالج طلبات 400"""
     logger.warning(f"طلب غير صالح: {error}")
     return 'Bad Request', 400
 
 @app.errorhandler(404)
 def not_found(error):
-    """معالج صفحات غير موجودة"""
     return 'Not Found', 404
 
 @app.errorhandler(Exception)
 def handle_error(error):
-    """معالج الأخطاء العام"""
     logger.error(f"خطأ غير متوقع: {error}", exc_info=True)
     if request.path == '/callback':
         return 'OK', 200
@@ -1935,9 +1890,9 @@ def handle_error(error):
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
     logger.info("="*50)
-    logger.info("بوت الحُوت - بدء التشغيل")
+    logger.info("بوت الألعاب - بدء التشغيل")
     logger.info(f"المنفذ: {port}")
-    logger.info(f"Gemini AI: {'مفعّل' if USE_AI else 'معطّل'}")
+    logger.info(f"Gemini AI: {'مُفعَّل' if USE_AI else 'مُعطَّل'}")
     logger.info(f"اللاعبون: {len(registered_players)}")
     logger.info(f"الألعاب: {len(active_games)}")
     
