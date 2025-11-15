@@ -1,4 +1,4 @@
-from linebot.models import TextSendMessage
+from linebot.models import TextSendMessage, FlexSendMessage
 import random
 
 class CompatibilityGame:
@@ -7,7 +7,91 @@ class CompatibilityGame:
         self.waiting_for_names = True
     
     def start_game(self):
-        return TextSendMessage(text="▪️ لعبة التوافق\n\nاكتب اسمين مفصولين بمسافة\nنص فقط بدون رموز\n\nمثال: محمد فاطمة")
+        card = {
+            "type": "bubble",
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": "لعبة التوافق",
+                        "size": "xl",
+                        "weight": "bold",
+                        "color": "#1C1C1E",
+                        "align": "center"
+                    },
+                    {
+                        "type": "text",
+                        "text": "للتسلية فقط",
+                        "size": "sm",
+                        "color": "#8E8E93",
+                        "align": "center",
+                        "margin": "sm"
+                    },
+                    {
+                        "type": "separator",
+                        "margin": "xl",
+                        "color": "#F2F2F7"
+                    },
+                    {
+                        "type": "box",
+                        "layout": "vertical",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": "اكتب اسمين مفصولين بمسافة",
+                                "size": "md",
+                                "color": "#1C1C1E",
+                                "align": "center",
+                                "wrap": True
+                            },
+                            {
+                                "type": "text",
+                                "text": "نص فقط بدون رموز",
+                                "size": "sm",
+                                "color": "#8E8E93",
+                                "align": "center",
+                                "margin": "md"
+                            },
+                            {
+                                "type": "box",
+                                "layout": "vertical",
+                                "contents": [
+                                    {
+                                        "type": "text",
+                                        "text": "مثال: اسم اسم",
+                                        "size": "sm",
+                                        "color": "#1C1C1E",
+                                        "align": "center"
+                                    }
+                                ],
+                                "backgroundColor": "#FFFFFF",
+                                "cornerRadius": "8px",
+                                "paddingAll": "12px",
+                                "margin": "md"
+                            },
+                            {
+                                "type": "text",
+                                "text": "▫️ لا تُحسب نقاط لهذه اللعبة",
+                                "size": "xs",
+                                "color": "#8E8E93",
+                                "align": "center",
+                                "margin": "lg"
+                            }
+                        ],
+                        "backgroundColor": "#F2F2F7",
+                        "cornerRadius": "12px",
+                        "paddingAll": "16px",
+                        "margin": "xl"
+                    }
+                ],
+                "backgroundColor": "#FFFFFF",
+                "paddingAll": "24px"
+            }
+        }
+        
+        return FlexSendMessage(alt_text="لعبة التوافق", contents=card)
     
     def check_answer(self, answer, user_id, display_name):
         if not self.waiting_for_names:
@@ -17,7 +101,9 @@ class CompatibilityGame:
         
         if len(parts) < 2:
             return {
-                'response': TextSendMessage(text="▫️ يجب كتابة اسمين مفصولين بمسافة\n\nمثال: محمد فاطمة"),
+                'response': TextSendMessage(
+                    text="يجب كتابة اسمين مفصولين بمسافة\n\nمثال: اسم اسم"
+                ),
                 'points': 0,
                 'correct': False,
                 'won': False,
@@ -25,28 +111,110 @@ class CompatibilityGame:
             }
         
         name1 = parts[0]
-        name2 = ' '.join(parts[1:])
+        name2 = parts[1]
         
-        # حساب نسبة التوافق
-        compatibility = random.randint(60, 100)
+        # نسبة توافق عشوائية
+        compatibility = random.randint(50, 100)
         
+        # رسائل حسب النسبة
         if compatibility >= 90:
-            status = "توافق مثالي "
-        elif compatibility >= 80:
-            status = "توافق ممتاز "
-        elif compatibility >= 70:
-            status = "توافق جيد "
+            message = "🖤 توافق مثالي"
+            emoji = "🖤"
+        elif compatibility >= 75:
+            message = "🖤 توافق ممتاز"
+            emoji = "🖤"
+        elif compatibility >= 60:
+            message = "🖤 توافق جيد"
+            emoji = "🖤"
         else:
-            status = "توافق متوسط "
+            message = "🖤 توافق متوسط"
+            emoji = "🖤"
         
         self.waiting_for_names = False
         
+        # بطاقة نتيجة التوافق
+        result_card = {
+            "type": "bubble",
+            "body": {
+                "type": "box",
+                "layout": "vertical",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": "نسبة التوافق",
+                        "size": "xl",
+                        "weight": "bold",
+                        "color": "#1C1C1E",
+                        "align": "center"
+                    },
+                    {
+                        "type": "separator",
+                        "margin": "xl",
+                        "color": "#F2F2F7"
+                    },
+                    {
+                        "type": "box",
+                        "layout": "vertical",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": f"{name1} 🖤 {name2}",
+                                "size": "lg",
+                                "weight": "bold",
+                                "color": "#1C1C1E",
+                                "align": "center",
+                                "wrap": True
+                            },
+                            {
+                                "type": "box",
+                                "layout": "vertical",
+                                "contents": [
+                                    {
+                                        "type": "text",
+                                        "text": f"{compatibility}%",
+                                        "size": "xxl",
+                                        "weight": "bold",
+                                        "color": "#1C1C1E",
+                                        "align": "center"
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": message,
+                                        "size": "md",
+                                        "color": "#8E8E93",
+                                        "align": "center",
+                                        "margin": "sm"
+                                    }
+                                ],
+                                "backgroundColor": "#FFFFFF",
+                                "cornerRadius": "12px",
+                                "paddingAll": "20px",
+                                "margin": "lg"
+                            },
+                            {
+                                "type": "text",
+                                "text": "▫️ للتسلية فقط - لا تُحسب نقاط",
+                                "size": "xs",
+                                "color": "#8E8E93",
+                                "align": "center",
+                                "margin": "lg"
+                            }
+                        ],
+                        "backgroundColor": "#F2F2F7",
+                        "cornerRadius": "12px",
+                        "paddingAll": "16px",
+                        "margin": "xl"
+                    }
+                ],
+                "backgroundColor": "#FFFFFF",
+                "paddingAll": "24px"
+            }
+        }
+        
         return {
-            'response': TextSendMessage(
-                text=f"▪️ نسبة التوافق\n\n{name1} 🖤 {name2}\n\n▫️ {compatibility}%\n\n{status}\n\nملاحظة: هذه اللعبة للتسلية فقط"
-            ),
+            'response': FlexSendMessage(alt_text="نسبة التوافق", contents=result_card),
             'points': 0,  # لا نقاط لهذه اللعبة
             'correct': True,
-            'won': True,
+            'won': False,
             'game_over': True
         }
