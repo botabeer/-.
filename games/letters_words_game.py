@@ -3,14 +3,14 @@ import random
 import re
 
 class LettersWordsGame:
-    def __init__(self, line_bot_api, use_ai=False, ask_ai=None):
+    def __init__(self, line_bot_api, use_ai=False, ask_ai=None, words_needed=3):
         self.line_bot_api = line_bot_api
         self.use_ai = use_ai
         self.ask_ai = ask_ai
         self.current_letters = None
         self.valid_words = []
         self.found_words = {}
-        self.words_needed = 3
+        self.words_needed = words_needed
         self.scores = {}
         
         self.challenges = [
@@ -37,28 +37,24 @@ class LettersWordsGame:
         return text
     
     def can_form_word(self, word, letters):
-        """التحقق من إمكانية تكوين الكلمة من الحروف"""
         letters_list = letters.replace(' ', '')
-        word_letters = list(word)
-        
-        for char in word_letters:
+        for char in word:
             if char in letters_list:
                 letters_list = letters_list.replace(char, '', 1)
             else:
                 return False
         return True
     
-    def verify_word_with_ai(self, word):
-        """التحقق من صحة الكلمة باستخدام AI"""
-        if not self.use_ai or not self.ask_ai:
-            return True
-        
-        try:
-            prompt = f"هل '{word}' كلمة عربية صحيحة؟ أجب بنعم أو لا فقط"
-            response = self.ask_ai(prompt)
-            return response and 'نعم' in response
-        except:
-            return True
+    def verify_word(self, word):
+        """التحقق من صحة الكلمة عبر AI إذا مفعل، أو قبول أي كلمة منطقية"""
+        if self.use_ai and self.ask_ai:
+            try:
+                prompt = f"هل '{word}' كلمة عربية صحيحة؟ أجب بنعم أو لا فقط"
+                response = self.ask_ai(prompt)
+                return response and 'نعم' in response
+            except:
+                return True  # في حال فشل AI، تقبل الكلمة
+        return True  # أي كلمة منطقية تُقبل
     
     def start_game(self):
         challenge = random.choice(self.challenges)
@@ -67,7 +63,9 @@ class LettersWordsGame:
         self.found_words = {}
         self.scores = {}
         
-        return TextSendMessage(text=f"▪️ لعبة تكوين الكلمات\n\nالحروف: {self.current_letters}\n\nكوّن {self.words_needed} كلمات من هذه الحروف\n\nاكتب كلمة واحدة في كل رسالة")
+        return TextSendMessage(
+            text=f"▪️ لعبة تكوين الكلمات\n\nالحروف: {self.current_letters}\n\nكوّن {self.words_needed} كلمات من هذه الحروف\n\nاكتب كلمة واحدة في كل رسالة"
+        )
     
     def check_answer(self, text, user_id, display_name):
         text = text.strip()
@@ -91,9 +89,7 @@ class LettersWordsGame:
             return None
         
         # التحقق من صحة الكلمة
-        is_valid = word_normalized in self.valid_words or self.verify_word_with_ai(text)
-        
-        if not is_valid:
+        if not self.verify_word(word_normalized):
             return None
         
         # إضافة الكلمة
@@ -115,11 +111,15 @@ class LettersWordsGame:
                 'points': points,
                 'won': True,
                 'game_over': True,
-                'response': TextSendMessage(text=f"▪️ {display_name} فاز\n\nالكلمات: {', '.join(self.found_words[user_id])}\n\nإجمالي النقاط: {self.scores[user_id]['score']}")
+                'response': TextSendMessage(
+                    text=f"▪️ {display_name} فاز\n\nالكلمات: {', '.join(self.found_words[user_id])}\n\nإجمالي النقاط: {self.scores[user_id]['score']}"
+                )
             }
         
         return {
             'correct': True,
             'points': points,
-            'response': TextSendMessage(text=f"▪️ {display_name}\n\nكلمة صحيحة: {text}\n+{points} نقطة\n\nالكلمات المتبقية: {self.words_needed - words_count}")
+            'response': TextSendMessage(
+                text=f"▪️ {display_name}\n\nكلمة صحيحة: {text}\n+{points} نقطة\n\nالكلمات المتبقية: {self.words_needed - words_count}"
+            )
         }
