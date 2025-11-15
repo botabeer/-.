@@ -1371,8 +1371,7 @@ def cleanup_old_games():
         try:
             time.sleep(300)  # كل 5 دقائق
             now = datetime.now()
-            
-            # حذف الألعاب القديمة
+                        # حذف الألعاب القديمة
             to_delete = []
             with games_lock:
                 for game_id, game_data in active_games.items():
@@ -1400,4 +1399,5 @@ def cleanup_old_games():
                 conn.close()
                 if deleted_count > 0:
                     logger.info(f"حذف {deleted_count} مستخدم غير نشط")
-            except Exception
+            except Exception as e:
+                logger.error(f"خطأ أثناء حذف المستخدمين غير النشطين: {e}")
