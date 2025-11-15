@@ -19,17 +19,55 @@ class SongGame:
         self.use_ai = use_ai
         self.ask_ai = ask_ai
         
+        # الأغاني الجديدة فقط
         self.all_songs = [
-            {"lyrics": "يا بعد عمري وروحي وكل شي أملكه", "singer": "راشد الماجد"},
-            {"lyrics": "الأماكن ما تنسى تبقى في البال", "singer": "محمد عبده"},
-            {"lyrics": "أحبك موت أحبك موت يا غالي", "singer": "عبدالمجيد عبدالله"},
-            {"lyrics": "بعثر خاطري وبعثر أفكاري", "singer": "ماجد المهندس"},
-            {"lyrics": "متعب عمري الغلا وانت ما فيك غلا", "singer": "نوال الكويتية"},
-            {"lyrics": "خلاص سكرنا الموضوع وانتهينا", "singer": "عبدالله الرويشد"},
-            {"lyrics": "حبيبي مجنني وذبحني وشفته", "singer": "نبيل شعيل"},
-            {"lyrics": "زدني عشقاً زدني عشقاً زدني جنوناً", "singer": "كاظم الساهر"},
+            {"lyrics": "أنا بلياك إذا أرمش إلك تنزل ألف دمعة", "singer": "ماجد المهندس"},
+            {"lyrics": "يا بعدهم كلهم .. يا سراجي بينهم", "singer": "عبدالمجيد عبدالله"},
+            {"lyrics": "أنا لحبيبي وحبيبي إلي", "singer": "فيروز"},
+            {"lyrics": "قولي أحبك كي تزيد وسامتي", "singer": "كاظم الساهر"},
+            {"lyrics": "كيف أبيّن لك شعوري دون ما أحكي", "singer": "عايض"},
+            {"lyrics": "أريد الله يسامحني لان أذيت نفسي", "singer": "رحمة رياض"},
+            {"lyrics": "جنّنت قلبي بحبٍ يلوي ذراعي", "singer": "ماجد المهندس"},
+            {"lyrics": "واسِع خيالك إكتبه آنا بكذبك مُعجبه", "singer": "شمة حمدان"},
+            {"lyrics": "خذني من ليلي لليلك", "singer": "عبادي الجوهر"},
+            {"lyrics": "أنا عندي قلب واحد", "singer": "حسين الجسمي"},
+            {"lyrics": "احس اني لقيتك بس عشان تضيع مني", "singer": "عبدالمجيد عبدالله"},
+            {"lyrics": "قال الوداع و مقصده يجرح القلب", "singer": "راشد الماجد"},
+            {"lyrics": "يا بنات يا بنات", "singer": "نانسي عجرم"},
+            {"lyrics": "احبك موت كلمة مالها تفسير", "singer": "ماجد المهندس"},
+            {"lyrics": "خلني مني طمني عليك", "singer": "نوال الكويتية"},
+            {"lyrics": "رحت عني ما قويت جيت لك لاتردني", "singer": "عبدالمجيد عبدالله"},
+            {"lyrics": "انسى هالعالم ولو هم يزعلون", "singer": "عباس ابراهيم"},
+            {"lyrics": "مشاعر تشاور تودع تسافر", "singer": "شيرين"},
+            {"lyrics": "جلست والخوف بعينيها تتأمل فنجاني", "singer": "عبد الحليم حافظ"},
+            {"lyrics": "اسخر لك غلا وتشوفني مقصر", "singer": "عايض"},
+            {"lyrics": "أنا استاهل وداع افضل وداع", "singer": "نوال الكويتية"},
+            {"lyrics": "ظلمتني والله قويٍ يجازيك", "singer": "طلال مداح"},
+            {"lyrics": "خلك من الي ما بقلبه وفا", "singer": "محمد عبده"},
+            {"lyrics": "انتى ندمتى", "singer": "تامر عاشور"},
+            {"lyrics": "احبك لو تكون حاضر .. احبك لو تكون هاجر", "singer": "عبادي الجوهر"},
+            {"lyrics": "منوتي ليتك معي", "singer": "محمد عبده"},
+            {"lyrics": "أنا أكثر شخص بالدنيا يحبك .. وأنتي ماتدرين", "singer": "راشد الماجد"},
+            {"lyrics": "يردون .. قلت لازم يردون وين مني يروحون", "singer": "وليد الشامي"},
+            {"lyrics": "نكتشف مر الحقيقة بعد ما يفوت الأوان", "singer": "أصاله نصري"},
+            {"lyrics": "اسميحيلي يالغرام العف", "singer": "محمد عبده"},
+            {"lyrics": "تدري كثر ماني من البعد مخنوق", "singer": "راشد الماجد"},
+            {"lyrics": "احبه بس مو معناه اسمحله بيه يجرح", "singer": "أصيل هميم"},
+            {"lyrics": "يمان حاولت الفراق وما قويت", "singer": "عبدالمجيد عبدالله"},
+            {"lyrics": "بيرجع من هواي فيك", "singer": "أميمة طالب"},
+            {"lyrics": "قلبك يسألني عنك طمني وينك", "singer": "وائل كفوري"},
+            {"lyrics": "بردان أنا تكفى أبي احترق بدفا", "singer": "محمد عبده"},
+            {"lyrics": "عايش لك .. ما عيش من دونك", "singer": "عايض"},
+            {"lyrics": "انا مش بتاعت الكلام ده", "singer": "شيرين"},
+            {"lyrics": "أنا احبك اكثر من اول", "singer": "راشد الماجد"},
+            {"lyrics": "تملي معاك ولو حتى بعيد عني", "singer": "عمرو دياب"},
+            {"lyrics": "ياليت العمر لو كان مليون مره", "singer": "راشد الماجد"},
+            {"lyrics": "يا هي توجع كذبة اخباري تمام", "singer": "أميمة طالب"},
+            {"lyrics": "أحبك ليه أنا مدري", "singer": "عبدالمجيد عبدالله"},
             {"lyrics": "يا مغرور جرحني غرورك", "singer": "أصالة"},
-            {"lyrics": "عكس اللي شايفينها الحب مش سهل", "singer": "إليسا"}
+            {"lyrics": "سألوني الناس عنك يا حبيبي", "singer": "فيروز"},
+            {"lyrics": "أنا ما عيش من دونك", "singer": "ماجد المهندس"},
+            {"lyrics": "أمر الله أقوى أحبك والعقل واعي", "singer": "ماجد المهندس"}
         ]
         
         self.questions = []
@@ -38,44 +76,13 @@ class SongGame:
         self.question_number = 0
         self.total_questions = 5
         self.player_scores = {}
-    
+
     def start_game(self):
-        if self.use_ai and self.ask_ai:
-            self._generate_ai_songs()
-        
         self.questions = random.sample(self.all_songs, min(self.total_questions, len(self.all_songs)))
         self.question_number = 0
         self.player_scores = {}
         return self._next_question()
-    
-    def _generate_ai_songs(self):
-        """توليد أسئلة بواسطة AI"""
-        try:
-            prompt = """اعطني 10 مقاطع من أغاني عربية مشهورة مع اسم المغني.
-الصيغة:
-مقطع الأغنية | اسم المغني
 
-مثال:
-يا بعد عمري وروحي | راشد الماجد"""
-            
-            response = self.ask_ai(prompt)
-            if response:
-                lines = response.strip().split('\n')
-                new_songs = []
-                for line in lines:
-                    if '|' in line:
-                        parts = line.split('|')
-                        if len(parts) == 2:
-                            new_songs.append({
-                                'lyrics': parts[0].strip(),
-                                'singer': parts[1].strip()
-                            })
-                
-                if new_songs:
-                    self.all_songs = new_songs
-        except Exception as e:
-            pass
-    
     def _next_question(self):
         self.question_number += 1
         self.current_song = self.questions[self.question_number - 1]
@@ -83,12 +90,12 @@ class SongGame:
         return TextSendMessage(
             text=f"▪️ لعبة الأغاني\n\nسؤال {self.question_number} من {self.total_questions}\n\n{self.current_song['lyrics']}\n\nمن المغني؟\n\n▫️ لمح - للحصول على تلميح\n▫️ جاوب - لعرض الإجابة"
         )
-    
+
     def next_question(self):
         if self.question_number < self.total_questions:
             return self._next_question()
         return None
-    
+
     def check_answer(self, answer, user_id, display_name):
         if not self.current_song:
             return None
@@ -157,7 +164,7 @@ class SongGame:
                 return self._end_game()
         
         return None
-    
+
     def _end_game(self):
         if self.player_scores:
             sorted_players = sorted(self.player_scores.items(), key=lambda x: x[1]['score'], reverse=True)
