@@ -36,7 +36,12 @@ class OppositeGame:
             {"word": "مظلم", "opposite": "مضيء"},
             {"word": "صادق", "opposite": "كاذب"},
             {"word": "شجاع", "opposite": "جبان"},
-            {"word": "نشيط", "opposite": "كسول"}
+            {"word": "نشيط", "opposite": "كسول"},
+            {"word": "واسع", "opposite": "ضيق"},
+            {"word": "عالي", "opposite": "منخفض"},
+            {"word": "حلو", "opposite": "مر"},
+            {"word": "ناعم", "opposite": "خشن"},
+            {"word": "رطب", "opposite": "جاف"}
         ]
         self.questions = []
         self.current_word = None
@@ -56,7 +61,7 @@ class OppositeGame:
         self.current_word = self.questions[self.question_number - 1]
         self.hints_used = 0
         return TextSendMessage(
-            text=f"▪️ لعبة الأضداد\n\nسؤال {self.question_number} من {self.total_questions}\n\nما هو عكس كلمة: {self.current_word['word']}\n\n▫️ لمح - للحصول على تلميح\n▫️ جاوب - لعرض الإجابة"
+            text=f"▪️ لعبة الأضداد\n\nسؤال {self.question_number} من {self.total_questions}\n\nما هو عكس كلمة: {self.current_word['word']}\n\n▫️ لمح - للحصول على تلميح"
         )
     
     def next_question(self):
@@ -72,7 +77,10 @@ class OppositeGame:
         
         if answer_lower in ['لمح', 'تلميح', 'hint']:
             if self.hints_used == 0:
-                hint = f"▫️ يبدأ بحرف: {self.current_word['opposite'][0]}"
+                opposite = self.current_word['opposite']
+                first_letter = opposite[0]
+                word_length = len(opposite)
+                hint = f"▫️ يبدأ بحرف: {first_letter}\n▫️ عدد الحروف: {word_length}"
                 self.hints_used += 1
                 return {
                     'response': TextSendMessage(text=hint),
@@ -133,16 +141,29 @@ class OppositeGame:
             winner = sorted_players[0][1]
             all_scores = [(data['name'], data['score']) for uid, data in sorted_players]
             
-            from app import get_winner_card
-            winner_card = get_winner_card(winner['name'], winner['score'], all_scores)
-            
-            return {
-                'points': 0,
-                'correct': False,
-                'won': True,
-                'game_over': True,
-                'winner_card': winner_card
-            }
+            # استيراد دالة البطاقة
+            try:
+                import sys
+                import os
+                sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+                from app import get_winner_card
+                winner_card = get_winner_card(winner['name'], winner['score'], all_scores)
+                
+                return {
+                    'points': 0,
+                    'correct': False,
+                    'won': True,
+                    'game_over': True,
+                    'winner_card': winner_card
+                }
+            except:
+                return {
+                    'response': TextSendMessage(text=f"▪️ انتهت اللعبة\n\nالفائز: {winner['name']}\nالنقاط: {winner['score']}"),
+                    'points': 0,
+                    'correct': False,
+                    'won': False,
+                    'game_over': True
+                }
         else:
             return {
                 'response': TextSendMessage(text="انتهت اللعبة"),
