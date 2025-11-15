@@ -2,84 +2,32 @@ from linebot.models import TextSendMessage
 import random
 import re
 
-class SongGame:
+class LettersWordsGame:
     def __init__(self, line_bot_api, use_ai=False, ask_ai=None):
         self.line_bot_api = line_bot_api
         self.use_ai = use_ai
         self.ask_ai = ask_ai
-        self.current_song = None
+        self.current_letters = None
+        self.valid_words = []
+        self.found_words = {}
+        self.words_needed = 3
         self.scores = {}
-        self.answered = False
 
-        # كل الأغاني مدموجة هنا، كل مقطع أصبح أغنية مستقلة
-        self.all_songs = [
-            {"lyrics": "رجعت لي أيام الماضي معاك", "singer": "أم كلثوم"},
-            {"lyrics": "جلست والخوف بعينيها تتأمل فنجاني", "singer": "عبد الحليم حافظ"},
-            {"lyrics": "تملي معاك ولو حتى بعيد عني", "singer": "عمرو دياب"},
-            {"lyrics": "يا بنات يا بنات", "singer": "نانسي عجرم"},
-            {"lyrics": "قولي أحبك كي تزيد وسامتي", "singer": "كاظم الساهر"},
-            {"lyrics": "أنا لحبيبي وحبيبي إلي", "singer": "فيروز"},
-            {"lyrics": "حبيبي يا كل الحياة اوعدني تبقى معايا", "singer": "تامر حسني"},
-            {"lyrics": "قلبي بيسألني عنك دخلك طمني وينك", "singer": "وائل كفوري"},
-            {"lyrics": "كيف أبيّن لك شعوري دون ما أحكي", "singer": "عايض"},
-            {"lyrics": "اسخر لك غلا وتشوفني مقصر", "singer": "عايض"},
-            {"lyrics": "رحت عني ما قويت جيت لك لاتردني", "singer": "عبدالمجيد عبدالله"},
-            {"lyrics": "خذني من ليلي لليلك", "singer": "عبادي الجوهر"},
-            {"lyrics": "تدري كثر ماني من البعد مخنوق", "singer": "راشد الماجد"},
-            {"lyrics": "انسى هالعالم ولو هم يزعلون", "singer": "عباس ابراهيم"},
-            {"lyrics": "أنا عندي قلب واحد", "singer": "حسين الجسمي"},
-            {"lyrics": "منوتي ليتك معي", "singer": "محمد عبده"},
-            {"lyrics": "خلنا مني طمني عليك", "singer": "نوال الكويتية"},
-            {"lyrics": "أحبك ليه أنا مدري", "singer": "عبدالمجيد عبدالله"},
-            {"lyrics": "أمر الله أقوى أحبك والعقل واعي", "singer": "ماجد المهندس"},
-            {"lyrics": "الحب يتعب من يدله والله في حبه بلاني", "singer": "راشد الماجد"},
-            {"lyrics": "محد غيرك شغل عقلي شغل بالي", "singer": "وليد الشامي"},
-            {"lyrics": "نكتشف مر الحقيقة بعد ما يفوت الأوان", "singer": "أصالة نصري"},
-            {"lyrics": "يا هي توجع كذبة اخباري تمام", "singer": "أميمة طالب"},
-            {"lyrics": "احس اني لقيتك بس عشان تضيع مني", "singer": "عبدالمجيد عبدالله"},
-            {"lyrics": "بردان أنا تكفى أبي احترق بدفا", "singer": "محمد عبده"},
-            {"lyrics": "واسِع خيالك إكتبه آنا بكذبك مُعجبه", "singer": "شمة حمدان"},
-            {"lyrics": "حبيته بيني وبين نفسي وماقولتلوش ع اللي في نفسي", "singer": "شيرين عبد الوهاب"},
-            {"lyrics": "ظلمتني والله قويٍ يجازيك", "singer": "طلال مداح"},
-            {"lyrics": "فزيت من نومي اناديلك رد الصدى عنك", "singer": "ذكرى"},
-            {"lyrics": "ابد علـى حطة يدك .. لو كان هذا يسعدك", "singer": "ذكرى"},
-            {"lyrics": "انا لولا الغلا هو والمحبه والعيون السود", "singer": "فؤاد عبد الواحد"},
-            {"lyrics": "كلمة ولو جبر خاطر .. والا سلام من بعيد", "singer": "عبادي الجوهر"},
-            {"lyrics": "احبك لو تكون حاضر .. احبك لو تكون هاجر", "singer": "عبادي الجوهر"},
-            {"lyrics": "إلحق عيني إلحق .. إلحق لايروح منك حبيبك", "singer": "وليد الشامي"},
-            {"lyrics": "يردون .. قلت لازم يردون وين مني يروحون", "singer": "وليد الشامي"},
-            {"lyrics": "ولهان انا ولهان و الوقت محسوب", "singer": "وليد الشامي"},
-            {"lyrics": "اقولها كبر عن الدنيا حبيبي اشتقت لك", "singer": "وليد الشامي"},
-            {"lyrics": "انا استاهل وداع افضل وداع يليق فيني و فيك", "singer": "نوال الكويتية"},
-            {"lyrics": "خلنا مني .. طمني عليك ما انام الليل من خوفي عليك", "singer": "نوال الكويتية"},
-            {"lyrics": "لقيت روحي بعد ما انا لقيتك", "singer": "نوال الكويتية"},
-            {"lyrics": "غريبة الناس غريبة الدنيا ديّا", "singer": "وائل جسار"},
-            {"lyrics": "اعذريني يوم زفافك مقدرتش افرح زيهم", "singer": "وائل جسار"},
-            {"lyrics": "ماعاد يمديني ولا عاد يمديك قلوبنا حبت ولا استاذنتنا", "singer": "عبدالمجيد عبدالله"},
-            {"lyrics": "يـا بعدهم كلهم .. يـا سراجي بينهم", "singer": "عبدالمجيد عبدالله"},
-            {"lyrics": "حتى الكره احساس لا تبلاني انا ما اكرهك", "singer": "عبدالمجيد عبدالله"},
-            {"lyrics": "استكثرك وقتي علي وغدابك عادة زماني كل ما طاب هوّن", "singer": "عبدالمجيد عبدالله"},
-            {"lyrics": "ياما حاولت الفراق وما قويت", "singer": "عبدالمجيد عبدالله"},
-            {"lyrics": "احبك موت كلمة مالها تفسير ولين اليوم ما ادري كيف افسرها", "singer": "ماجد المهندس"},
-            {"lyrics": "جنّنت قلبي بحبٍ يلوي ذراعي", "singer": "ماجد المهندس"},
-            {"lyrics": "بديت اطيب بديت احس بك عادي", "singer": "ماجد المهندس"},
-            {"lyrics": "من اول نظره شفتك قلت هذا اللي تمنيته", "singer": "ماجد المهندس"},
-            {"lyrics": "أنا بلياك إذا أرمش إلك تنزل ألف دمعة", "singer": "ماجد المهندس"},
-            {"lyrics": "عطشان يا برق السما بموت من طول الغياب", "singer": "ماجد المهندس"},
-            {"lyrics": "هيجيلي موجوع.. دموعه ف عينه تعبان", "singer": "تامر عاشور"},
-            {"lyrics": "تيجى نتراهن إنّ هيجى اليوم وتقولى ان انتى ندمتى", "singer": "تامر عاشور"},
-            {"lyrics": "خليني ف حضنك يا حبيبي ده ف حضنك بهدى وبرتاح", "singer": "تامر عاشور"},
-            {"lyrics": "أريد الله يسامحني لان أذيت نفسي هواي طيبة قلبي أذتني تعبتج ياروحي وياي", "singer": "رحمة رياض"},
-            {"lyrics": "كون نصير اني وياك نجمه بالسما وغيمه", "singer": "رحمة رياض"},
-            {"lyrics": "على طاري الزعل والدمعتين الي على فرقاك", "singer": "أصيل هميم"},
-            {"lyrics": "يشبهْك قلبي..كنّـك إلقلبي مخلوق", "singer": "أصيل هميم"},
-            {"lyrics": "احبه بس مو معناه اسمحله بيه يجرح", "singer": "أصيل هميم"},
-            {"lyrics": "المفروض اعوفك من زمان كون من ذاك الوكت من عليه تغيرت", "singer": "أصيل هميم"}
+        # تحديات اللعبة: كل مجموعة حروف مع الكلمات الصحيحة الممكنة
+        self.challenges = [
+            {"letters": "ق ل م ع ر ب", "words": ["قلم", "عمر", "رقم", "قلب", "لعب", "عرب", "عمل", "قمل"]},
+            {"letters": "ك ت ا ب ل م", "words": ["كتاب", "كتب", "كلم", "ملك", "تلك", "بلك"]},
+            {"letters": "م د ر س ه ل", "words": ["مدرسه", "درس", "مدر", "سرد", "سهل", "درسه"]},
+            {"letters": "ش ج ر ه ق ف", "words": ["شجره", "جرش", "شجر", "قشر", "فجر", "شرف"]},
+            {"letters": "ح د ي ق ه ل", "words": ["حديقه", "حديق", "قديح", "دقيق", "حقل", "قلد"]},
+            {"letters": "ب ي ت ك ر م", "words": ["بيت", "كبير", "ترك", "كرم", "تبي", "ريم"]},
+            {"letters": "ن و ر س م ا", "words": ["نور", "سمر", "مان", "نار", "سور", "مرس"]},
+            {"letters": "ف ل ج ر ب ح", "words": ["فجر", "حرب", "فلج", "جرح", "حفل", "برج"]},
+            {"letters": "س ل ا م و ن", "words": ["سلام", "سلم", "سما", "لوم", "ماس", "سوم", "لام", "منل"]}
         ]
 
-        random.shuffle(self.all_songs)
-
     def normalize_text(self, text):
+        """تطبيع النصوص لتسهيل المقارنة"""
         if not text:
             return ""
         text = text.strip().lower()
@@ -90,42 +38,96 @@ class SongGame:
         text = re.sub(r'\s+', '', text)
         return text
 
+    def can_form_word(self, word, letters):
+        """التحقق من إمكانية تكوين الكلمة من الحروف المتاحة"""
+        letters_list = letters.replace(' ', '')
+        word_letters = list(word)
+        for char in word_letters:
+            if char in letters_list:
+                letters_list = letters_list.replace(char, '', 1)
+            else:
+                return False
+        return True
+
+    def verify_word_with_ai(self, word):
+        """التحقق من صحة الكلمة باستخدام AI إذا مفعل"""
+        if not self.use_ai or not self.ask_ai:
+            return True
+        try:
+            prompt = f"هل '{word}' كلمة عربية صحيحة؟ أجب بنعم أو لا فقط"
+            response = self.ask_ai(prompt)
+            return response and 'نعم' in response
+        except:
+            return True
+
     def start_game(self):
-        self.current_song = random.choice(self.all_songs)
-        self.answered = False
-        return TextSendMessage(text=f"▪️ لعبة الأغنية\n\nأغنية: {self.current_song['lyrics']}\n\nمن المغني؟")
+        """بدء لعبة جديدة واختيار تحدي عشوائي"""
+        challenge = random.choice(self.challenges)
+        self.current_letters = challenge['letters']
+        self.valid_words = [self.normalize_text(w) for w in challenge['words']]
+        self.found_words = {}
+        self.scores = {}
+
+        return TextSendMessage(
+            text=f"▪️ لعبة تكوين الكلمات\n\nالحروف: {self.current_letters}\nكوّن {self.words_needed} كلمات من هذه الحروف\nاكتب كلمة واحدة في كل رسالة"
+        )
 
     def check_answer(self, text, user_id, display_name):
-        if self.answered:
-            return None
+        text = text.strip()
 
-        text_normalized = self.normalize_text(text)
-        singer_normalized = self.normalize_text(self.current_song['singer'])
-
-        if text in ['لمح', 'تلميح']:
-            return {'correct': False, 'response': TextSendMessage(text=f"▪️ تلميح: {self.current_song['lyrics']}")}
-        if text in ['جاوب', 'الجواب', 'الحل']:
-            self.answered = True
+        # أوامر خاصة لعرض الإجابة
+        if text in ['جاوب', 'الحل']:
             return {
                 'correct': False,
                 'game_over': True,
                 'response': TextSendMessage(
-                    text=f"▪️ الإجابة الصحيحة:\n{self.current_song['singer']}\nأغنية: {self.current_song['lyrics']}"
+                    text=f"▪️ بعض الكلمات الصحيحة:\n{', '.join(self.valid_words[:5])}"
                 )
             }
-        if text_normalized == singer_normalized or singer_normalized in text_normalized:
-            self.answered = True
-            points = 10
-            if user_id not in self.scores:
-                self.scores[user_id] = {'name': display_name, 'score': 0}
-            self.scores[user_id]['score'] += points
+
+        word_normalized = self.normalize_text(text)
+
+        # تجاهل الكلمات المكررة
+        if user_id in self.found_words and word_normalized in self.found_words[user_id]:
+            return None
+
+        # التحقق من إمكانية تكوين الكلمة من الحروف
+        if not self.can_form_word(word_normalized, self.current_letters):
+            return None
+
+        # التحقق من صحة الكلمة
+        is_valid = word_normalized in self.valid_words or self.verify_word_with_ai(text)
+        if not is_valid:
+            return None
+
+        # إضافة الكلمة للمستخدم
+        if user_id not in self.found_words:
+            self.found_words[user_id] = []
+        self.found_words[user_id].append(word_normalized)
+
+        if user_id not in self.scores:
+            self.scores[user_id] = {'name': display_name, 'score': 0}
+
+        points = 5
+        self.scores[user_id]['score'] += points
+
+        words_count = len(self.found_words[user_id])
+
+        if words_count >= self.words_needed:
             return {
                 'correct': True,
                 'points': points,
                 'won': True,
                 'game_over': True,
                 'response': TextSendMessage(
-                    text=f"✔️ إجابة صحيحة يا {display_name}\n+{points} نقطة\nالمغني: {self.current_song['singer']}\nأغنية: {self.current_song['lyrics']}"
+                    text=f"▪️ {display_name} فاز!\nالكلمات: {', '.join(self.found_words[user_id])}\nإجمالي النقاط: {self.scores[user_id]['score']}"
                 )
             }
-        return None
+
+        return {
+            'correct': True,
+            'points': points,
+            'response': TextSendMessage(
+                text=f"▪️ {display_name}\nكلمة صحيحة: {text}\n+{points} نقطة\nالكلمات المتبقية: {self.words_needed - words_count}"
+            )
+        }
