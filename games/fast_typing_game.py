@@ -1,124 +1,75 @@
 from linebot.models import TextSendMessage
 import random
-import time
 import re
-
-def normalize_text(text):
-    if not text:
-        return ""
-    text = text.strip().lower()
-    text = text.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا')
-    text = text.replace('ؤ', 'و').replace('ئ', 'ي').replace('ء', '')
-    text = text.replace('ة', 'ه').replace('ى', 'ي')
-    text = re.sub(r'[\u064B-\u065F]', '', text)
-    text = re.sub(r'\s+', ' ', text)
-    return text
+from datetime import datetime, timedelta
 
 class FastTypingGame:
     def __init__(self, line_bot_api):
         self.line_bot_api = line_bot_api
-        self.all_sentences = [
-            "السرعة في الكتابة مهارة مهمة",
-            "التدريب المستمر يحسن الأداء",
-            "الممارسة تصنع الكمال",
-            "الوقت من ذهب فلا تضيعه",
-            "النجاح يحتاج إلى صبر وعمل",
-            "القراءة غذاء العقل والروح",
-            "العلم نور والجهل ظلام",
-            "من جد وجد ومن زرع حصد",
-            "الصبر مفتاح الفرج",
-            "العمل الجاد يؤدي للنجاح",
-            "الأمل هو بداية النجاح",
-            "التفاؤل طريق السعادة",
-            "الإبداع يبدأ بفكرة بسيطة",
-            "الثقة بالنفس أساس التميز",
-            "الاحترام يبني العلاقات الجيدة"
-        ]
-        self.questions = []
-        self.current_sentence = None
+        self.current_word = None
+        self.first_correct = None
         self.start_time = None
-        self.question_number = 0
-        self.total_questions = 5
-        self.player_scores = {}
+        self.time_limit = 30  # 30 ثانية
+        self.scores = {}
+        
+        self.words = [
+            "سرعة", "كتابة", "برمجة", "حاسوب", "إنترنت", "تطبيق", "موقع", "شبكة",
+            "تقنية", "ذكاء", "اصطناعي", "تطوير", "مبرمج", "لغة", "كود", "برنامج",
+            "نظام", "بيانات", "معلومات", "أمان", "حماية", "تشفير", "خوارزمية", "تصميم"
+        ]
+    
+    def normalize_text(self, text):
+        if not text:
+            return ""
+        text = text.strip().lower()
+        text = text.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا')
+        text = text.replace('ؤ', 'و').replace('ئ', 'ي').replace('ء', '')
+        text = text.replace('ة', 'ه').replace('ى', 'ي')
+        text = re.sub(r'[\u064B-\u065F]', '', text)
+        text = re.sub(r'\s+', '', text)
+        return text
     
     def start_game(self):
-        self.questions = random.sample(self.all_sentences, self.total_questions)
-        self.question_number = 0
-        self.player_scores = {}
-        return self._next_question()
+        self.current_word = random.choice(self.words)
+        self.first_correct = None
+        self.start_time = datetime.now()
+        self.scores = {}
+        
+        return TextSendMessage(text=f"▪️ لعبة الكتابة السريعة\n\nاكتب هذه الكلمة بأسرع وقت:\n\n{self.current_word}\n\nلديك {self.time_limit} ثانية")
     
-    def _next_question(self):
-        self.question_number += 1
-        self.current_sentence = self.questions[self.question_number - 1]
-        self.start_time = time.time()
-        return TextSendMessage(
-            text=f"▪️ لعبة السرعة\n\nسؤال {self.question_number} من {self.total_questions}\n\nاكتب هذه الجملة بأسرع وقت:\n\n{self.current_sentence}\n\n▫️ الوقت بدأ"
-        )
-    
-    def next_question(self):
-        if self.question_number < self.total_questions:
-            return self._next_question()
-        return None
-    
-    def check_answer(self, answer, user_id, display_name):
-        if not self.current_sentence or not self.start_time:
+    def check_answer(self, text, user_id, display_name):
+        # التحقق من انتهاء الوقت
+        if self.start_time and (datetime.now() - self.start_time).seconds > self.time_limit:
+            if not self.first_correct:
+                return {
+                    'correct': False,
+                    'game_over': True,
+                    'response': TextSendMessage(text=f"▫️ انتهى الوقت\n\nلم يجب أحد بشكل صحيح\n\nالكلمة: {self.current_word}")
+                }
             return None
         
-        elapsed_time = time.time() - self.start_time
+        # قبول أول إجابة صحيحة فقط
+        if self.first_correct:
+            return None
         
-        if normalize_text(answer) == normalize_text(self.current_sentence):
-            # حساب النقاط بناءً على الوقت
-            if elapsed_time < 5:
-                points = 25
-            elif elapsed_time < 10:
-                points = 20
-            elif elapsed_time < 15:
-                points = 15
-            elif elapsed_time < 20:
-                points = 10
-            else:
-                points = 5
-            
-            if user_id not in self.player_scores:
-                self.player_scores[user_id] = {'name': display_name, 'score': 0}
-            self.player_scores[user_id]['score'] += points
-            
-            if self.question_number < self.total_questions:
-                response_text = f"▪️ صحيح {display_name}\n\n▫️ الوقت: {elapsed_time:.2f} ثانية\n▫️ النقاط: {points}"
-                return {
-                    'response': TextSendMessage(text=response_text),
-                    'points': points,
-                    'correct': True,
-                    'won': True,
-                    'game_over': False,
-                    'next_question': True
-                }
-            else:
-                return self._end_game()
+        text_normalized = self.normalize_text(text)
+        word_normalized = self.normalize_text(self.current_word)
         
-        return None
-    
-    def _end_game(self):
-        if self.player_scores:
-            sorted_players = sorted(self.player_scores.items(), key=lambda x: x[1]['score'], reverse=True)
-            winner = sorted_players[0][1]
-            all_scores = [(data['name'], data['score']) for uid, data in sorted_players]
+        if text_normalized == word_normalized:
+            elapsed_time = (datetime.now() - self.start_time).total_seconds()
+            points = max(5, int(20 - elapsed_time))  # نقاط بناءً على السرعة
             
-            from app import get_winner_card
-            winner_card = get_winner_card(winner['name'], winner['score'], all_scores)
+            self.first_correct = user_id
+            if user_id not in self.scores:
+                self.scores[user_id] = {'name': display_name, 'score': 0}
+            self.scores[user_id]['score'] += points
             
             return {
-                'points': 0,
-                'correct': False,
+                'correct': True,
+                'points': points,
                 'won': True,
                 'game_over': True,
-                'winner_card': winner_card
+                'response': TextSendMessage(text=f"▪️ {display_name} فاز\n\nالوقت: {elapsed_time:.2f} ثانية\n+{points} نقطة")
             }
-        else:
-            return {
-                'response': TextSendMessage(text="انتهت اللعبة"),
-                'points': 0,
-                'correct': False,
-                'won': False,
-                'game_over': True
-            }
+        
+        return None
