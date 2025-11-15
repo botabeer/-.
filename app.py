@@ -1616,23 +1616,24 @@ def handle_message(event):
                 return
     
     except Exception as e:
-        # معالجة أي خطأ غير متوقع
-        logger.error(f"خطأ في handle_message: {e}", exc_info=True)
-        log_error('handle_message', e, {
-            'user_id': user_id[-4:] if user_id else 'Unknown',
-            'text': text[:100] if text else 'Unknown',
-            'display_name': display_name if display_name else 'Unknown'
-        })
-        # لا نرسل رد للمستخدم لتجنب إزعاجه بالأخطاء CompatibilityGame(line_bot_api)
-                    active_games[game_id] = {
-                        'game': game,
-                        'type': 'توافق',
-                        'created_at': datetime.now(),
-                        'participants': participants,
-                        'answered_users': set(),
-                        'last_game': text,
-                        'waiting_for_names': True
-                    }
+except Exception as e:
+    # معالجة أي خطأ غير متوقع
+    logger.error(f"خطأ في handle_message: {e}", exc_info=True)
+    log_error('handle_message', e, {
+        'user_id': user_id[-4:] if user_id else 'Unknown',
+        'text': text[:100] if text else 'Unknown',
+        'display_name': display_name if display_name else 'Unknown'
+    })
+    # لا نرسل رد للمستخدم لتجنب إزعاجه بالأخطاء
+    active_games[game_id] = {
+        'game': game,
+        'type': 'توافق',
+        'created_at': datetime.now(),
+        'participants': participants,
+        'answered_users': set(),
+        'last_game': text,
+        'waiting_for_names': True
+    }
                 line_bot_api.reply_message(event.reply_token,
                     TextSendMessage(text="▫️ لعبة التوافق\n\nاكتب اسمين مفصولين بمسافة\nنص فقط بدون @ أو رموز\n\nمثال: ميش عبير",
                         quick_reply=get_quick_reply()))
