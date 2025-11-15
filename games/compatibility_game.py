@@ -5,6 +5,15 @@ class CompatibilityGame:
     def __init__(self, line_bot_api):
         self.line_bot_api = line_bot_api
         self.waiting_for_names = True
+        
+        # الألوان - iOS Style
+        self.colors = {
+            'primary': '#1C1C1E',
+            'text': '#1C1C1E',
+            'text_light': '#8E8E93',
+            'surface': '#F2F2F7',
+            'white': '#FFFFFF'
+        }
     
     def start_game(self):
         card = {
@@ -14,25 +23,35 @@ class CompatibilityGame:
                 "layout": "vertical",
                 "contents": [
                     {
-                        "type": "text",
-                        "text": "لعبة التوافق",
-                        "size": "xl",
-                        "weight": "bold",
-                        "color": "#1C1C1E",
-                        "align": "center"
+                        "type": "box",
+                        "layout": "vertical",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": "لعبة التوافق",
+                                "size": "xl",
+                                "weight": "bold",
+                                "color": self.colors['white'],
+                                "align": "center"
+                            }
+                        ],
+                        "backgroundColor": self.colors['primary'],
+                        "cornerRadius": "16px",
+                        "paddingAll": "20px"
                     },
                     {
-                        "type": "text",
-                        "text": "للتسلية فقط",
-                        "size": "sm",
-                        "color": "#8E8E93",
-                        "align": "center",
-                        "margin": "sm"
-                    },
-                    {
-                        "type": "separator",
-                        "margin": "xl",
-                        "color": "#F2F2F7"
+                        "type": "box",
+                        "layout": "vertical",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": "للتسلية فقط",
+                                "size": "sm",
+                                "color": self.colors['text_light'],
+                                "align": "center"
+                            }
+                        ],
+                        "margin": "md"
                     },
                     {
                         "type": "box",
@@ -42,15 +61,16 @@ class CompatibilityGame:
                                 "type": "text",
                                 "text": "اكتب اسمين مفصولين بمسافة",
                                 "size": "md",
-                                "color": "#1C1C1E",
+                                "color": self.colors['text'],
                                 "align": "center",
-                                "wrap": True
+                                "wrap": True,
+                                "weight": "bold"
                             },
                             {
                                 "type": "text",
                                 "text": "نص فقط بدون رموز",
                                 "size": "sm",
-                                "color": "#8E8E93",
+                                "color": self.colors['text_light'],
                                 "align": "center",
                                 "margin": "md"
                             },
@@ -62,31 +82,31 @@ class CompatibilityGame:
                                         "type": "text",
                                         "text": "مثال: اسم اسم",
                                         "size": "sm",
-                                        "color": "#1C1C1E",
+                                        "color": self.colors['text'],
                                         "align": "center"
                                     }
                                 ],
-                                "backgroundColor": "#FFFFFF",
+                                "backgroundColor": self.colors['white'],
                                 "cornerRadius": "8px",
                                 "paddingAll": "12px",
                                 "margin": "md"
                             },
                             {
                                 "type": "text",
-                                "text": "▫️ لا تُحسب نقاط لهذه اللعبة",
+                                "text": "لا تُحسب نقاط لهذه اللعبة",
                                 "size": "xs",
-                                "color": "#8E8E93",
+                                "color": self.colors['text_light'],
                                 "align": "center",
                                 "margin": "lg"
                             }
                         ],
-                        "backgroundColor": "#F2F2F7",
+                        "backgroundColor": self.colors['surface'],
                         "cornerRadius": "12px",
                         "paddingAll": "16px",
-                        "margin": "xl"
+                        "margin": "lg"
                     }
                 ],
-                "backgroundColor": "#FFFFFF",
+                "backgroundColor": self.colors['white'],
                 "paddingAll": "24px"
             }
         }
@@ -118,21 +138,21 @@ class CompatibilityGame:
         
         # رسائل حسب النسبة
         if compatibility >= 90:
-            message = "🖤 توافق مثالي"
-            emoji = "🖤"
+            message = "توافق مثالي"
+            emoji = ""
         elif compatibility >= 75:
-            message = "🖤 توافق ممتاز"
-            emoji = "🖤"
+            message = "توافق ممتاز"
+            emoji = ""
         elif compatibility >= 60:
-            message = "🖤 توافق جيد"
-            emoji = "🖤"
+            message = "توافق جيد"
+            emoji = ""
         else:
-            message = "🖤 توافق متوسط"
-            emoji = "🖤"
+            message = "توافق متوسط"
+            emoji = ""
         
         self.waiting_for_names = False
         
-        # بطاقة نتيجة التوافق
+        # بطاقة النتيجة
         result_card = {
             "type": "bubble",
             "body": {
@@ -140,17 +160,21 @@ class CompatibilityGame:
                 "layout": "vertical",
                 "contents": [
                     {
-                        "type": "text",
-                        "text": "نسبة التوافق",
-                        "size": "xl",
-                        "weight": "bold",
-                        "color": "#1C1C1E",
-                        "align": "center"
-                    },
-                    {
-                        "type": "separator",
-                        "margin": "xl",
-                        "color": "#F2F2F7"
+                        "type": "box",
+                        "layout": "vertical",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": "نسبة التوافق",
+                                "size": "xl",
+                                "weight": "bold",
+                                "color": self.colors['white'],
+                                "align": "center"
+                            }
+                        ],
+                        "backgroundColor": self.colors['primary'],
+                        "cornerRadius": "16px",
+                        "paddingAll": "20px"
                     },
                     {
                         "type": "box",
@@ -161,52 +185,55 @@ class CompatibilityGame:
                                 "text": f"{name1} 🖤 {name2}",
                                 "size": "lg",
                                 "weight": "bold",
-                                "color": "#1C1C1E",
+                                "color": self.colors['text'],
                                 "align": "center",
                                 "wrap": True
-                            },
+                            }
+                        ],
+                        "margin": "xl"
+                    },
+                    {
+                        "type": "box",
+                        "layout": "vertical",
+                        "contents": [
                             {
-                                "type": "box",
-                                "layout": "vertical",
-                                "contents": [
-                                    {
-                                        "type": "text",
-                                        "text": f"{compatibility}%",
-                                        "size": "xxl",
-                                        "weight": "bold",
-                                        "color": "#1C1C1E",
-                                        "align": "center"
-                                    },
-                                    {
-                                        "type": "text",
-                                        "text": message,
-                                        "size": "md",
-                                        "color": "#8E8E93",
-                                        "align": "center",
-                                        "margin": "sm"
-                                    }
-                                ],
-                                "backgroundColor": "#FFFFFF",
-                                "cornerRadius": "12px",
-                                "paddingAll": "20px",
-                                "margin": "lg"
+                                "type": "text",
+                                "text": f"{compatibility}%",
+                                "size": "xxl",
+                                "weight": "bold",
+                                "color": self.colors['text'],
+                                "align": "center"
                             },
                             {
                                 "type": "text",
-                                "text": "▫️ للتسلية فقط - لا تُحسب نقاط",
-                                "size": "xs",
-                                "color": "#8E8E93",
+                                "text": f"{emoji} {message}",
+                                "size": "md",
+                                "color": self.colors['text_light'],
                                 "align": "center",
-                                "margin": "lg"
+                                "margin": "sm"
                             }
                         ],
-                        "backgroundColor": "#F2F2F7",
+                        "backgroundColor": self.colors['surface'],
                         "cornerRadius": "12px",
-                        "paddingAll": "16px",
-                        "margin": "xl"
+                        "paddingAll": "20px",
+                        "margin": "lg"
+                    },
+                    {
+                        "type": "box",
+                        "layout": "vertical",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": "للتسلية فقط - لا تُحسب نقاط",
+                                "size": "xs",
+                                "color": self.colors['text_light'],
+                                "align": "center"
+                            }
+                        ],
+                        "margin": "lg"
                     }
                 ],
-                "backgroundColor": "#FFFFFF",
+                "backgroundColor": self.colors['white'],
                 "paddingAll": "24px"
             }
         }
