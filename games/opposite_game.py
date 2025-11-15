@@ -61,7 +61,7 @@ class OppositeGame:
         self.current_word = self.questions[self.question_number - 1]
         self.hints_used = 0
         return TextSendMessage(
-            text=f"▪️ لعبة الأضداد\n\nسؤال {self.question_number} من {self.total_questions}\n\nما هو عكس كلمة: {self.current_word['word']}\n\n▫️ لمح - للحصول على تلميح"
+            text=f"لعبة الأضداد\n\nسؤال {self.question_number} من {self.total_questions}\n\nما هو عكس كلمة: {self.current_word['word']}\n\nلمح - للحصول على تلميح\nجاوب - لعرض الإجابة"
         )
     
     def next_question(self):
@@ -75,12 +75,13 @@ class OppositeGame:
         
         answer_lower = answer.strip().lower()
         
+        # أمر التلميح
         if answer_lower in ['لمح', 'تلميح', 'hint']:
             if self.hints_used == 0:
                 opposite = self.current_word['opposite']
                 first_letter = opposite[0]
                 word_length = len(opposite)
-                hint = f"▫️ يبدأ بحرف: {first_letter}\n▫️ عدد الحروف: {word_length}"
+                hint = f"يبدأ بحرف: {first_letter}\nعدد الحروف: {word_length}"
                 self.hints_used += 1
                 return {
                     'response': TextSendMessage(text=hint),
@@ -98,9 +99,11 @@ class OppositeGame:
                     'game_over': False
                 }
         
-        if answer_lower in ['جاوب', 'الجواب', 'answer']:
-            response_text = f"▪️ الإجابة: {self.current_word['opposite']}"
+        # أمر عرض الإجابة والانتقال للسؤال التالي
+        if answer_lower in ['جاوب', 'الجواب', 'answer', 'الحل']:
+            response_text = f"الإجابة: {self.current_word['opposite']}"
             
+            # الانتقال للسؤال التالي أو إنهاء اللعبة
             if self.question_number < self.total_questions:
                 return {
                     'response': TextSendMessage(text=response_text),
@@ -111,8 +114,9 @@ class OppositeGame:
                     'next_question': True
                 }
             else:
-                return self._end_game()
+                return self._end_game(show_answer=response_text)
         
+        # التحقق من الإجابة
         if normalize_text(answer) == normalize_text(self.current_word['opposite']):
             points = 15 - (self.hints_used * 3)
             
@@ -121,7 +125,7 @@ class OppositeGame:
             self.player_scores[user_id]['score'] += points
             
             if self.question_number < self.total_questions:
-                response_text = f"▪️ صحيح {display_name}\n\n{self.current_word['word']} ↔️ {self.current_word['opposite']}\n\n▫️ النقاط: {points}"
+                response_text = f"صحيح {display_name}\n\n{self.current_word['word']} ↔️ {self.current_word['opposite']}\n\nالنقاط: {points}"
                 return {
                     'response': TextSendMessage(text=response_text),
                     'points': points,
@@ -135,13 +139,12 @@ class OppositeGame:
         
         return None
     
-    def _end_game(self):
+    def _end_game(self, show_answer=None):
         if self.player_scores:
             sorted_players = sorted(self.player_scores.items(), key=lambda x: x[1]['score'], reverse=True)
             winner = sorted_players[0][1]
             all_scores = [(data['name'], data['score']) for uid, data in sorted_players]
             
-            # استيراد دالة البطاقة
             try:
                 import sys
                 import os
@@ -157,16 +160,22 @@ class OppositeGame:
                     'winner_card': winner_card
                 }
             except:
+                message = f"انتهت اللعبة\n\nالفائز: {winner['name']}\nالنقاط: {winner['score']}"
+                if show_answer:
+                    message = f"{show_answer}\n\n{message}"
                 return {
-                    'response': TextSendMessage(text=f"▪️ انتهت اللعبة\n\nالفائز: {winner['name']}\nالنقاط: {winner['score']}"),
+                    'response': TextSendMessage(text=message),
                     'points': 0,
                     'correct': False,
                     'won': False,
                     'game_over': True
                 }
         else:
+            message = "انتهت اللعبة"
+            if show_answer:
+                message = f"{show_answer}\n\n{message}"
             return {
-                'response': TextSendMessage(text="انتهت اللعبة"),
+                'response': TextSendMessage(text=message),
                 'points': 0,
                 'correct': False,
                 'won': False,
