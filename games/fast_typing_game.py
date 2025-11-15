@@ -1,21 +1,24 @@
+# ============================================
+# fast_typing_game.py - لعبة الكتابة السريعة
+# ============================================
+
 from linebot.models import TextSendMessage
 import random
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 
 class FastTypingGame:
     def __init__(self, line_bot_api):
         self.line_bot_api = line_bot_api
         self.current_word = None
-        self.first_correct = None  # حفظ أول مستخدم أجاب بشكل صحيح
+        self.first_correct = None
         self.start_time = None
-        self.time_limit = 30  # 30 ثانية
+        self.time_limit = 30
         self.scores = {}
         
         self.words = [
             "سرعة", "كتابة", "برمجة", "حاسوب", "إنترنت", "تطبيق", "موقع", "شبكة",
-            "تقنية", "ذكاء", "تطوير", "مبرمج", "لغة", "كود", "برنامج",
-            "نظام", "بيانات", "معلومات", "أمان", "حماية", "تشفير", "خوارزمية", "تصميم"
+            "تقنية", "ذكاء", "تطوير", "مبرمج", "لغة", "كود", "برنامج"
         ]
     
     def normalize_text(self, text):
@@ -31,16 +34,15 @@ class FastTypingGame:
     
     def start_game(self):
         self.current_word = random.choice(self.words)
-        self.first_correct = None  # إعادة تعيين
+        self.first_correct = None
         self.start_time = datetime.now()
         self.scores = {}
         
         return TextSendMessage(
-            text=f"لعبة الكتابة السريعة\n\nاكتب هذه الكلمة بأسرع وقت:\n\n{self.current_word}\n\nلديك {self.time_limit} ثانية"
+            text=f"▪️ لعبة الكتابة السريعة\n\n▫️ اكتب هذه الكلمة:\n\n{self.current_word}\n\n▫️ الوقت: {self.time_limit} ثانية\n▫️ أول إجابة صحيحة تفوز"
         )
     
     def check_answer(self, text, user_id, display_name):
-        # التحقق من انتهاء الوقت
         if self.start_time:
             elapsed = (datetime.now() - self.start_time).seconds
             if elapsed > self.time_limit:
@@ -49,12 +51,11 @@ class FastTypingGame:
                         'correct': False,
                         'game_over': True,
                         'response': TextSendMessage(
-                            text=f"انتهى الوقت\n\nلم يجب أحد بشكل صحيح\n\nالكلمة: {self.current_word}"
+                            text=f"▪️ انتهى الوقت\n\n▫️ لم يجب أحد\n▫️ الكلمة: {self.current_word}"
                         )
                     }
                 return None
         
-        # إذا كان هناك فائز بالفعل، تجاهل باقي الإجابات
         if self.first_correct:
             return None
         
@@ -64,11 +65,6 @@ class FastTypingGame:
         if text_normalized == word_normalized:
             elapsed_time = (datetime.now() - self.start_time).total_seconds()
             
-            # حساب النقاط بناءً على السرعة (أسرع = أكثر نقاط)
-            # 0-5 ثواني = 20 نقطة
-            # 5-10 ثواني = 15 نقطة
-            # 10-20 ثواني = 10 نقاط
-            # 20-30 ثواني = 5 نقاط
             if elapsed_time <= 5:
                 points = 20
             elif elapsed_time <= 10:
@@ -89,7 +85,7 @@ class FastTypingGame:
                 'won': True,
                 'game_over': True,
                 'response': TextSendMessage(
-                    text=f"{display_name} فاز\n\nالوقت: {elapsed_time:.2f} ثانية\n+{points} نقطة"
+                    text=f"▪️ {display_name} فاز\n\n▫️ الوقت: {elapsed_time:.2f} ثانية\n▫️ النقاط: +{points}"
                 )
             }
         
