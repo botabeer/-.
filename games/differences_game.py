@@ -26,16 +26,10 @@ class DifferencesGame:
                 "differences": 5
             },
             {
-                "original": "https://up6.cc/2025/10/17630844821154.jpeg",
-                "solution": "https://mrkzgulfup.com/uploads/1763033387254610.jpeg",
-                "differences": 5
-            },
-            {
                 "original": "https://up6.cc/2025/10/176308448213085.jpeg",
                 "solution": "https://mrkzgulfup.com/uploads/1763033387284912.jpeg",
                 "differences": 5
-            },
-            {
+            }
         ]
         self.current_pair = None
         self.showed_solution = False
