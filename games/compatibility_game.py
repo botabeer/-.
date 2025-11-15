@@ -46,7 +46,7 @@ class CompatibilityGame:
         
         return {
             'response': TextSendMessage(
-                text=f"▪️ نسبة التوافق\n\n{name1} ▪️ {name2}\n\n▫️ {compatibility}%\n\n{message}"
+                text=f"▪️ نسبة التوافق\n\n{name1} 🖤 {name2}\n\n▫️ {compatibility}%\n\n{message}"
             ),
             'points': 5,
             'correct': True,
