@@ -85,7 +85,7 @@ class FastTypingGame:
                 'won': True,
                 'game_over': True,
                 'response': TextSendMessage(
-                    text=f"▪️ {display_name} فاز\n\n▫️ الوقت: {elapsed_time:.2f} ثانية\n▫️ النقاط: +{points}"
+                    text=f"▪️ {display_name} فاز\n\n⏱️ الوقت: {elapsed_time:.2f} ثانية\n▫️ النقاط: +{points}"
                 )
             }
         
