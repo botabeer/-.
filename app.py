@@ -1,9 +1,9 @@
 """
 بوت الحوت - نظام ألعاب تفاعلية على LINE
-نسخة محسّنة ومتكاملة بتصميم iOS نظيف
+النسخة المحسّنة والمتكاملة
 """
 
-from flask import Flask, request, abort
+from flask import Flask, request, abort, jsonify
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError, LineBotApiError
 from linebot.models import (
@@ -14,37 +14,73 @@ import os
 import sqlite3
 from datetime import datetime, timedelta
 from collections import defaultdict
+from dataclasses import dataclass
+from typing import List, Dict, Optional, Set, Tuple
+from functools import wraps, lru_cache
+from abc import ABC, abstractmethod
 import threading
 import time
 import random
 import logging
 import sys
 import re
+import hashlib
 
 # ═══════════════════════════════════════════════════════════════
 # إعدادات النظام
 # ═══════════════════════════════════════════════════════════════
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)]
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('bot.log', encoding='utf-8')
+    ]
 )
 logger = logging.getLogger("whale-bot")
 
-# الثوابت
-LINE_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN', '')
-LINE_SECRET = os.getenv('LINE_CHANNEL_SECRET', '')
-GEMINI_KEYS = [k for k in [
-    os.getenv('GEMINI_API_KEY_1', ''),
-    os.getenv('GEMINI_API_KEY_2', '')
-] if k]
+# ═══════════════════════════════════════════════════════════════
+# Configuration Management
+# ═══════════════════════════════════════════════════════════════
+@dataclass
+class BotConfig:
+    """إعدادات البوت"""
+    line_token: str
+    line_secret: str
+    gemini_keys: List[str]
+    admin_token: str
+    db_name: str = 'game_bot.db'
+    rate_limit_max: int = 30
+    rate_limit_window: int = 60
+    inactive_days: int = 45
+    game_timeout_minutes: int = 15
+    cleanup_interval_seconds: int = 300
+    names_cache_max: int = 1000
+    
+    @classmethod
+    def from_env(cls):
+        """تحميل الإعدادات من المتغيرات البيئية"""
+        return cls(
+            line_token=os.getenv('LINE_CHANNEL_ACCESS_TOKEN', ''),
+            line_secret=os.getenv('LINE_CHANNEL_SECRET', ''),
+            gemini_keys=[k for k in [
+                os.getenv('GEMINI_API_KEY_1', ''),
+                os.getenv('GEMINI_API_KEY_2', '')
+            ] if k],
+            admin_token=os.getenv('ADMIN_TOKEN', hashlib.sha256(b'default_admin').hexdigest())
+        )
+    
+    def validate(self) -> bool:
+        """التحقق من صحة الإعدادات"""
+        if not self.line_token or not self.line_secret:
+            logger.error("متغيرات LINE مفقودة")
+            return False
+        return True
 
-RATE_LIMIT = {'max': 30, 'window': 60}
-DB_NAME = 'game_bot.db'
-INACTIVE_DAYS = 45
-GAME_TIMEOUT_MINUTES = 15
-CLEANUP_INTERVAL_SECONDS = 300
-NAMES_CACHE_MAX = 1000
+# تحميل الإعدادات
+config = BotConfig.from_env()
+if not config.validate():
+    logger.critical("فشل في تحميل الإعدادات الأساسية")
 
 # نظام الألوان iOS Style
 THEME = {
@@ -55,85 +91,172 @@ THEME = {
     'accent': '#007AFF',
     'success': '#34C759',
     'danger': '#FF3B30',
+    'warning': '#FF9500',
     'separator': '#D1D1D6'
 }
 
-NO_POINTS_GAMES = ['اختلاف', 'توافق', 'سؤال', 'اعتراف', 'تحدي', 'منشن']
+NO_POINTS_GAMES = {'اختلاف', 'توافق', 'سؤال', 'اعتراف', 'تحدي', 'منشن'}
+
+# ═══════════════════════════════════════════════════════════════
+# Custom Exceptions
+# ═══════════════════════════════════════════════════════════════
+class BotException(Exception):
+    """استثناء أساسي للبوت"""
+    pass
+
+class GameNotFoundException(BotException):
+    """اللعبة غير موجودة"""
+    pass
+
+class UserNotRegisteredException(BotException):
+    """المستخدم غير مسجل"""
+    pass
+
+class DatabaseException(BotException):
+    """خطأ في قاعدة البيانات"""
+    pass
 
 # ═══════════════════════════════════════════════════════════════
 # قاعدة البيانات
 # ═══════════════════════════════════════════════════════════════
-def get_db():
-    """اتصال آمن بقاعدة البيانات"""
-    try:
-        conn = sqlite3.connect(DB_NAME, check_same_thread=False, timeout=10)
-        conn.row_factory = sqlite3.Row
-        return conn
-    except Exception as e:
-        logger.error(f"فشل الاتصال بقاعدة البيانات: {e}")
-        return None
-
-def init_db():
-    """تهيئة قاعدة البيانات مع معالجة الأخطاء"""
-    try:
-        conn = get_db()
-        if not conn:
+class DatabaseManager:
+    """مدير قاعدة البيانات"""
+    
+    def __init__(self, db_name: str):
+        self.db_name = db_name
+        self._local = threading.local()
+    
+    def get_connection(self):
+        """الحصول على اتصال thread-safe"""
+        if not hasattr(self._local, 'conn') or self._local.conn is None:
+            try:
+                self._local.conn = sqlite3.connect(
+                    self.db_name,
+                    check_same_thread=False,
+                    timeout=10,
+                    isolation_level='DEFERRED'
+                )
+                self._local.conn.row_factory = sqlite3.Row
+                # تفعيل Foreign Keys
+                self._local.conn.execute('PRAGMA foreign_keys = ON')
+                # تحسين الأداء
+                self._local.conn.execute('PRAGMA journal_mode = WAL')
+                self._local.conn.execute('PRAGMA synchronous = NORMAL')
+            except Exception as e:
+                logger.error(f"فشل الاتصال بقاعدة البيانات: {e}")
+                raise DatabaseException(f"Database connection failed: {e}")
+        
+        return self._local.conn
+    
+    def close_connection(self):
+        """إغلاق الاتصال"""
+        if hasattr(self._local, 'conn') and self._local.conn:
+            self._local.conn.close()
+            self._local.conn = None
+    
+    def init_database(self) -> bool:
+        """تهيئة قاعدة البيانات"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # جدول اللاعبين
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS players (
+                    user_id TEXT PRIMARY KEY,
+                    display_name TEXT NOT NULL,
+                    total_points INTEGER DEFAULT 0 CHECK(total_points >= 0),
+                    games_played INTEGER DEFAULT 0 CHECK(games_played >= 0),
+                    wins INTEGER DEFAULT 0 CHECK(wins >= 0),
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    last_active TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # جدول تاريخ الألعاب
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS game_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    game_type TEXT NOT NULL,
+                    points INTEGER DEFAULT 0,
+                    won INTEGER DEFAULT 0 CHECK(won IN (0, 1)),
+                    played_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES players(user_id) ON DELETE CASCADE
+                )
+            ''')
+            
+            # الفهارس المحسّنة
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_points ON players(total_points DESC)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_active ON players(last_active DESC)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_active_points ON players(last_active DESC, total_points DESC)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_history_user ON game_history(user_id, played_at DESC)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_history_composite ON game_history(user_id, game_type, played_at DESC)')
+            
+            conn.commit()
+            logger.info("قاعدة البيانات جاهزة")
+            return True
+        except Exception as e:
+            logger.error(f"خطأ في تهيئة قاعدة البيانات: {e}")
             return False
-        
-        cursor = conn.cursor()
-        
-        # جدول اللاعبين
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS players (
-                user_id TEXT PRIMARY KEY,
-                display_name TEXT NOT NULL,
-                total_points INTEGER DEFAULT 0,
-                games_played INTEGER DEFAULT 0,
-                wins INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                last_active TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # جدول تاريخ الألعاب
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS game_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT NOT NULL,
-                game_type TEXT NOT NULL,
-                points INTEGER DEFAULT 0,
-                won INTEGER DEFAULT 0,
-                played_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES players(user_id) ON DELETE CASCADE
-            )
-        ''')
-        
-        # الفهارس
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_points ON players(total_points DESC)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_active ON players(last_active)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_history ON game_history(user_id, played_at)')
-        
-        conn.commit()
-        conn.close()
-        logger.info("قاعدة البيانات جاهزة")
-        return True
-    except Exception as e:
-        logger.error(f"خطأ في تهيئة قاعدة البيانات: {e}")
-        return False
+    
+    def execute_query(self, query: str, params: tuple = ()) -> Optional[List]:
+        """تنفيذ استعلام SELECT"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            return cursor.fetchall()
+        except Exception as e:
+            logger.error(f"خطأ في تنفيذ الاستعلام: {e}")
+            raise DatabaseException(f"Query execution failed: {e}")
+    
+    def execute_update(self, query: str, params: tuple = ()) -> bool:
+        """تنفيذ استعلام UPDATE/INSERT/DELETE"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"خطأ في تنفيذ التحديث: {e}")
+            conn.rollback()
+            raise DatabaseException(f"Update execution failed: {e}")
+    
+    def execute_batch(self, query: str, params_list: List[tuple]) -> bool:
+        """تنفيذ عدة استعلامات دفعة واحدة"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.executemany(query, params_list)
+            conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"خطأ في تنفيذ الدفعة: {e}")
+            conn.rollback()
+            raise DatabaseException(f"Batch execution failed: {e}")
+
+# إنشاء مدير قاعدة البيانات
+db_manager = DatabaseManager(config.db_name)
+db_manager.init_database()
 
 # ═══════════════════════════════════════════════════════════════
-# دوال مساعدة
+# دوال مساعدة محسّنة
 # ═══════════════════════════════════════════════════════════════
-def safe_text(text):
+def safe_text(text: any, max_length: int = 500) -> str:
     """تنظيف النص من الأحرف الخطرة"""
-    if not text:
+    if text is None:
         return ""
-    # إزالة الأحرف الخاصة التي قد تسبب مشاكل
+    
     text = str(text).strip()
+    # إزالة الأحرف الخطرة
     text = text.replace('"', '').replace("'", '').replace('\\', '')
-    return text[:500]  # حد أقصى 500 حرف
+    text = text.replace('<', '').replace('>', '')
+    # حد أقصى للطول
+    return text[:max_length]
 
-def normalize_text(text):
+def normalize_text(text: str) -> str:
     """تطبيع النص العربي للمقارنة"""
     if not text:
         return ""
@@ -152,7 +275,7 @@ def normalize_text(text):
     
     return text
 
-def load_file(filename):
+def load_file(filename: str) -> List[str]:
     """تحميل ملف نصي بشكل آمن"""
     try:
         filepath = os.path.join('games', filename)
@@ -162,157 +285,239 @@ def load_file(filename):
         
         with open(filepath, 'r', encoding='utf-8') as f:
             lines = [safe_text(line) for line in f if line.strip()]
-            logger.info(f"تم تحميل {len(lines)} سطر من {filename}")
-            return lines
+        
+        logger.info(f"تم تحميل {len(lines)} سطر من {filename}")
+        return lines
     except Exception as e:
         logger.error(f"خطأ في تحميل {filename}: {e}")
         return []
 
 # ═══════════════════════════════════════════════════════════════
+# Cache Management
+# ═══════════════════════════════════════════════════════════════
+class CacheManager:
+    """مدير الذاكرة المؤقتة"""
+    
+    def __init__(self, max_size: int = 1000, ttl: int = 3600):
+        self.max_size = max_size
+        self.ttl = ttl
+        self.cache: Dict[str, Tuple[any, datetime]] = {}
+        self.lock = threading.Lock()
+    
+    def get(self, key: str) -> Optional[any]:
+        """الحصول على قيمة من الذاكرة"""
+        with self.lock:
+            if key in self.cache:
+                value, timestamp = self.cache[key]
+                if (datetime.now() - timestamp).seconds < self.ttl:
+                    return value
+                else:
+                    del self.cache[key]
+        return None
+    
+    def set(self, key: str, value: any) -> None:
+        """حفظ قيمة في الذاكرة"""
+        with self.lock:
+            if len(self.cache) >= self.max_size:
+                # حذف أقدم عنصر
+                oldest_key = min(self.cache.items(), key=lambda x: x[1][1])[0]
+                del self.cache[oldest_key]
+            
+            self.cache[key] = (value, datetime.now())
+    
+    def delete(self, key: str) -> None:
+        """حذف قيمة من الذاكرة"""
+        with self.lock:
+            self.cache.pop(key, None)
+    
+    def clear(self) -> None:
+        """مسح الذاكرة"""
+        with self.lock:
+            self.cache.clear()
+    
+    def cleanup(self) -> int:
+        """حذف القيم منتهية الصلاحية"""
+        with self.lock:
+            now = datetime.now()
+            expired_keys = [
+                k for k, (_, ts) in self.cache.items()
+                if (now - ts).seconds >= self.ttl
+            ]
+            for key in expired_keys:
+                del self.cache[key]
+            return len(expired_keys)
+
+# إنشاء مديري الذاكرة المؤقتة
+names_cache = CacheManager(max_size=config.names_cache_max, ttl=3600)
+stats_cache = CacheManager(max_size=500, ttl=60)
+leaderboard_cache = CacheManager(max_size=1, ttl=60)
+
+# ═══════════════════════════════════════════════════════════════
 # إدارة المستخدمين
 # ═══════════════════════════════════════════════════════════════
-def update_user_activity(user_id, display_name):
-    """تحديث آخر نشاط للمستخدم"""
-    try:
-        conn = get_db()
-        if not conn:
-            return False
-        
-        cursor = conn.cursor()
-        now = datetime.now().isoformat()
-        safe_name = safe_text(display_name)
-        
-        cursor.execute('SELECT user_id FROM players WHERE user_id = ?', (user_id,))
-        exists = cursor.fetchone()
-        
-        if exists:
-            cursor.execute(
-                'UPDATE players SET last_active = ?, display_name = ? WHERE user_id = ?',
-                (now, safe_name, user_id)
-            )
-        else:
-            cursor.execute(
-                'INSERT INTO players (user_id, display_name, last_active) VALUES (?, ?, ?)',
-                (user_id, safe_name, now)
-            )
-        
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        logger.error(f"خطأ في تحديث النشاط: {e}")
-        return False
-
-def update_points(user_id, display_name, points, won=False, game_type=''):
-    """تحديث نقاط اللاعب"""
-    if game_type in NO_POINTS_GAMES:
-        points = 0
+class UserManager:
+    """مدير المستخدمين"""
     
-    try:
-        conn = get_db()
-        if not conn:
-            return False
-        
-        cursor = conn.cursor()
-        now = datetime.now().isoformat()
-        safe_name = safe_text(display_name)
-        
-        cursor.execute('SELECT * FROM players WHERE user_id = ?', (user_id,))
-        user = cursor.fetchone()
-        
-        if user:
-            new_points = max(0, user['total_points'] + points)
-            new_games = user['games_played'] + 1
-            new_wins = user['wins'] + (1 if won else 0)
+    @staticmethod
+    def update_activity(user_id: str, display_name: str) -> bool:
+        """تحديث آخر نشاط للمستخدم"""
+        try:
+            now = datetime.now().isoformat()
+            safe_name = safe_text(display_name, 100)
             
-            cursor.execute('''
-                UPDATE players 
-                SET total_points = ?, games_played = ?, wins = ?, 
-                    last_active = ?, display_name = ? 
-                WHERE user_id = ?
-            ''', (new_points, new_games, new_wins, now, safe_name, user_id))
-        else:
-            cursor.execute('''
-                INSERT INTO players 
-                (user_id, display_name, total_points, games_played, wins, last_active) 
-                VALUES (?, ?, ?, 1, ?, ?)
-            ''', (user_id, safe_name, max(0, points), 1 if won else 0, now))
-        
-        if game_type and points != 0:
-            cursor.execute(
-                'INSERT INTO game_history (user_id, game_type, points, won) VALUES (?, ?, ?, ?)',
-                (user_id, game_type, points, 1 if won else 0)
+            # التحقق من الوجود
+            result = db_manager.execute_query(
+                'SELECT user_id FROM players WHERE user_id = ?',
+                (user_id,)
             )
+            
+            if result:
+                db_manager.execute_update(
+                    'UPDATE players SET last_active = ?, display_name = ? WHERE user_id = ?',
+                    (now, safe_name, user_id)
+                )
+            else:
+                db_manager.execute_update(
+                    'INSERT INTO players (user_id, display_name, last_active) VALUES (?, ?, ?)',
+                    (user_id, safe_name, now)
+                )
+            
+            # حذف من الذاكرة المؤقتة
+            stats_cache.delete(user_id)
+            return True
+        except DatabaseException as e:
+            logger.error(f"خطأ في تحديث النشاط: {e}")
+            return False
+    
+    @staticmethod
+    def update_points(user_id: str, display_name: str, points: int, 
+                     won: bool = False, game_type: str = '') -> bool:
+        """تحديث نقاط اللاعب"""
+        if game_type in NO_POINTS_GAMES:
+            points = 0
         
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        logger.error(f"خطأ في تحديث النقاط: {e}")
-        return False
-
-def get_stats(user_id):
-    """جلب إحصائيات اللاعب"""
-    try:
-        conn = get_db()
-        if not conn:
+        try:
+            now = datetime.now().isoformat()
+            safe_name = safe_text(display_name, 100)
+            
+            # جلب البيانات الحالية
+            result = db_manager.execute_query(
+                'SELECT total_points, games_played, wins FROM players WHERE user_id = ?',
+                (user_id,)
+            )
+            
+            if result:
+                user = result[0]
+                new_points = max(0, user['total_points'] + points)
+                new_games = user['games_played'] + 1
+                new_wins = user['wins'] + (1 if won else 0)
+                
+                db_manager.execute_update('''
+                    UPDATE players 
+                    SET total_points = ?, games_played = ?, wins = ?, 
+                        last_active = ?, display_name = ? 
+                    WHERE user_id = ?
+                ''', (new_points, new_games, new_wins, now, safe_name, user_id))
+            else:
+                db_manager.execute_update('''
+                    INSERT INTO players 
+                    (user_id, display_name, total_points, games_played, wins, last_active) 
+                    VALUES (?, ?, ?, 1, ?, ?)
+                ''', (user_id, safe_name, max(0, points), 1 if won else 0, now))
+            
+            # حفظ في السجل
+            if game_type and points != 0:
+                db_manager.execute_update(
+                    'INSERT INTO game_history (user_id, game_type, points, won) VALUES (?, ?, ?, ?)',
+                    (user_id, game_type, points, 1 if won else 0)
+                )
+            
+            # حذف من الذاكرة المؤقتة
+            stats_cache.delete(user_id)
+            leaderboard_cache.clear()
+            return True
+        except DatabaseException as e:
+            logger.error(f"خطأ في تحديث النقاط: {e}")
+            return False
+    
+    @staticmethod
+    def get_stats(user_id: str) -> Optional[Dict]:
+        """جلب إحصائيات اللاعب"""
+        # التحقق من الذاكرة المؤقتة
+        cached = stats_cache.get(user_id)
+        if cached:
+            return cached
+        
+        try:
+            result = db_manager.execute_query(
+                'SELECT * FROM players WHERE user_id = ?',
+                (user_id,)
+            )
+            
+            if result:
+                stats = dict(result[0])
+                stats_cache.set(user_id, stats)
+                return stats
             return None
+        except DatabaseException as e:
+            logger.error(f"خطأ في جلب الإحصائيات: {e}")
+            return None
+    
+    @staticmethod
+    def get_leaderboard(limit: int = 10) -> List[Dict]:
+        """جلب لوحة الصدارة"""
+        # التحقق من الذاكرة المؤقتة
+        cache_key = f"leaderboard_{limit}"
+        cached = leaderboard_cache.get(cache_key)
+        if cached:
+            return cached
         
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM players WHERE user_id = ?', (user_id,))
-        user = cursor.fetchone()
-        conn.close()
-        return dict(user) if user else None
-    except Exception as e:
-        logger.error(f"خطأ في جلب الإحصائيات: {e}")
-        return None
-
-def get_leaderboard(limit=10):
-    """جلب لوحة الصدارة"""
-    try:
-        conn = get_db()
-        if not conn:
+        try:
+            result = db_manager.execute_query('''
+                SELECT display_name, total_points, games_played, wins 
+                FROM players 
+                WHERE total_points > 0
+                ORDER BY total_points DESC, wins DESC 
+                LIMIT ?
+            ''', (limit,))
+            
+            leaders = [dict(row) for row in result]
+            leaderboard_cache.set(cache_key, leaders)
+            return leaders
+        except DatabaseException as e:
+            logger.error(f"خطأ في جلب الصدارة: {e}")
             return []
-        
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT display_name, total_points, games_played, wins 
-            FROM players 
-            WHERE total_points > 0
-            ORDER BY total_points DESC, wins DESC 
-            LIMIT ?
-        ''', (limit,))
-        leaders = cursor.fetchall()
-        conn.close()
-        return [dict(l) for l in leaders]
-    except Exception as e:
-        logger.error(f"خطأ في جلب الصدارة: {e}")
-        return []
-
-def cleanup_inactive_users():
-    """حذف المستخدمين غير النشطين"""
-    try:
-        conn = get_db()
-        if not conn:
-            return
-        
-        cursor = conn.cursor()
-        cutoff_date = (datetime.now() - timedelta(days=INACTIVE_DAYS)).isoformat()
-        
-        cursor.execute('SELECT COUNT(*) FROM players WHERE last_active < ?', (cutoff_date,))
-        count = cursor.fetchone()[0]
-        
-        if count > 0:
-            cursor.execute('DELETE FROM players WHERE last_active < ?', (cutoff_date,))
-            cursor.execute(
-                'DELETE FROM game_history WHERE user_id NOT IN (SELECT user_id FROM players)'
+    
+    @staticmethod
+    def cleanup_inactive(days: int = 45) -> int:
+        """حذف المستخدمين غير النشطين"""
+        try:
+            cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
+            
+            # حساب العدد
+            result = db_manager.execute_query(
+                'SELECT COUNT(*) as count FROM players WHERE last_active < ?',
+                (cutoff_date,)
             )
-            conn.commit()
-            logger.info(f"تم حذف {count} مستخدم غير نشط")
-        
-        conn.close()
-    except Exception as e:
-        logger.error(f"خطأ في تنظيف المستخدمين: {e}")
+            count = result[0]['count'] if result else 0
+            
+            if count > 0:
+                # حذف المستخدمين
+                db_manager.execute_update(
+                    'DELETE FROM players WHERE last_active < ?',
+                    (cutoff_date,)
+                )
+                
+                logger.info(f"تم حذف {count} مستخدم غير نشط")
+                
+                # مسح الذاكرة المؤقتة
+                stats_cache.clear()
+                leaderboard_cache.clear()
+            
+            return count
+        except DatabaseException as e:
+            logger.error(f"خطأ في تنظيف المستخدمين: {e}")
+            return 0
 
 # ═══════════════════════════════════════════════════════════════
 # Gemini AI
@@ -322,23 +527,24 @@ ask_gemini = None
 
 try:
     import google.generativeai as genai
-    if GEMINI_KEYS:
-        genai.configure(api_key=GEMINI_KEYS[0])
+    if config.gemini_keys:
+        genai.configure(api_key=config.gemini_keys[0])
         model = genai.GenerativeModel('gemini-2.0-flash-exp')
         USE_AI = True
-        logger.info(f"Gemini AI جاهز ({len(GEMINI_KEYS)} مفاتيح)")
+        logger.info(f"Gemini AI جاهز ({len(config.gemini_keys)} مفاتيح)")
         
-        def ask_gemini(prompt, max_retries=2):
+        def ask_gemini(prompt: str, max_retries: int = 2) -> Optional[str]:
             """استدعاء Gemini AI مع إعادة المحاولة"""
             for attempt in range(max_retries):
                 try:
                     response = model.generate_content(prompt)
                     if response and response.text:
-                        return response.text.strip()
+                        return safe_text(response.text.strip(), 1000)
                 except Exception as e:
                     logger.error(f"خطأ Gemini (محاولة {attempt + 1}): {e}")
-                    if attempt < max_retries - 1 and len(GEMINI_KEYS) > 1:
-                        genai.configure(api_key=GEMINI_KEYS[(attempt + 1) % len(GEMINI_KEYS)])
+                    if attempt < max_retries - 1 and len(config.gemini_keys) > 1:
+                        key_index = (attempt + 1) % len(config.gemini_keys)
+                        genai.configure(api_key=config.gemini_keys[key_index])
             return None
 except ImportError:
     logger.warning("مكتبة Gemini غير مثبتة")
@@ -373,24 +579,19 @@ except Exception as e:
 # ═══════════════════════════════════════════════════════════════
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
+app.config['JSON_SORT_KEYS'] = False
 
-line_bot_api = LineBotApi(LINE_TOKEN) if LINE_TOKEN else None
-handler = WebhookHandler(LINE_SECRET) if LINE_SECRET else None
+line_bot_api = LineBotApi(config.line_token) if config.line_token else None
+handler = WebhookHandler(config.line_secret) if config.line_secret else None
 
 # البيانات المشتركة
-active_games = {}
-registered_players = set()
-user_message_count = defaultdict(lambda: {'count': 0, 'reset_time': datetime.now()})
-user_names_cache = {}
+active_games: Dict[str, Dict] = {}
+registered_players: Set[str] = set()
+user_message_count: Dict[str, Dict] = defaultdict(lambda: {'count': 0, 'reset_time': datetime.now()})
 
 # Locks للأمان
 games_lock = threading.Lock()
 players_lock = threading.Lock()
-names_cache_lock = threading.Lock()
-
-# تهيئة النظام
-if not init_db():
-    logger.critical("فشل في تهيئة قاعدة البيانات")
 
 # تحميل الملفات
 QUESTIONS = load_file('questions.txt')
@@ -399,13 +600,46 @@ CONFESSIONS = load_file('confessions.txt')
 MENTIONS = load_file('more_questions.txt')
 
 # ═══════════════════════════════════════════════════════════════
+# Decorators
+# ═══════════════════════════════════════════════════════════════
+def require_admin_token(f):
+    """تتطلب توكن المسؤول"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        token = request.headers.get('X-Admin-Token', '')
+        if not token or token != config.admin_token:
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
+
+def verify_line_signature(f):
+    """التحقق من توقيع LINE"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not handler:
+            abort(500)
+        
+        signature = request.headers.get('X-Line-Signature', '')
+        body = request.get_data(as_text=True)
+        
+        try:
+            handler.parser.parse(body, signature)
+        except InvalidSignatureError:
+            logger.error("توقيع غير صالح")
+            abort(400)
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+# ═══════════════════════════════════════════════════════════════
 # دوال LINE Bot
 # ═══════════════════════════════════════════════════════════════
-def get_profile_safe(user_id):
+def get_profile_safe(user_id: str) -> str:
     """جلب اسم المستخدم بشكل آمن"""
-    with names_cache_lock:
-        if user_id in user_names_cache:
-            return user_names_cache[user_id]
+    # التحقق من الذاكرة المؤقتة
+    cached = names_cache.get(user_id)
+    if cached:
+        return cached
     
     fallback_name = f"لاعب {user_id[-4:]}"
     
@@ -414,11 +648,9 @@ def get_profile_safe(user_id):
     
     try:
         profile = line_bot_api.get_profile(user_id)
-        display_name = safe_text(profile.display_name) if profile.display_name else fallback_name
+        display_name = safe_text(profile.display_name, 50) if profile.display_name else fallback_name
         
-        with names_cache_lock:
-            user_names_cache[user_id] = display_name
-        
+        names_cache.set(user_id, display_name)
         return display_name
     except LineBotApiError as e:
         if e.status_code != 404:
@@ -426,27 +658,25 @@ def get_profile_safe(user_id):
     except Exception as e:
         logger.error(f"خطأ غير متوقع في جلب الملف: {e}")
     
-    with names_cache_lock:
-        user_names_cache[user_id] = fallback_name
-    
+    names_cache.set(user_id, fallback_name)
     return fallback_name
 
-def check_rate(user_id):
+def check_rate(user_id: str) -> bool:
     """فحص معدل الرسائل"""
     now = datetime.now()
     data = user_message_count[user_id]
     
-    if now - data['reset_time'] > timedelta(seconds=RATE_LIMIT['window']):
+    if now - data['reset_time'] > timedelta(seconds=config.rate_limit_window):
         data['count'] = 0
         data['reset_time'] = now
     
-    if data['count'] >= RATE_LIMIT['max']:
+    if data['count'] >= config.rate_limit_max:
         return False
     
     data['count'] += 1
     return True
 
-def get_quick_reply():
+def get_quick_reply() -> QuickReply:
     """أزرار Quick Reply"""
     return QuickReply(items=[
         QuickReplyButton(action=MessageAction(label="سؤال", text="سؤال")),
@@ -466,7 +696,7 @@ def get_quick_reply():
 # ═══════════════════════════════════════════════════════════════
 # بطاقات Flex - iOS Style
 # ═══════════════════════════════════════════════════════════════
-def create_card(title, body_content, footer_buttons=None):
+def create_card(title: str, body_content: list, footer_buttons: Optional[list] = None) -> dict:
     """إنشاء بطاقة iOS نظيفة"""
     body = {
         "type": "box",
@@ -491,10 +721,7 @@ def create_card(title, body_content, footer_buttons=None):
         "spacing": "lg"
     }
     
-    if isinstance(body_content, list):
-        body["contents"].extend(body_content)
-    else:
-        body["contents"].append(body_content)
+    body["contents"].extend(body_content if isinstance(body_content, list) else [body_content])
     
     card = {
         "type": "bubble",
@@ -514,7 +741,7 @@ def create_card(title, body_content, footer_buttons=None):
     
     return card
 
-def create_button(label, text, style="primary"):
+def create_button(label: str, text: str, style: str = "primary") -> dict:
     """إنشاء زر iOS"""
     color = THEME['accent'] if style == "primary" else THEME['text_secondary']
     return {
@@ -529,7 +756,7 @@ def create_button(label, text, style="primary"):
         "height": "sm"
     }
 
-def get_welcome_card(name):
+def get_welcome_card(name: str) -> dict:
     """بطاقة الترحيب"""
     return create_card("مرحباً", [
         {
@@ -555,7 +782,7 @@ def get_welcome_card(name):
         create_button("المساعدة", "مساعدة", "secondary")
     ])
 
-def get_help_card():
+def get_help_card() -> dict:
     """بطاقة المساعدة"""
     return create_card("المساعدة", [
         {
@@ -571,7 +798,7 @@ def get_help_card():
                 },
                 {
                     "type": "text",
-                    "text": "انضم - للتسجيل في النظام\nانسحب - للإلغاء\nنقاطي - عرض الإحصائيات\nالصدارة - عرض الترتيب\nإيقاف - إنهاء اللعبة الحالية",
+                    "text": "انضم - للتسجيل في النظام\nانسحب - للإلغاء\nنقاطي - عرض الإحصائيات\nالصدارة - عرض الترتيب\nإيقاف - إنهاء اللعبة",
                     "size": "xs",
                     "color": THEME['text_secondary'],
                     "wrap": True,
@@ -592,7 +819,7 @@ def get_help_card():
                 },
                 {
                     "type": "text",
-                    "text": "لمح - طلب تلميح خلال اللعبة\nجاوب - عرض الحل الكامل",
+                    "text": "لمح - طلب تلميح\nجاوب - عرض الحل",
                     "size": "xs",
                     "color": THEME['text_secondary'],
                     "wrap": True,
@@ -610,7 +837,7 @@ def get_help_card():
         create_button("الصدارة", "الصدارة", "secondary")
     ])
 
-def get_registration_card(name):
+def get_registration_card(name: str) -> dict:
     """بطاقة التسجيل"""
     return create_card("تم التسجيل", [
         {
@@ -630,11 +857,9 @@ def get_registration_card(name):
             "align": "center",
             "margin": "md"
         }
-    ], [
-        create_button("ابدأ اللعب", "أغنية", "primary")
-    ])
+    ], [create_button("ابدأ اللعب", "أغنية", "primary")])
 
-def get_withdrawal_card(name):
+def get_withdrawal_card(name: str) -> dict:
     """بطاقة الانسحاب"""
     return create_card("تم الانسحاب", [
         {
@@ -655,9 +880,9 @@ def get_withdrawal_card(name):
         }
     ])
 
-def get_stats_card(user_id, name):
+def get_stats_card(user_id: str, name: str) -> dict:
     """بطاقة الإحصائيات"""
-    stats = get_stats(user_id)
+    stats = UserManager.get_stats(user_id)
     
     with players_lock:
         is_registered = user_id in registered_players
@@ -761,30 +986,13 @@ def get_stats_card(user_id, name):
                         }
                     ]
                 },
-                {
-                    "type": "separator",
-                    "margin": "lg",
-                    "color": THEME['separator']
-                },
+                {"type": "separator", "margin": "lg", "color": THEME['separator']},
                 {
                     "type": "box",
                     "layout": "horizontal",
                     "contents": [
-                        {
-                            "type": "text",
-                            "text": "الألعاب",
-                            "size": "sm",
-                            "color": THEME['text_secondary'],
-                            "flex": 1
-                        },
-                        {
-                            "type": "text",
-                            "text": str(stats['games_played']),
-                            "size": "md",
-                            "color": THEME['text'],
-                            "flex": 1,
-                            "align": "end"
-                        }
+                        {"type": "text", "text": "الألعاب", "size": "sm", "color": THEME['text_secondary'], "flex": 1},
+                        {"type": "text", "text": str(stats['games_played']), "size": "md", "color": THEME['text'], "flex": 1, "align": "end"}
                     ],
                     "margin": "lg"
                 },
@@ -792,21 +1000,8 @@ def get_stats_card(user_id, name):
                     "type": "box",
                     "layout": "horizontal",
                     "contents": [
-                        {
-                            "type": "text",
-                            "text": "الفوز",
-                            "size": "sm",
-                            "color": THEME['text_secondary'],
-                            "flex": 1
-                        },
-                        {
-                            "type": "text",
-                            "text": str(stats['wins']),
-                            "size": "md",
-                            "color": THEME['text'],
-                            "flex": 1,
-                            "align": "end"
-                        }
+                        {"type": "text", "text": "الفوز", "size": "sm", "color": THEME['text_secondary'], "flex": 1},
+                        {"type": "text", "text": str(stats['wins']), "size": "md", "color": THEME['text'], "flex": 1, "align": "end"}
                     ],
                     "margin": "md"
                 },
@@ -814,21 +1009,8 @@ def get_stats_card(user_id, name):
                     "type": "box",
                     "layout": "horizontal",
                     "contents": [
-                        {
-                            "type": "text",
-                            "text": "معدل الفوز",
-                            "size": "sm",
-                            "color": THEME['text_secondary'],
-                            "flex": 1
-                        },
-                        {
-                            "type": "text",
-                            "text": f"{win_rate:.0f}%",
-                            "size": "md",
-                            "color": THEME['text'],
-                            "flex": 1,
-                            "align": "end"
-                        }
+                        {"type": "text", "text": "معدل الفوز", "size": "sm", "color": THEME['text_secondary'], "flex": 1},
+                        {"type": "text", "text": f"{win_rate:.0f}%", "size": "md", "color": THEME['text'], "flex": 1, "align": "end"}
                     ],
                     "margin": "md"
                 }
@@ -840,9 +1022,9 @@ def get_stats_card(user_id, name):
         }
     ], footer_buttons)
 
-def get_leaderboard_card():
+def get_leaderboard_card() -> dict:
     """بطاقة الصدارة"""
-    leaders = get_leaderboard()
+    leaders = UserManager.get_leaderboard()
     
     if not leaders:
         return create_card("لوحة الصدارة", [
@@ -858,45 +1040,15 @@ def get_leaderboard_card():
     
     items = []
     for i, leader in enumerate(leaders, 1):
-        if i == 1:
-            rank = "🥇"
-        elif i == 2:
-            rank = "🥈"
-        elif i == 3:
-            rank = "🥉"
-        else:
-            rank = str(i)
+        rank = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else str(i)
         
         items.append({
             "type": "box",
             "layout": "horizontal",
             "contents": [
-                {
-                    "type": "text",
-                    "text": rank,
-                    "size": "sm",
-                    "weight": "bold",
-                    "flex": 0,
-                    "color": THEME['text']
-                },
-                {
-                    "type": "text",
-                    "text": leader['display_name'],
-                    "size": "sm",
-                    "flex": 3,
-                    "margin": "md",
-                    "wrap": True,
-                    "color": THEME['text']
-                },
-                {
-                    "type": "text",
-                    "text": str(leader['total_points']),
-                    "size": "sm",
-                    "weight": "bold",
-                    "flex": 1,
-                    "align": "end",
-                    "color": THEME['accent']
-                }
+                {"type": "text", "text": rank, "size": "sm", "weight": "bold", "flex": 0, "color": THEME['text']},
+                {"type": "text", "text": leader['display_name'], "size": "sm", "flex": 3, "margin": "md", "wrap": True, "color": THEME['text']},
+                {"type": "text", "text": str(leader['total_points']), "size": "sm", "weight": "bold", "flex": 1, "align": "end", "color": THEME['accent']}
             ],
             "paddingAll": "12px",
             "backgroundColor": THEME['bg'] if i > 3 else THEME['card'],
@@ -924,72 +1076,98 @@ def get_leaderboard_card():
 # ═══════════════════════════════════════════════════════════════
 # إدارة الألعاب
 # ═══════════════════════════════════════════════════════════════
-def start_game(game_id, game_class, game_type, user_id, event):
-    """بدء لعبة جديدة"""
-    if not game_class:
-        try:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(
-                    text=f"لعبة {game_type} غير متوفرة حالياً",
-                    quick_reply=get_quick_reply()
+class GameManager:
+    """مدير الألعاب"""
+    
+    @staticmethod
+    def start_game(game_id: str, game_class: any, game_type: str, 
+                   user_id: str, event: MessageEvent) -> bool:
+        """بدء لعبة جديدة"""
+        if not game_class:
+            try:
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(
+                        text=f"لعبة {game_type} غير متوفرة حالياً",
+                        quick_reply=get_quick_reply()
+                    )
                 )
-            )
+            except Exception as e:
+                logger.error(f"خطأ في إرسال رسالة: {e}")
+            return False
+        
+        try:
+            with games_lock:
+                # إنشاء اللعبة
+                if game_class in [SongGame, HumanAnimalPlantGame, LettersWordsGame]:
+                    game = game_class(line_bot_api, use_ai=USE_AI, ask_ai=ask_gemini)
+                else:
+                    game = game_class(line_bot_api)
+                
+                # إضافة المشاركين
+                with players_lock:
+                    participants = registered_players.copy()
+                    participants.add(user_id)
+                
+                # حفظ اللعبة
+                active_games[game_id] = {
+                    'game': game,
+                    'type': game_type,
+                    'created_at': datetime.now(),
+                    'participants': participants,
+                    'answered_users': set(),
+                    'last_game': game_type
+                }
+            
+            # بدء اللعبة
+            response = game.start_game()
+            
+            # إضافة Quick Reply
+            if isinstance(response, TextSendMessage):
+                response.quick_reply = get_quick_reply()
+            elif isinstance(response, list):
+                for r in response:
+                    if isinstance(r, TextSendMessage):
+                        r.quick_reply = get_quick_reply()
+            
+            line_bot_api.reply_message(event.reply_token, response)
+            logger.info(f"بدأت لعبة {game_type} للمستخدم {user_id[-4:]}")
+            return True
+        
         except Exception as e:
-            logger.error(f"خطأ في إرسال رسالة: {e}")
-        return False
-    
-    try:
-        with games_lock:
-            # إنشاء اللعبة
-            if game_class in [SongGame, HumanAnimalPlantGame, LettersWordsGame]:
-                game = game_class(line_bot_api, use_ai=USE_AI, ask_ai=ask_gemini)
-            else:
-                game = game_class(line_bot_api)
-            
-            # إضافة المشاركين
-            with players_lock:
-                participants = registered_players.copy()
-                participants.add(user_id)
-            
-            # حفظ اللعبة
-            active_games[game_id] = {
-                'game': game,
-                'type': game_type,
-                'created_at': datetime.now(),
-                'participants': participants,
-                'answered_users': set(),
-                'last_game': game_type
-            }
-        
-        # بدء اللعبة
-        response = game.start_game()
-        
-        # إضافة Quick Reply
-        if isinstance(response, TextSendMessage):
-            response.quick_reply = get_quick_reply()
-        elif isinstance(response, list):
-            for r in response:
-                if isinstance(r, TextSendMessage):
-                    r.quick_reply = get_quick_reply()
-        
-        line_bot_api.reply_message(event.reply_token, response)
-        logger.info(f"بدأت لعبة {game_type} للمستخدم {user_id[-4:]}")
-        return True
-    
-    except Exception as e:
-        logger.error(f"خطأ في بدء لعبة {game_type}: {e}")
-        try:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(
-                    text="حدث خطأ في بدء اللعبة، يرجى المحاولة مرة أخرى",
-                    quick_reply=get_quick_reply()
+            logger.error(f"خطأ في بدء لعبة {game_type}: {e}")
+            try:
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(
+                        text="حدث خطأ في بدء اللعبة، يرجى المحاولة مرة أخرى",
+                        quick_reply=get_quick_reply()
+                    )
                 )
-            )
-        except:
-            pass
-        return False
+            except:
+                pass
+            return False
+    
+    @staticmethod
+    def cleanup_old_games(timeout_minutes: int = 15) -> int:
+        """حذف الألعاب القديمة"""
+        count = 0
+        now = datetime.now()
+        
+        with games_lock:
+            to_delete = [
+                gid for gid, gdata in active_games.items()
+                if (now - gdata.get('created_at', now)) > timedelta(minutes=timeout_minutes)
+            ]
+            
+            for gid in to_delete:
+                active_games.pop(gid, None)
+                count += 1
+        
+        if count > 0:
+            logger.info(f"تم حذف {count} لعبة قديمة")
+        
+        return count
 
 # ═══════════════════════════════════════════════════════════════
 # Routes
@@ -1130,17 +1308,71 @@ def home():
 @app.route("/health", methods=['GET'])
 def health():
     """فحص صحة الخادم"""
-    return {
+    try:
+        db_status = "connected" if db_manager.get_connection() else "disconnected"
+    except:
+        db_status = "error"
+    
+    return jsonify({
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "active_games": len(active_games),
         "registered_players": len(registered_players),
-        "cached_names": len(user_names_cache),
+        "cached_names": len(names_cache.cache),
         "ai_enabled": USE_AI,
-        "database": "connected" if get_db() else "disconnected"
-    }, 200
+        "database": db_status,
+        "version": "2.0.0"
+    }), 200
+
+@app.route("/reload_content", methods=['POST'])
+@require_admin_token
+def reload_content():
+    """إعادة تحميل المحتوى"""
+    global QUESTIONS, CHALLENGES, CONFESSIONS, MENTIONS
+    
+    try:
+        QUESTIONS = load_file('questions.txt')
+        CHALLENGES = load_file('challenges.txt')
+        CONFESSIONS = load_file('confessions.txt')
+        MENTIONS = load_file('more_questions.txt')
+        
+        return jsonify({
+            "status": "reloaded",
+            "counts": {
+                "questions": len(QUESTIONS),
+                "challenges": len(CHALLENGES),
+                "confessions": len(CONFESSIONS),
+                "mentions": len(MENTIONS)
+            }
+        }), 200
+    except Exception as e:
+        logger.error(f"خطأ في إعادة التحميل: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/stats", methods=['GET'])
+def get_system_stats():
+    """إحصائيات النظام"""
+    try:
+        total_users = db_manager.execute_query('SELECT COUNT(*) as count FROM players')[0]['count']
+        total_games_played = db_manager.execute_query('SELECT SUM(games_played) as total FROM players')[0]['total'] or 0
+        
+        return jsonify({
+            "total_users": total_users,
+            "total_games_played": total_games_played,
+            "active_games": len(active_games),
+            "registered_players": len(registered_players),
+            "cache_sizes": {
+                "names": len(names_cache.cache),
+                "stats": len(stats_cache.cache),
+                "leaderboard": len(leaderboard_cache.cache)
+            }
+        }), 200
+    except Exception as e:
+        logger.error(f"خطأ في جلب الإحصائيات: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/callback", methods=['POST'])
+@verify_line_signature
 def callback():
     """معالجة طلبات LINE"""
     if not handler or not line_bot_api:
@@ -1168,7 +1400,7 @@ def handle_message(event):
     """معالجة الرسائل الواردة"""
     try:
         user_id = event.source.user_id
-        text = safe_text(event.message.text) if event.message.text else ""
+        text = safe_text(event.message.text, 500) if event.message.text else ""
         
         if not text or not check_rate(user_id):
             return
@@ -1177,12 +1409,10 @@ def handle_message(event):
         game_id = getattr(event.source, 'group_id', user_id)
         
         # تحديث النشاط
-        update_user_activity(user_id, name)
+        UserManager.update_activity(user_id, name)
         logger.info(f"رسالة من {name} ({user_id[-4:]}): {text[:50]}")
         
-        # ═══════════════════════════════════════════════════════════
         # الأوامر الأساسية
-        # ═══════════════════════════════════════════════════════════
         if text in ['البداية', 'ابدأ', 'start', 'البوت']:
             line_bot_api.reply_message(
                 event.reply_token,
@@ -1229,13 +1459,12 @@ def handle_message(event):
         
         if text in ['إيقاف', 'stop', 'ايقاف']:
             with games_lock:
-                if game_id in active_games:
-                    game_type = active_games[game_id]['type']
-                    del active_games[game_id]
+                game_data = active_games.pop(game_id, None)
+                if game_data:
                     line_bot_api.reply_message(
                         event.reply_token,
                         TextSendMessage(
-                            text=f"تم إيقاف لعبة {game_type}",
+                            text=f"تم إيقاف لعبة {game_data['type']}",
                             quick_reply=get_quick_reply()
                         )
                     )
@@ -1295,9 +1524,7 @@ def handle_message(event):
                     )
             return
         
-        # ═══════════════════════════════════════════════════════════
         # الأوامر النصية للجميع
-        # ═══════════════════════════════════════════════════════════
         if text in ['سؤال', 'سوال'] and QUESTIONS:
             line_bot_api.reply_message(
                 event.reply_token,
@@ -1338,9 +1565,7 @@ def handle_message(event):
             )
             return
         
-        # ═══════════════════════════════════════════════════════════
         # بدء الألعاب (للمسجلين فقط)
-        # ═══════════════════════════════════════════════════════════
         with players_lock:
             is_registered = user_id in registered_players
         
@@ -1403,15 +1628,13 @@ def handle_message(event):
                             quick_reply=get_quick_reply()
                         )
                     )
-                logger.info(f"بدأت لعبة توافق")
+                logger.info("بدأت لعبة توافق")
                 return
             
-            start_game(game_id, game_class, game_type, user_id, event)
+            GameManager.start_game(game_id, game_class, game_type, user_id, event)
             return
         
-        # ═══════════════════════════════════════════════════════════
         # معالجة إجابات الألعاب
-        # ═══════════════════════════════════════════════════════════
         if game_id in active_games:
             if not is_registered:
                 return
@@ -1448,8 +1671,7 @@ def handle_message(event):
                     result = game.check_answer(f"{names[0]} {names[1]}", user_id, name)
                     
                     with games_lock:
-                        if game_id in active_games:
-                            del active_games[game_id]
+                        active_games.pop(game_id, None)
                     
                     if result and result.get('response'):
                         line_bot_api.reply_message(event.reply_token, result['response'])
@@ -1480,7 +1702,8 @@ def handle_message(event):
                         points = 0
                     
                     if points != 0:
-                        update_points(user_id, name, points, result.get('won', False), game_type)
+                        UserManager.update_points(user_id, name, points, 
+                                                 result.get('won', False), game_type)
                     
                     if result.get('next_question', False):
                         with games_lock:
@@ -1494,8 +1717,7 @@ def handle_message(event):
                     
                     if result.get('game_over', False):
                         with games_lock:
-                            if game_id in active_games:
-                                del active_games[game_id]
+                            active_games.pop(game_id, None)
                         
                         response = result.get('response', TextSendMessage(
                             text=result.get('message', '')))
@@ -1523,43 +1745,52 @@ def handle_message(event):
 # ═══════════════════════════════════════════════════════════════
 # التنظيف التلقائي
 # ═══════════════════════════════════════════════════════════════
-def cleanup_task():
-    """مهمة التنظيف التلقائي"""
-    while True:
-        try:
-            time.sleep(CLEANUP_INTERVAL_SECONDS)
-            now = datetime.now()
-            
-            # تنظيف الألعاب القديمة
-            to_delete = []
-            with games_lock:
-                for gid, gdata in active_games.items():
-                    age = now - gdata.get('created_at', now)
-                    if age > timedelta(minutes=GAME_TIMEOUT_MINUTES):
-                        to_delete.append(gid)
+class CleanupManager:
+    """مدير التنظيف التلقائي"""
+    
+    def __init__(self):
+        self.last_cleanup = None
+        self.running = True
+    
+    def cleanup_task(self):
+        """مهمة التنظيف التلقائي"""
+        while self.running:
+            try:
+                time.sleep(config.cleanup_interval_seconds)
+                now = datetime.now()
                 
-                for gid in to_delete:
-                    del active_games[gid]
+                # تنظيف الألعاب القديمة
+                GameManager.cleanup_old_games(config.game_timeout_minutes)
                 
-                if to_delete:
-                    logger.info(f"تم حذف {len(to_delete)} لعبة قديمة")
+                # تنظيف الذاكرة المؤقتة
+                names_expired = names_cache.cleanup()
+                stats_expired = stats_cache.cleanup()
+                if names_expired > 0 or stats_expired > 0:
+                    logger.info(f"تنظيف الذاكرة: {names_expired} أسماء، {stats_expired} إحصائيات")
+                
+                # تنظيف المستخدمين غير النشطين (كل 6 ساعات)
+                if now.hour % 6 == 0 and now.minute < 5:
+                    if self.last_cleanup is None or (now - self.last_cleanup) > timedelta(hours=1):
+                        UserManager.cleanup_inactive(config.inactive_days)
+                        self.last_cleanup = now
             
-            # تنظيف ذاكرة الأسماء
-            with names_cache_lock:
-                if len(user_names_cache) > NAMES_CACHE_MAX:
-                    logger.info(f"تنظيف ذاكرة الأسماء ({len(user_names_cache)} عنصر)")
-                    user_names_cache.clear()
-            
-            # تنظيف المستخدمين غير النشطين (كل 6 ساعات)
-            if now.hour % 6 == 0 and now.minute < 5:
-                cleanup_inactive_users()
-        
-        except Exception as e:
-            logger.error(f"خطأ في مهمة التنظيف: {e}")
+            except Exception as e:
+                logger.error(f"خطأ في مهمة التنظيف: {e}")
+    
+    def start(self):
+        """بدء خيط التنظيف"""
+        thread = threading.Thread(target=self.cleanup_task, daemon=True)
+        thread.start()
+        logger.info("بدء خيط التنظيف التلقائي")
+        return thread
+    
+    def stop(self):
+        """إيقاف التنظيف"""
+        self.running = False
 
-# بدء خيط التنظيف
-cleanup_thread = threading.Thread(target=cleanup_task, daemon=True)
-cleanup_thread.start()
+# إنشاء وبدء مدير التنظيف
+cleanup_manager = CleanupManager()
+cleanup_manager.start()
 
 # ═══════════════════════════════════════════════════════════════
 # معالج الأخطاء
@@ -1567,13 +1798,13 @@ cleanup_thread.start()
 @app.errorhandler(404)
 def not_found(error):
     """معالج خطأ 404"""
-    return {"error": "الصفحة غير موجودة"}, 404
+    return jsonify({"error": "الصفحة غير موجودة"}), 404
 
 @app.errorhandler(500)
 def internal_error(error):
     """معالج خطأ 500"""
     logger.error(f"خطأ داخلي في الخادم: {error}")
-    return {"error": "خطأ داخلي في الخادم"}, 500
+    return jsonify({"error": "خطأ داخلي في الخادم"}), 500
 
 @app.errorhandler(Exception)
 def handle_exception(error):
@@ -1584,14 +1815,13 @@ def handle_exception(error):
 # ═══════════════════════════════════════════════════════════════
 # التشغيل
 # ═══════════════════════════════════════════════════════════════
-if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 5000))
-    
-    # طباعة معلومات النظام
+def print_startup_info():
+    """طباعة معلومات بدء التشغيل"""
     print("\n" + "="*60)
     print("بوت الحوت - نظام ألعاب تفاعلية")
+    print("النسخة المحسّنة 2.0.0")
     print("="*60)
-    print(f"المنفذ: {port}")
+    print(f"المنفذ: {int(os.environ.get('PORT', 5000))}")
     print(f"Gemini AI: {'مفعّل' if USE_AI else 'معطّل'}")
     
     games_count = sum([
@@ -1603,20 +1833,70 @@ if __name__ == "__main__":
     ])
     print(f"الألعاب المتوفرة: {games_count}/8")
     
-    print(f"قاعدة البيانات: {'متصلة' if get_db() else 'غير متصلة'}")
+    try:
+        db_status = "متصلة" if db_manager.get_connection() else "غير متصلة"
+    except:
+        db_status = "خطأ"
+    
+    print(f"قاعدة البيانات: {db_status}")
     print(f"LINE Bot: {'جاهز' if line_bot_api and handler else 'غير مهيأ'}")
+    print(f"المحتوى: {len(QUESTIONS)} سؤال، {len(CHALLENGES)} تحدي")
     print("="*60 + "\n")
+
+def validate_environment():
+    """التحقق من البيئة"""
+    warnings = []
+    errors = []
     
-    # التحقق من المتطلبات الأساسية
-    if not LINE_TOKEN or not LINE_SECRET:
-        logger.critical("متغيرات LINE غير موجودة")
-        print("تحذير: يجب تعيين LINE_CHANNEL_ACCESS_TOKEN و LINE_CHANNEL_SECRET")
+    if not config.line_token or not config.line_secret:
+        errors.append("متغيرات LINE غير موجودة")
     
-    if not games_count:
-        logger.warning("لا توجد ألعاب متوفرة")
+    if not USE_AI:
+        warnings.append("Gemini AI غير متوفر")
+    
+    games_count = sum([
+        1 for g in [
+            SongGame, HumanAnimalPlantGame, ChainWordsGame, 
+            FastTypingGame, OppositeGame, LettersWordsGame, 
+            DifferencesGame, CompatibilityGame
+        ] if g
+    ])
+    
+    if games_count == 0:
+        errors.append("لا توجد ألعاب متوفرة")
+    elif games_count < 8:
+        warnings.append(f"فقط {games_count} من 8 ألعاب متوفرة")
+    
+    if not QUESTIONS:
+        warnings.append("ملف الأسئلة فارغ")
+    
+    if warnings:
+        print("\nتحذيرات:")
+        for w in warnings:
+            print(f"  - {w}")
+    
+    if errors:
+        print("\nأخطاء:")
+        for e in errors:
+            print(f"  - {e}")
+        return False
+    
+    return True
+
+if __name__ == "__main__":
+    port = int(os.environ.get('PORT', 5000))
+    
+    # طباعة معلومات البدء
+    print_startup_info()
+    
+    # التحقق من البيئة
+    if not validate_environment():
+        logger.critical("فشل في التحقق من البيئة")
+        print("\nتحذير: توجد مشاكل في الإعداد، لكن سيتم المتابعة...\n")
     
     # تشغيل الخادم
     try:
+        logger.info(f"بدء الخادم على المنفذ {port}")
         app.run(
             host='0.0.0.0',
             port=port,
@@ -1624,6 +1904,10 @@ if __name__ == "__main__":
             threaded=True,
             use_reloader=False
         )
+    except KeyboardInterrupt:
+        logger.info("تم إيقاف الخادم بواسطة المستخدم")
+        cleanup_manager.stop()
+        db_manager.close_connection()
     except Exception as e:
         logger.critical(f"فشل في تشغيل الخادم: {e}")
         sys.exit(1)
