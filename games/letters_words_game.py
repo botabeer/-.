@@ -3,830 +3,156 @@ import re
 from linebot.models import TextSendMessage, FlexSendMessage
 
 class LettersWordsGame:
-    def __init__(self, line_bot_api, use_ai=False, ask_ai=None):
+    def __init__(self, line_bot_api, max_questions=5, words_per_question=3):
         self.line_bot_api = line_bot_api
-        self.use_ai = use_ai
-        self.ask_ai = ask_ai
-        
-        self.available_letters = []
-        self.used_words = set()
+        self.max_questions = max_questions
+        self.words_per_question = words_per_question
         self.current_question = 1
-        self.max_questions = 5
-        self.players_scores = {}
-        self.players_words = {}
+        self.available_letters = []
+        self.valid_words_set = set()
+        self.used_words = set()
+        self.players_scores = {}  # user_id: {"name": display_name, "score": points}
+        self.players_words = {}   # user_id: عدد الكلمات المكتملة
         self.hint_used = False
-        self.words_per_question = 3
 
-        # ✅ مجموعات حروف منطقية (6 حروف) - كلمات حقيقية فقط
+        # ✅ مجموعات حروف وكلمات حقيقية
         self.letter_sets = [
-            {
-                "letters": "ق م ر ي ل ن",
-                "words": [
-                    "قمر",      # القمر
-                    "ليل",      # الليل
-                    "مرق",      # مرق الطبخ
-                    "ريم",      # اسم / الغزال
-                    "نيل",      # نهر النيل
-                    "قرن",      # القرن
-                    "ملي",      # يملي
-                    "مير",      # أمير
-                    "قيل",      # قيل وقال
-                    "ليم",      # الليم (الليمون)
-                    "نمر",      # النمر
-                    "مرن",      # مرونة
-                ]
-            },
-            {
-                "letters": "ن ج م س و ر",
-                "words": [
-                    "نجم",      # النجم
-                    "نجوم",     # النجوم
-                    "سور",      # السور
-                    "نور",      # النور
-                    "سمر",      # السمر / السهرة
-                    "رسم",      # الرسم
-                    "جور",      # الظلم
-                    "نمر",      # النمر
-                    "جرس",      # الجرس
-                    "سجن",      # السجن
-                    "مرج",      # المرج
-                    "رسوم",     # الرسوم
-                    "سمور",     # حيوان السمور
-                    "نسور",     # النسور
-                ]
-            },
-            {
-                "letters": "ب ح ر ي ن ل",
-                "words": [
-                    "بحر",      # البحر
-                    "بحرين",    # دولة البحرين
-                    "بحري",     # بحري
-                    "حرب",      # الحرب
-                    "نحل",      # النحل
-                    "نيل",      # نهر النيل
-                    "لبن",      # اللبن
-                    "حبل",      # الحبل
-                    "نبيل",     # اسم نبيل
-                    "نبل",      # النبل
-                    "ربح",      # الربح
-                    "بين",      # بين
-                    "حين",      # الحين
-                ]
-            },
-            {
-                "letters": "ك ت ب م ل و",
-                "words": [
-                    "كتب",      # الكتب
-                    "كتاب",     # الكتاب (ينقص حرف أ لكن كتب موجود)
-                    "مكتب",     # المكتب
-                    "ملك",      # الملك
-                    "كمل",      # اكتمل
-                    "كلم",      # الكلام
-                    "بلوت",     # لعبة البلوت
-                    "موت",      # الموت
-                    "كوم",      # الكومة
-                    "ملت",      # ملل
-                    "بكت",      # البكاء
-                    "تكلم",     # يتكلم
-                ]
-            },
-            {
-                "letters": "ش ج ر ة ي ن",
-                "words": [
-                    "شجر",      # الشجر
-                    "شجرة",     # الشجرة
-                    "جرة",      # جرة الماء
-                    "نشر",      # النشر
-                    "شرن",      # الشرنقة (ناقص حرف لكن شرن ممكن)
-                    "تين",      # التين
-                    "جنة",      # الجنة
-                    "جين",      # الجينات
-                    "رجة",      # الرجة
-                    "شين",      # حرف الشين
-                    "شجن",      # الشجن (الحزن)
-                    "جشن",      # الجشن (الاحتفال التركي)
-                ]
-            },
-            {
-                "letters": "س م ك ن ا ه",
-                "words": [
-                    "سمك",      # السمك
-                    "سكن",      # السكن
-                    "سماء",     # السماء (ناقص حرف لكن سما موجود)
-                    "سما",      # السماء
-                    "ماء",      # الماء
-                    "سمان",     # طائر السمان
-                    "نام",      # نام
-                    "سام",      # سام
-                    "هام",      # مهم
-                    "سهم",      # السهم
-                    "اسم",      # الاسم
-                    "امن",      # الأمن
-                    "نهم",      # النهم
-                    "مهن",      # المهن
-                ]
-            },
-            {
-                "letters": "ع ي ن ر ب د",
-                "words": [
-                    "عين",      # العين
-                    "عربي",     # عربي
-                    "عرب",      # العرب
-                    "برد",      # البرد
-                    "عبد",      # عبد
-                    "بعد",      # بعد
-                    "دين",      # الدين
-                    "عيد",      # العيد
-                    "برع",      # يبرع
-                    "عبر",      # العبور
-                    "رعد",      # الرعد
-                    "عرين",     # عرين الأسد
-                    "بعير",     # البعير
-                ]
-            },
-            {
-                "letters": "د ر س م ح ل",
-                "words": [
-                    "درس",      # الدرس
-                    "مدرس",     # المدرس
-                    "رسم",      # الرسم
-                    "حلم",      # الحلم
-                    "سلم",      # السلام
-                    "حرم",      # الحرم
-                    "حرس",      # الحرس
-                    "سحر",      # السحر
-                    "حمل",      # الحمل
-                    "رحم",      # الرحمة
-                    "حسد",      # الحسد
-                    "ملح",      # الملح
-                    "رمح",      # الرمح
-                ]
-            },
-            {
-                "letters": "ط ل ع م و ب",
-                "words": [
-                    "طلع",      # طلع
-                    "علم",      # العلم
-                    "طعم",      # الطعم
-                    "عمل",      # العمل
-                    "طمع",      # الطمع
-                    "بطل",      # البطل
-                    "طول",      # الطول
-                    "علب",      # العلب
-                    "موعد",     # الموعد (ناقص د لكن موع ممكن)
-                    "معلم",     # المعلم
-                    "طبع",      # الطبع
-                    "بعل",      # بعل
-                ]
-            },
-            {
-                "letters": "ح ب ر ط ي ق",
-                "words": [
-                    "حبر",      # الحبر
-                    "حرب",      # الحرب
-                    "طرب",      # الطرب
-                    "طريق",     # الطريق
-                    "قرب",      # القرب
-                    "طيب",      # الطيب
-                    "قطر",      # قطر
-                    "حرق",      # الحرق
-                    "بحر",      # البحر (ناقص لكن ممكن)
-                    "قبر",      # القبر
-                    "حقب",      # الحقبة
-                    "ربح",      # الربح
-                ]
-            },
-            {
-                "letters": "ف ك ر ت ي ن",
-                "words": [
-                    "فكر",      # الفكر
-                    "فكري",     # فكري
-                    "تفكير",    # التفكير (ناقص حرف لكن فكر موجود)
-                    "ركن",      # الركن
-                    "تين",      # التين
-                    "فني",      # فني
-                    "كفر",      # الكفر
-                    "نير",      # النير
-                    "فرن",      # الفرن
-                    "فتن",      # الفتنة
-                    "ترف",      # الترف
-                    "كفن",      # الكفن
-                ]
-            },
-            {
-                "letters": "ص و ر ة ح ب",
-                "words": [
-                    "صورة",     # الصورة
-                    "صور",      # الصور
-                    "بحر",      # البحر
-                    "حرب",      # الحرب
-                    "صبر",      # الصبر
-                    "حبر",      # الحبر
-                    "وحش",      # الوحش (ناقص ش)
-                    "بحة",      # البحة
-                    "حصر",      # الحصر
-                    "روح",      # الروح
-                    "صحة",      # الصحة
-                    "حوض",      # الحوض (ناقص ض)
-                ]
-            },
-            {
-                "letters": "ج س م ا ل ن",
-                "words": [
-                    "جسم",      # الجسم
-                    "جمال",     # الجمال
-                    "سلام",     # السلام
-                    "مجلس",     # المجلس
-                    "جمل",      # الجمل
-                    "سام",      # سام
-                    "نام",      # نام
-                    "مال",      # المال
-                    "جان",      # الجان
-                    "لسان",     # اللسان
-                    "سلم",      # السلم
-                    "ماس",      # الماس
-                ]
-            },
-            {
-                "letters": "خ ل ق ا ن ي",
-                "words": [
-                    "خلق",      # الخلق
-                    "خالق",     # الخالق
-                    "اخلاق",    # الأخلاق
-                    "خال",      # الخال
-                    "خيل",      # الخيل
-                    "لقي",      # لقي
-                    "نقي",      # نقي
-                    "خان",      # الخان
-                    "نخيل",     # النخيل
-                    "قلي",      # القلي
-                    "خيال",     # الخيال
-                ]
-            },
-            {
-                "letters": "ذ ه ب و ن ي",
-                "words": [
-                    "ذهب",      # الذهب
-                    "ذهبي",     # ذهبي
-                    "نبي",      # النبي
-                    "بون",      # البون
-                    "ذوب",      # الذوبان
-                    "وهن",      # الوهن
-                    "نهب",      # النهب
-                    "ذنب",      # الذنب
-                    "بيون",     # البيون (ناقص لكن ممكن)
-                    "هون",      # الهون
-                ]
-            },
+            {"letters": "ق م ر ي ل ن",
+             "words": ["قمر","ليل","مرق","ريم","نيل","قرن","ملي","مير","قيل","ليم","نمر","مرن"]},
+            {"letters": "ن ج م س و ر",
+             "words": ["نجم","نجوم","سور","نور","سمر","رسم","جور","نمر","جرس","سجن","مرج","رسوم","سمور","نسور"]},
+            {"letters": "ب ح ر ي ن ل",
+             "words": ["بحر","بحرين","بحري","حرب","نحل","نيل","لبن","حبل","نبيل","نبل","ربح","بين","حين"]},
+            {"letters": "ك ت ب م ل و",
+             "words": ["كتب","كتاب","مكتب","ملك","كمل","كلم","بلوت","موت","كوم","ملت","بكت","تكلم"]},
+            {"letters": "ش ج ر ة ي ن",
+             "words": ["شجر","شجرة","جرة","نشر","شرن","تين","جنة","جين","رجة","شين","شجن","جشن"]},
+            {"letters": "س م ك ن ا ه",
+             "words": ["سمك","سكن","سماء","سما","ماء","سمان","نام","سام","هام","سهم","اسم","امن","نهم","مهن"]},
+            {"letters": "ع ي ن ر ب د",
+             "words": ["عين","عربي","عرب","برد","عبد","بعد","دين","عيد","برع","عبر","رعد","عرين","بعير"]},
+            {"letters": "د ر س م ح ل",
+             "words": ["درس","مدرس","رسم","حلم","سلم","حرم","حرس","سحر","حمل","رحم","حسد","ملح","رمح"]},
+            {"letters": "ط ل ع م و ب",
+             "words": ["طلع","علم","طعم","عمل","طمع","بطل","طول","علب","موعد","معلم","طبع","بعل"]},
+            {"letters": "ح ب ر ط ي ق",
+             "words": ["حبر","حرب","طرب","طريق","قرب","طيب","قطر","حرق","بحر","قبر","حقب","ربح"]},
+            {"letters": "ف ك ر ت ي ن",
+             "words": ["فكر","فكري","تفكير","ركن","تين","فني","كفر","نير","فرن","فتن","ترف","كفن"]},
+            {"letters": "ص و ر ة ح ب",
+             "words": ["صورة","صور","بحر","حرب","صبر","حبر","وحش","بحة","حصر","روح","صحة","حوض"]},
+            {"letters": "ج س م ا ل ن",
+             "words": ["جسم","جمال","سلام","مجلس","جمل","سام","نام","مال","جان","لسان","سلم","ماس"]},
+            {"letters": "خ ل ق ا ن ي",
+             "words": ["خلق","خالق","اخلاق","خال","خيل","لقي","نقي","خان","نخيل","قلي","خيال"]},
+            {"letters": "ذ ه ب و ن ي",
+             "words": ["ذهب","ذهبي","نبي","بون","ذوب","وهن","نهب","ذنب","بيون","هون"]}
         ]
 
     def normalize_text(self, text):
-        """تطبيع النص لقبول جميع أشكال الحروف"""
         if not text:
             return ""
         text = text.strip().lower()
         text = re.sub(r'^ال', '', text)
-        text = text.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا')
-        text = text.replace('ؤ', 'و').replace('ئ', 'ي').replace('ء', '')
-        text = text.replace('ة', 'ه').replace('ى', 'ي')
+        text = text.replace('أ','ا').replace('إ','ا').replace('آ','ا')
+        text = text.replace('ؤ','و').replace('ئ','ي').replace('ء','')
+        text = text.replace('ة','ه').replace('ى','ي')
         text = re.sub(r'[\u064B-\u065F]', '', text)
-        text = re.sub(r'\s+', '', text)
+        text = re.sub(r'\s+','', text)
         return text
 
-    def get_neumorphism_card(self, title, question_num, letters_str, instruction, show_buttons=True):
-        """بطاقة Neumorphism Dark الاحترافية"""
-        
-        # تحويل الحروف إلى مربعات منفصلة
-        letter_boxes = []
-        letters_list = letters_str.split()
-        
-        for letter in letters_list:
-            letter_boxes.append({
-                "type": "box",
-                "layout": "vertical",
-                "contents": [
-                    {
-                        "type": "text",
-                        "text": letter,
-                        "size": "xxl",
-                        "weight": "bold",
-                        "color": "#A78BFA",
-                        "align": "center"
-                    }
-                ],
-                "backgroundColor": "#1F2937",
-                "cornerRadius": "12px",
-                "width": "50px",
-                "height": "60px",
-                "justifyContent": "center",
-                "paddingAll": "8px",
-                "shadow": {
-                    "offsetX": "4px",
-                    "offsetY": "4px",
-                    "blur": "8px",
-                    "color": "#000000"
-                }
-            })
-        
-        # تقسيم الحروف إلى صفين (3 × 3)
-        first_row = letter_boxes[:3]
-        second_row = letter_boxes[3:] if len(letter_boxes) > 3 else []
-        
-        letters_display = {
-            "type": "box",
-            "layout": "vertical",
-            "contents": [
-                {
-                    "type": "box",
-                    "layout": "horizontal",
-                    "contents": first_row,
-                    "spacing": "md",
-                    "justifyContent": "center"
-                }
-            ],
-            "spacing": "md"
-        }
-        
-        if second_row:
-            letters_display["contents"].append({
-                "type": "box",
-                "layout": "horizontal",
-                "contents": second_row,
-                "spacing": "md",
-                "justifyContent": "center"
-            })
-        
-        # بناء البطاقة
-        bubble = {
-            "type": "bubble",
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "contents": [
-                    # Header
-                    {
-                        "type": "box",
-                        "layout": "vertical",
-                        "contents": [
-                            {
-                                "type": "text",
-                                "text": title,
-                                "size": "xl",
-                                "weight": "bold",
-                                "color": "#F3F4F6",
-                                "align": "center"
-                            },
-                            {
-                                "type": "text",
-                                "text": f"سؤال {question_num} من {self.max_questions}",
-                                "size": "sm",
-                                "color": "#9CA3AF",
-                                "align": "center",
-                                "margin": "sm"
-                            }
-                        ],
-                        "paddingAll": "20px",
-                        "backgroundColor": "#111827",
-                        "cornerRadius": "16px",
-                        "margin": "none",
-                        "shadow": {
-                            "offsetX": "0px",
-                            "offsetY": "4px",
-                            "blur": "12px",
-                            "color": "#000000"
-                        }
-                    },
-                    # Separator
-                    {
-                        "type": "separator",
-                        "margin": "xl",
-                        "color": "#374151"
-                    },
-                    # Letters Section
-                    {
-                        "type": "box",
-                        "layout": "vertical",
-                        "contents": [
-                            {
-                                "type": "text",
-                                "text": "الحروف المتاحة",
-                                "size": "xs",
-                                "color": "#6B7280",
-                                "align": "center",
-                                "weight": "bold"
-                            },
-                            letters_display
-                        ],
-                        "margin": "xl",
-                        "spacing": "md"
-                    },
-                    # Instruction Box
-                    {
-                        "type": "box",
-                        "layout": "vertical",
-                        "contents": [
-                            {
-                                "type": "text",
-                                "text": instruction,
-                                "size": "sm",
-                                "color": "#D1D5DB",
-                                "align": "center",
-                                "wrap": True,
-                                "weight": "bold"
-                            }
-                        ],
-                        "backgroundColor": "#1F2937",
-                        "cornerRadius": "12px",
-                        "paddingAll": "16px",
-                        "margin": "xl",
-                        "shadow": {
-                            "offsetX": "inset 2px",
-                            "offsetY": "inset 2px",
-                            "blur": "4px",
-                            "color": "#000000"
-                        }
-                    },
-                    # Progress indicator
-                    {
-                        "type": "box",
-                        "layout": "horizontal",
-                        "contents": [
-                            {
-                                "type": "box",
-                                "layout": "vertical",
-                                "contents": [],
-                                "backgroundColor": "#A78BFA",
-                                "height": "4px",
-                                "flex": question_num,
-                                "cornerRadius": "2px"
-                            },
-                            {
-                                "type": "box",
-                                "layout": "vertical",
-                                "contents": [],
-                                "backgroundColor": "#374151",
-                                "height": "4px",
-                                "flex": self.max_questions - question_num,
-                                "cornerRadius": "2px"
-                            }
-                        ],
-                        "margin": "xl",
-                        "spacing": "sm"
-                    }
-                ],
-                "backgroundColor": "#0F172A",
-                "paddingAll": "24px"
-            }
-        }
-        
-        # إضافة الأزرار
-        if show_buttons:
-            bubble["footer"] = {
-                "type": "box",
-                "layout": "horizontal",
-                "contents": [
-                    {
-                        "type": "button",
-                        "action": {
-                            "type": "message",
-                            "label": "💡 تلميح",
-                            "text": "لمح"
-                        },
-                        "style": "secondary",
-                        "height": "sm",
-                        "color": "#6366F1"
-                    },
-                    {
-                        "type": "button",
-                        "action": {
-                            "type": "message",
-                            "label": "✓ الحل",
-                            "text": "جاوب"
-                        },
-                        "style": "secondary",
-                        "height": "sm",
-                        "color": "#8B5CF6"
-                    }
-                ],
-                "spacing": "sm",
-                "backgroundColor": "#1E293B",
-                "paddingAll": "16px"
-            }
-        
-        return bubble
-
     def start_game(self):
-        """بدء اللعبة"""
         self.current_question = 1
         self.players_scores = {}
         self.players_words = {}
         return self.next_question()
 
     def next_question(self):
-        """السؤال التالي"""
         if self.current_question > self.max_questions:
-            return None
-
+            return self._end_game()
         letter_set = random.choice(self.letter_sets)
         self.available_letters = letter_set['letters'].split()
         self.valid_words_set = set(letter_set['words'])
-        
         random.shuffle(self.available_letters)
         self.used_words.clear()
         self.hint_used = False
         self.players_words = {}
-
         letters_str = ' '.join(self.available_letters)
-        
-        flex_card = self.get_neumorphism_card(
-            title="▪️ لعبة تكوين الكلمات",
-            question_num=self.current_question,
-            letters_str=letters_str,
-            instruction=f"كوّن {self.words_per_question} كلمات صحيحة من الحروف\nأول لاعب يكمل يفوز!"
-        )
-        
-        return FlexSendMessage(
-            alt_text=f"سؤال {self.current_question} - تكوين كلمات",
-            contents=flex_card
-        )
+        return self.get_question_card(self.current_question, letters_str, self.words_per_question)
+
+    # --- Flex Cards جاهزة لكل خطوة ---
+    def get_question_card(self, question_num, letters, words_needed):
+        letter_boxes = [{"type":"box","layout":"vertical","contents":[{"type":"text","text":l,"size":"xxl","weight":"bold","color":"#A78BFA","align":"center"}],"backgroundColor":"#1F2937","cornerRadius":"12px","width":"50px","height":"60px","justifyContent":"center","paddingAll":"8px","shadow":{"offsetX":"4px","offsetY":"4px","blur":"8px","color":"#000000"}} for l in letters.split()]
+        first_row = letter_boxes[:3]
+        second_row = letter_boxes[3:] if len(letter_boxes)>3 else []
+        letters_display = {"type":"box","layout":"vertical","contents":[{"type":"box","layout":"horizontal","contents":first_row,"justifyContent":"center"}]}
+        if second_row:
+            letters_display["contents"].append({"type":"box","layout":"horizontal","contents":second_row,"justifyContent":"center"})
+        bubble = {"type":"bubble","body":{"type":"box","layout":"vertical","contents":[{"type":"text","text":f"▪️ تكوين كلمات - سؤال {question_num}","size":"xl","weight":"bold","color":"#F3F4F6","align":"center"},{"type":"separator","margin":"lg","color":"#374151"},{"type":"text","text":f"كوّن {words_needed} كلمات صحيحة من الحروف","size":"sm","color":"#D1D5DB","align":"center","wrap":True},letters_display],"backgroundColor":"#0F172A","paddingAll":"20px"},"footer":{"type":"box","layout":"horizontal","contents":[{"type":"button","action":{"type":"message","label":"💡 تلميح","text":"لمح"},"style":"secondary","color":"#6366F1"},{"type":"button","action":{"type":"message","label":"✓ الحل","text":"جاوب"},"style":"secondary","color":"#8B5CF6"}],"backgroundColor":"#1E293B","paddingAll":"16px"}}
+        return FlexSendMessage(alt_text=f"سؤال {question_num}", contents=bubble)
 
     def get_hint(self):
-        """الحصول على تلميح - يعرض أول حرف وعدد الحروف"""
         if self.hint_used:
-            return {
-                'response': TextSendMessage(text="▫️ تم استخدام التلميح مسبقاً"),
-                'points': 0,
-                'correct': False,
-                'won': False,
-                'game_over': False
-            }
-        
+            return {"response":TextSendMessage(text="▫️ تم استخدام التلميح مسبقاً"), "points":0}
         self.hint_used = True
-        # اختيار كلمة عشوائية من الكلمات المتاحة
-        example_word = random.choice(list(self.valid_words_set)) if self.valid_words_set else ""
-        
-        # الحصول على أول حرف
-        first_letter = example_word[0] if example_word else ""
+        example_word = random.choice(list(self.valid_words_set))
+        first_letter = example_word[0]
         word_length = len(example_word)
-        
-        # إنشاء نمط الكلمة: أول حرف + _ _ _
-        hint_pattern = first_letter + " " + " ".join(["_"] * (word_length - 1))
-        
-        hint_card = {
-            "type": "bubble",
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "contents": [
-                    {
-                        "type": "text",
-                        "text": "💡 تلميح",
-                        "size": "xl",
-                        "weight": "bold",
-                        "color": "#FCD34D",
-                        "align": "center"
-                    },
-                    {
-                        "type": "separator",
-                        "margin": "lg",
-                        "color": "#374151"
-                    },
-                    {
-                        "type": "box",
-                        "layout": "vertical",
-                        "contents": [
-                            {
-                                "type": "text",
-                                "text": "أول حرف من الكلمة:",
-                                "size": "sm",
-                                "color": "#9CA3AF",
-                                "margin": "lg",
-                                "align": "center"
-                            },
-                            {
-                                "type": "text",
-                                "text": hint_pattern,
-                                "size": "xxl",
-                                "weight": "bold",
-                                "color": "#A78BFA",
-                                "align": "center",
-                                "margin": "md",
-                                "spacing": "lg"
-                            },
-                            {
-                                "type": "box",
-                                "layout": "horizontal",
-                                "contents": [
-                                    {
-                                        "type": "text",
-                                        "text": "عدد الحروف:",
-                                        "size": "xs",
-                                        "color": "#6B7280",
-                                        "flex": 0
-                                    },
-                                    {
-                                        "type": "text",
-                                        "text": str(word_length),
-                                        "size": "sm",
-                                        "color": "#10B981",
-                                        "weight": "bold",
-                                        "flex": 0,
-                                        "margin": "md"
-                                    }
-                                ],
-                                "margin": "lg",
-                                "justifyContent": "center"
-                            }
-                        ],
-                        "backgroundColor": "#1F2937",
-                        "cornerRadius": "12px",
-                        "paddingAll": "16px"
-                    },
-                    {
-                        "type": "text",
-                        "text": "⚠️ النقاط ستنخفض إلى نصف القيمة",
-                        "size": "xxs",
-                        "color": "#F59E0B",
-                        "align": "center",
-                        "margin": "lg"
-                    }
-                ],
-                "backgroundColor": "#0F172A",
-                "paddingAll": "20px"
-            }
-        }
-        
-        return {
-            'response': FlexSendMessage(alt_text="تلميح", contents=hint_card),
-            'points': -1,
-            'correct': False,
-            'won': False,
-            'game_over': False
-        }
+        hint_pattern = first_letter + " " + " ".join(["_"]*(word_length-1))
+        bubble = {"type":"bubble","body":{"type":"box","layout":"vertical","contents":[{"type":"text","text":"💡 تلميح","size":"xl","weight":"bold","color":"#FCD34D","align":"center"},{"type":"separator","margin":"lg","color":"#374151"},{"type":"text","text":f"أول حرف: {hint_pattern}","size":"xxl","weight":"bold","color":"#A78BFA","align":"center"},{"type":"text","text":f"عدد الحروف: {word_length}","size":"sm","color":"#10B981","align":"center"},{"type":"text","text":"⚠️ النقاط ستنخفض إلى نصف القيمة","size":"xxs","color":"#F59E0B","align":"center"}],"backgroundColor":"#0F172A","paddingAll":"20px"}}
+        return {"response":FlexSendMessage(alt_text="تلميح", contents=bubble), "points":-1}
 
     def show_answer(self):
-        """عرض الإجابة والانتقال للسؤال التالي"""
-        suggestions = sorted(self.valid_words_set, key=len, reverse=True)[:4]
-        
-        answer_card = {
-            "type": "bubble",
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "contents": [
-                    {
-                        "type": "text",
-                        "text": "✓ الحل",
-                        "size": "xl",
-                        "weight": "bold",
-                        "color": "#10B981",
-                        "align": "center"
-                    },
-                    {
-                        "type": "separator",
-                        "margin": "lg",
-                        "color": "#374151"
-                    },
-                    {
-                        "type": "text",
-                        "text": "بعض الكلمات الصحيحة:",
-                        "size": "sm",
-                        "color": "#9CA3AF",
-                        "margin": "lg"
-                    },
-                    {
-                        "type": "box",
-                        "layout": "vertical",
-                        "contents": [
-                            {
-                                "type": "text",
-                                "text": " ، ".join(suggestions),
-                                "size": "lg",
-                                "weight": "bold",
-                                "color": "#A78BFA",
-                                "align": "center",
-                                "wrap": True
-                            }
-                        ],
-                        "backgroundColor": "#1F2937",
-                        "cornerRadius": "12px",
-                        "paddingAll": "16px",
-                        "margin": "md"
-                    }
-                ],
-                "backgroundColor": "#0F172A",
-                "paddingAll": "20px"
-            }
-        }
-
-        self.current_question += 1
-        
-        if self.current_question <= self.max_questions:
-            return {
-                'response': FlexSendMessage(alt_text="الحل", contents=answer_card),
-                'points': 0,
-                'correct': False,
-                'won': False,
-                'game_over': False,
-                'next_question': True
-            }
-        else:
+        suggestions = sorted(self.valid_words_set,key=len,reverse=True)[:4]
+        bubble = {"type":"bubble","body":{"type":"box","layout":"vertical","contents":[{"type":"text","text":"✓ الحل","size":"xl","weight":"bold","color":"#10B981","align":"center"},{"type":"separator","margin":"lg","color":"#374151"},{"type":"text","text":"بعض الكلمات الصحيحة:","size":"sm","color":"#9CA3AF","margin":"lg"},{"type":"text","text"," ، ".join(suggestions),"size":"lg","weight":"bold","color":"#A78BFA","align":"center"}],"backgroundColor":"#0F172A","paddingAll":"20px"}}
+        self.current_question +=1
+        if self.current_question>self.max_questions:
             return self._end_game()
+        return {"response":FlexSendMessage(alt_text="الحل", contents=bubble)}
 
     def _end_game(self):
-        """إنهاء اللعبة وعرض النتائج"""
         if not self.players_scores:
-            return {
-                'response': TextSendMessage(text="▫️ انتهت اللعبة\n\nلم يشارك أحد"),
-                'points': 0,
-                'correct': False,
-                'won': False,
-                'game_over': True
-            }
-
-        sorted_players = sorted(
-            self.players_scores.items(), 
-            key=lambda x: x[1]['score'], 
-            reverse=True
-        )
-        
-        winner = sorted_players[0]
-        all_scores = [(data['name'], data['score']) for name, data in sorted_players]
-
-        from app import get_winner_card
-        winner_card = get_winner_card(
-            winner[1]['name'], 
-            winner[1]['score'], 
-            all_scores
-        )
-
-        return {
-            'points': 0,
-            'correct': False,
-            'won': True,
-            'game_over': True,
-            'winner_card': winner_card
-        }
+            return {"response":TextSendMessage(text="▫️ انتهت اللعبة\n\nلم يشارك أحد")}
+        sorted_players = sorted(self.players_scores.items(),key=lambda x:x[1]['score'],reverse=True)
+        lines = [f"🥇 {data['name']}: {data['score']} نقطة" if i==0 else f"🥈 {data['name']}: {data['score']} نقطة" if i==1 else f"🥉 {data['name']}: {data['score']} نقطة" if i==2 else f"{i+1}. {data['name']}: {data['score']} نقطة" for i,(uid,data) in enumerate(sorted_players)]
+        bubble = {"type":"bubble","body":{"type":"box","layout":"vertical","contents":[{"type":"text","text":"🏆 النتائج النهائية","size":"xl","weight":"bold","color":"#FCD34D","align":"center"},{"type":"separator","margin":"lg","color":"#374151"}]+[{"type":"text","text":line,"size":"md","color":"#F3F4F6","align":"center"} for line in lines],"backgroundColor":"#0F172A","paddingAll":"20px"}}
+        return {"response":FlexSendMessage(alt_text="نهاية اللعبة", contents=bubble)}
 
     def can_form_word(self, word, letters):
-        """التحقق من إمكانية تكوين الكلمة من الحروف المتاحة"""
         letters_list = letters.copy()
-        word_letters = list(word)
-        
-        for char in word_letters:
-            if char in letters_list:
-                letters_list.remove(char)
+        for c in word:
+            if c in letters_list:
+                letters_list.remove(c)
             else:
                 return False
         return True
 
-    def check_answer(self, answer, user_id, display_name):
-        """التحقق من إجابة المستخدم"""
-        answer_lower = answer.strip().lower()
-        
-        if answer_lower in ['لمح', 'تلميح', 'hint']:
+    def check_answer(self, answer, user_id=None, display_name=None):
+        ans = self.normalize_text(answer)
+        if ans in ['لمح','تلميح','hint']:
             return self.get_hint()
-        
-        if answer_lower in ['جاوب', 'الجواب', 'الحل', 'answer']:
+        if ans in ['جاوب','الحل','answer']:
             return self.show_answer()
-
-        answer_word = self.normalize_text(answer)
-
-        if answer_word in self.used_words:
-            return {
-                'response': TextSendMessage(text=f"▫️ الكلمة '{answer}' مستخدمة مسبقاً"),
-                'points': 0,
-                'correct': False,
-                'won': False,
-                'game_over': False
-            }
-
-        letters_no_spaces = [l for l in self.available_letters]
-        if not self.can_form_word(answer_word, letters_no_spaces):
-            return {
-                'response': TextSendMessage(text=f"▫️ لا يمكن تكوين '{answer}' من الحروف المتاحة"),
-                'points': 0,
-                'correct': False,
-                'won': False,
-                'game_over': False
-            }
-
-        if len(answer_word) < 2:
-            return {
-                'response': TextSendMessage(text="▫️ الكلمة يجب أن تكون حرفين على الأقل"),
-                'points': 0,
-                'correct': False,
-                'won': False,
-                'game_over': False
-            }
-
-        # ✅ التحقق من أن الكلمة موجودة في قائمة الكلمات الصحيحة
+        if ans in self.used_words:
+            return {"response":TextSendMessage(text=f"▫️ الكلمة '{answer}' مستخدمة مسبقاً")}
+        if not self.can_form_word(ans,self.available_letters):
+            return {"response":TextSendMessage(text=f"▫️ لا يمكن تكوين '{answer}' من الحروف المتاحة")}
+        if len(ans)<2:
+            return {"response":TextSendMessage(text="▫️ الكلمة يجب أن تكون حرفين على الأقل")}
         normalized_valid = {self.normalize_text(w) for w in self.valid_words_set}
-        if answer_word not in normalized_valid:
-            return {
-                'response': TextSendMessage(text=f"▫️ '{answer}' ليست من الكلمات المطلوبة\n\nحاول كلمة أخرى من نفس الحروف"),
-                'points': 0,
-                'correct': False,
-                'won': False,
-                'game_over': False
-            }
+        if ans not in normalized_valid:
+            return {"response":TextSendMessage(text=f"▫️ '{answer}' ليست من الكلمات المطلوبة")}
+        # ✅ الإجابة صحيحة
+        self.used_words.add(ans)
+        if user_id not in self.players_words:
+            self.players_words[user_id] = 0
+        self.players_words[user_id] += 1
+        points = 2 if not self.hint_used else 1
+        if user_id not in self.players_scores:
+            self.players_scores[user_id] = {"name": display_name, "score": 0}
+        self.players_scores[user_id]['score'] += points
+        remaining = self.words_per_question - self.players_words[user_id]
+        if remaining<=0:
+            self.current_question +=1
+            return {"response":TextSendMessage(text=f"🎉 {display_name} أكمل جميع الكلمات! +{points} نقطة")}
+        return {"response":TextSendMessage(text=f"✓ صحيح {display_name} +{points} نقطة\nمتبقي {remaining} كلمة")}
