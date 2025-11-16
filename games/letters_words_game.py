@@ -5,15 +5,43 @@ from linebot.models import TextSendMessage
 
 ‏logger = logging.getLogger("whale-bot")
 
-‏class ChainWordsGame:
-‏    def __init__(self, line_bot_api):
+‏class LettersWordsGame:
+‏    def __init__(self, line_bot_api, use_ai=False, ask_ai=None):
 ‏        self.line_bot_api = line_bot_api
-‏        self.start_words = ["قلم", "كتاب", "مدرسة", "باب", "نافذة", "طاولة", "سماء", "بحر"]
-‏        self.current_word = None
-‏        self.used_words = set()
-‏        self.round_count = 0
-‏        self.max_rounds = 5
-‏        self.player_scores = {}
+‏        self.use_ai = use_ai
+‏        self.ask_ai = ask_ai
+‏        self.current_letters = None
+‏        self.valid_words = []
+‏        self.found_words = {}
+‏        self.words_needed = 3
+‏        self.scores = {}
+        
+‏        self.challenges = [
+            {
+‏                "letters": "ك ت ا ب ي ه",
+‏                "words": ["كتاب", "كتب", "تاب", "بيت", "بات", "كات", "تبي", "كيت", "بيك", "تيك", "كاب"]
+            },
+            {
+‏                "letters": "م د ر س ه ل",
+‏                "words": ["مدرسه", "مدرس", "درس", "سهل", "هدم", "رسم", "سمر", "مسر", "سرد", "سره", "مره"]
+            },
+            {
+‏                "letters": "ح ب ر ك ه ي",
+‏                "words": ["حرب", "حبر", "كبير", "حبك", "كرب", "ريح", "بحر", "حرك", "كحل", "حير", "كره"]
+            },
+            {
+‏                "letters": "ق ل م ع ر ي",
+‏                "words": ["قلم", "عمر", "قمر", "علم", "لعب", "ملع", "عرق", "قرع", "عير", "قير", "ريع"]
+            },
+            {
+‏                "letters": "ن و ر س م ي",
+‏                "words": ["نور", "سمر", "نمر", "سور", "مرس", "نور", "سني", "رسم", "نسر", "سير", "رون"]
+            },
+            {
+‏                "letters": "ش ج ر ق ه ل",
+‏                "words": ["شجر", "قشر", "شرق", "جرش", "قرش", "هجر", "شرج", "رجل", "جره", "شجه", "قره"]
+            }
+        ]
     
 ‏    def normalize_text(self, text):
 ‏        if not text:
@@ -26,89 +54,96 @@ from linebot.models import TextSendMessage
 ‏        text = re.sub(r'\s+', '', text)
 ‏        return text
     
+‏    def can_form_word(self, word, letters):
+‏        letters_list = list(letters.replace(' ', ''))
+‏        word_letters = list(word)
+‏        for char in word_letters:
+‏            if char in letters_list:
+‏                letters_list.remove(char)
+‏            else:
+‏                return False
+‏        return True
+    
 ‏    def start_game(self):
-‏        self.current_word = random.choice(self.start_words)
-‏        self.used_words = {self.normalize_text(self.current_word)}
-‏        self.round_count = 0
-‏        self.player_scores = {}
+‏        challenge = random.choice(self.challenges)
+‏        self.current_letters = challenge['letters']
+‏        self.valid_words = [self.normalize_text(w) for w in challenge['words']]
+‏        self.found_words = {}
+‏        self.scores = {}
         
 ‏        return TextSendMessage(
-‏            text=f"▪️ لعبة سلسلة الكلمات\n\n▫️ الكلمة: {self.current_word}\n▫️ اكتب كلمة تبدأ بحرف: {self.current_word[-1]}\n\n💡 مثال: قلم → ملك → كتاب\n📊 الجولات: {self.max_rounds}"
+‏            text=f"▪️ لعبة تكوين الكلمات 🔤\n\n▫️ الحروف:\n『 {self.current_letters} 』\n\n📝 كوّن {self.words_needed} كلمات\n💡 اكتب كلمة واحدة في كل رسالة\n\n▪️ جاوب - عرض حلول"
         )
     
-‏    def next_question(self):
-‏        if self.round_count < self.max_rounds:
-‏            last_letter = self.current_word[-1]
-‏            return TextSendMessage(
-‏                text=f"▪️ جولة {self.round_count + 1} من {self.max_rounds}\n\n▫️ الكلمة السابقة: {self.current_word}\n▫️ اكتب كلمة تبدأ بـ: {last_letter}"
-            )
-‏        return None
-    
-‏    def check_answer(self, answer, user_id, display_name):
-‏        if not self.current_word:
+‏    def check_answer(self, text, user_id, display_name):
+‏        text = text.strip()
+        
+        # عرض الحلول
+‏        if text in ['جاوب', 'الحل', 'الجواب']:
+‏            sample_words = []
+‏            for challenge in self.challenges:
+‏                if self.current_letters == challenge['letters']:
+‏                    sample_words = challenge['words'][:5]
+‏                    break
+            
+‏            return {
+‏                'correct': False,
+‏                'game_over': True,
+‏                'response': TextSendMessage(
+‏                    text=f"📝 بعض الحلول:\n\n▪️ " + "\n▪️ ".join(sample_words)
+                )
+            }
+        
+‏        word_normalized = self.normalize_text(text)
+        
+        # تحقق من عدم التكرار
+‏        if user_id in self.found_words and word_normalized in self.found_words[user_id]:
 ‏            return None
         
-‏        answer = answer.strip()
-‏        last_letter = self.current_word[-1]
-‏        normalized_last = 'ه' if last_letter in ['ة', 'ه'] else last_letter
-‏        normalized_answer = self.normalize_text(answer)
+        # تحقق من الطول
+‏        if len(word_normalized) < 2:
+‏            return None
         
-‏        if normalized_answer in self.used_words:
+        # تحقق من إمكانية تكوين الكلمة
+‏        if not self.can_form_word(word_normalized, self.current_letters):
+‏            return None
+        
+        # تحقق من صحة الكلمة
+‏        is_valid = word_normalized in self.valid_words
+        
+‏        if not is_valid:
+‏            return None
+        
+        # إضافة الكلمة
+‏        if user_id not in self.found_words:
+‏            self.found_words[user_id] = []
+‏        self.found_words[user_id].append(word_normalized)
+        
+‏        if user_id not in self.scores:
+‏            self.scores[user_id] = {'name': display_name, 'score': 0}
+        
+‏        points = 5
+‏        self.scores[user_id]['score'] += points
+        
+‏        words_count = len(self.found_words[user_id])
+        
+        # فوز اللاعب
+‏        if words_count >= self.words_needed:
+‏            words_list = "\n▪️ ".join(self.found_words[user_id])
 ‏            return {
-‏                'response': TextSendMessage(text="⚠️ هذه الكلمة استخدمت من قبل"),
-‏                'points': 0,
-‏                'correct': False
+‏                'correct': True,
+‏                'points': points,
+‏                'won': True,
+‏                'game_over': True,
+‏                'response': TextSendMessage(
+‏                    text=f"🏆 {display_name} فاز!\n\n▪️ الكلمات:\n▪️ {words_list}\n\n⭐ النقاط: {self.scores[user_id]['score']}"
+                )
             }
-        
-‏        first_letter = 'ه' if answer[0].lower() in ['ة', 'ه'] else answer[0].lower()
-        
-‏        if first_letter == normalized_last:
-‏            self.used_words.add(normalized_answer)
-‏            old_word = self.current_word
-‏            self.current_word = answer
-‏            self.round_count += 1
-            
-‏            points = 10
-‏            if user_id not in self.player_scores:
-‏                self.player_scores[user_id] = {'name': display_name, 'score': 0}
-‏            self.player_scores[user_id]['score'] += points
-            
-‏            if self.round_count < self.max_rounds:
-‏                return {
-‏                    'response': TextSendMessage(
-‏                        text=f"✅ صحيح {display_name}!\n\n▪️ {old_word} → {answer}\n⭐ +{points} نقطة"
-                    ),
-‏                    'points': points,
-‏                    'correct': True,
-‏                    'won': True,
-‏                    'next_question': True
-                }
-‏            else:
-‏                return self._end_game()
-‏        else:
-‏            return {
-‏                'response': TextSendMessage(text=f"❌ يجب أن تبدأ بحرف: {last_letter}"),
-‏                'points': 0,
-‏                'correct': False
-            }
-    
-‏    def _end_game(self):
-‏        if not self.player_scores:
-‏            return {
-‏                'response': TextSendMessage(text="⏹️ انتهت اللعبة"),
-‏                'game_over': True
-            }
-        
-‏        sorted_players = sorted(
-‏            self.player_scores.items(),
-‏            key=lambda x: x[1]['score'],
-‏            reverse=True
-        )
-‏        winner = sorted_players[0][1]
-        
-‏        message = f"🏆 انتهت اللعبة\n\n▪️ الفائز: {winner['name']}\n⭐ النقاط: {winner['score']}"
         
 ‏        return {
-‏            'response': TextSendMessage(text=message),
-‏            'game_over': True
+‏            'correct': True,
+‏            'points': points,
+‏            'response': TextSendMessage(
+‏                text=f"✅ {display_name}\n\n▪️ كلمة صحيحة: {text}\n⭐ +{points} نقطة\n\n📊 متبقي: {self.words_needed - words_count} كلمات"
+            )
         }
