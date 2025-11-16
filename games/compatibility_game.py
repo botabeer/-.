@@ -1,9 +1,7 @@
-‏# ═══════════════════════════════════════════════════════════════
-# games/compatibility_game.py - لعبة التوافق الذكية
-# ═══════════════════════════════════════════════════════════════
 from linebot.models import TextSendMessage
 import hashlib
 import logging
+import re
 
 logger = logging.getLogger("whale-bot")
 
@@ -19,7 +17,6 @@ class CompatibilityGame:
         name = name.strip().lower()
         name = name.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا')
         name = name.replace('ة', 'ه').replace('ى', 'ي')
-        import re
         name = re.sub(r'[\u064B-\u065F]', '', name)
         return name
     
