@@ -1,13 +1,3 @@
-"""
-═══════════════════════════════════════════════════════════════
-▪️ بوت الحوت - نظام ألعاب تفاعلية على LINE
-═══════════════════════════════════════════════════════════════
-النسخة: 2.1.0
-التطوير: فريق بوت الحوت
-الحقوق: © 2025 بوت الحوت - جميع الحقوق محفوظة
-═══════════════════════════════════════════════════════════════
-"""
-
 from flask import Flask, request, abort, jsonify
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
@@ -17,20 +7,21 @@ import sys
 import logging
 from datetime import datetime
 from functools import wraps
+from collections import defaultdict
+from threading import Lock
 
-# استيراد المكونات
+# استيراد المكونات - تأكد من وجود __init__.py في كل مجلد!
 from config import config
 from database import db_manager
 from cache import names_cache, stats_cache, leaderboard_cache
-from user_manager import UserManager
-from game_manager import GameManager
-from cards import (
+from managers import UserManager, GameManager, cleanup_manager
+from ui import (
     get_welcome_card, get_help_card, get_stats_card, 
     get_leaderboard_card, get_registration_card, get_withdrawal_card,
     get_quick_reply
 )
 from utils import safe_text, get_profile_safe, check_rate, load_file
-from cleanup import cleanup_manager
+from handlers import handle_text_message
 
 # ═══════════════════════════════════════════════════════════════
 # إعدادات النظام
@@ -49,7 +40,7 @@ logger = logging.getLogger("whale-bot")
 print("\n" + "═"*65)
 print("▪️ بوت الحوت - نظام ألعاب تفاعلية على LINE")
 print("═"*65)
-print("النسخة: 2.1.0 (محسّنة)")
+print("النسخة: 2.1.0 (محسّنة - بنية منظمة)")
 print("© 2025 بوت الحوت - جميع الحقوق محفوظة")
 print("═"*65 + "\n")
 
@@ -58,6 +49,9 @@ print("═"*65 + "\n")
 # ═══════════════════════════════════════════════════════════════
 if not config.validate():
     logger.critical("فشل في تحميل الإعدادات الأساسية")
+    logger.critical("تأكد من وجود المتغيرات البيئية:")
+    logger.critical("  - LINE_CHANNEL_ACCESS_TOKEN")
+    logger.critical("  - LINE_CHANNEL_SECRET")
     sys.exit(1)
 
 # ═══════════════════════════════════════════════════════════════
@@ -72,7 +66,6 @@ if not db_manager.init_database():
 # ═══════════════════════════════════════════════════════════════
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'games'))
 
-# استيراد الألعاب
 SongGame = HumanAnimalPlantGame = ChainWordsGame = FastTypingGame = None
 OppositeGame = LettersWordsGame = DifferencesGame = CompatibilityGame = None
 
@@ -85,9 +78,11 @@ try:
     from letters_words_game import LettersWordsGame
     from differences_game import DifferencesGame
     from compatibility_game import CompatibilityGame
-    logger.info("تم استيراد جميع الألعاب بنجاح")
+    logger.info("✅ تم استيراد جميع الألعاب بنجاح")
 except ImportError as e:
-    logger.error(f"خطأ في استيراد الألعاب: {e}")
+    logger.error(f"❌ خطأ في استيراد الألعاب: {e}")
+except Exception as e:
+    logger.error(f"❌ خطأ غير متوقع في استيراد الألعاب: {e}")
 
 # ═══════════════════════════════════════════════════════════════
 # Flask و LINE Bot
@@ -99,10 +94,15 @@ app.config['JSON_SORT_KEYS'] = False
 line_bot_api = LineBotApi(config.line_token) if config.line_token else None
 handler = WebhookHandler(config.line_secret) if config.line_secret else None
 
-# البيانات المشتركة
-from collections import defaultdict
-from threading import Lock
+if not line_bot_api or not handler:
+    logger.critical("❌ فشل في تهيئة LINE Bot API")
+    sys.exit(1)
 
+logger.info("✅ LINE Bot API جاهز")
+
+# ═══════════════════════════════════════════════════════════════
+# البيانات المشتركة
+# ═══════════════════════════════════════════════════════════════
 active_games = {}
 registered_players = set()
 user_message_count = defaultdict(lambda: {'count': 0, 'reset_time': datetime.now()})
@@ -116,6 +116,8 @@ CHALLENGES = load_file('challenges.txt')
 CONFESSIONS = load_file('confessions.txt')
 MENTIONS = load_file('more_questions.txt')
 
+logger.info(f"📄 المحتوى: {len(QUESTIONS)} سؤال، {len(CHALLENGES)} تحدي، {len(CONFESSIONS)} اعتراف، {len(MENTIONS)} منشن")
+
 # ═══════════════════════════════════════════════════════════════
 # Decorators
 # ═══════════════════════════════════════════════════════════════
@@ -125,6 +127,7 @@ def require_admin_token(f):
     def decorated_function(*args, **kwargs):
         token = request.headers.get('X-Admin-Token', '')
         if not token or token != config.admin_token:
+            logger.warning("⚠️ محاولة وصول غير مصرح بها للـ Admin API")
             abort(403)
         return f(*args, **kwargs)
     return decorated_function
@@ -142,7 +145,7 @@ def verify_line_signature(f):
         try:
             handler.parser.parse(body, signature)
         except InvalidSignatureError:
-            logger.error("توقيع غير صالح")
+            logger.error("❌ توقيع LINE غير صالح")
             abort(400)
         
         return f(*args, **kwargs)
@@ -164,14 +167,14 @@ def home():
     if DifferencesGame: games_status.append("اختلاف")
     if CompatibilityGame: games_status.append("توافق")
     
-    from gemini_ai import USE_AI
+    from ai import USE_AI
     
     return f"""<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>بوت الحوت</title>
+    <title> بوت الحوت</title>
     <style>
         * {{
             margin: 0;
@@ -179,7 +182,7 @@ def home():
             box-sizing: border-box;
         }}
         body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Cairo', sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
@@ -188,7 +191,7 @@ def home():
             padding: 20px;
         }}
         .container {{
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(255, 255, 255, 0.98);
             backdrop-filter: blur(10px);
             border-radius: 24px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
@@ -299,23 +302,23 @@ def home():
         
         <div class="status">
             <div class="status-item">
-                <span class="label">حالة الخادم</span>
+                <span class="label">⚡ حالة الخادم</span>
                 <span class="badge success pulse">يعمل</span>
             </div>
             <div class="status-item">
-                <span class="label">الذكاء الاصطناعي</span>
+                <span class="label">🤖 الذكاء الاصطناعي</span>
                 <span class="badge {'success' if USE_AI else 'warning'}">{'مفعّل' if USE_AI else 'معطّل'}</span>
             </div>
             <div class="status-item">
-                <span class="label">اللاعبون المسجلون</span>
+                <span class="label">👥 اللاعبون المسجلون</span>
                 <span class="value">{len(registered_players)}</span>
             </div>
             <div class="status-item">
-                <span class="label">الألعاب النشطة</span>
+                <span class="label">🎮 الألعاب النشطة</span>
                 <span class="value">{len(active_games)}</span>
             </div>
             <div class="status-item">
-                <span class="label">الألعاب المتوفرة</span>
+                <span class="label">🎯 الألعاب المتوفرة</span>
                 <span class="value">{len(games_status)}/8</span>
             </div>
         </div>
@@ -339,7 +342,7 @@ def health():
     except:
         db_status = "error"
     
-    from gemini_ai import USE_AI
+    from ai import USE_AI
     
     return jsonify({
         "status": "healthy",
@@ -364,6 +367,8 @@ def reload_content():
         CONFESSIONS = load_file('confessions.txt')
         MENTIONS = load_file('more_questions.txt')
         
+        logger.info("✅ تم إعادة تحميل المحتوى بنجاح")
+        
         return jsonify({
             "status": "reloaded",
             "counts": {
@@ -374,7 +379,7 @@ def reload_content():
             }
         }), 200
     except Exception as e:
-        logger.error(f"خطأ في إعادة التحميل: {e}")
+        logger.error(f"❌ خطأ في إعادة التحميل: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/stats", methods=['GET'])
@@ -396,7 +401,7 @@ def get_system_stats():
             }
         }), 200
     except Exception as e:
-        logger.error(f"خطأ في جلب الإحصائيات: {e}")
+        logger.error(f"❌ خطأ في جلب الإحصائيات: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/callback", methods=['POST'])
@@ -404,7 +409,7 @@ def get_system_stats():
 def callback():
     """معالجة طلبات LINE"""
     if not handler or not line_bot_api:
-        logger.error("LINE Bot غير مهيأ بشكل صحيح")
+        logger.error("❌ LINE Bot غير مهيأ بشكل صحيح")
         abort(500)
     
     signature = request.headers.get('X-Line-Signature', '')
@@ -413,18 +418,16 @@ def callback():
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
-        logger.error("توقيع غير صالح")
+        logger.error("❌ توقيع غير صالح")
         abort(400)
     except Exception as e:
-        logger.error(f"خطأ في معالجة webhook: {e}")
+        logger.error(f"❌ خطأ في معالجة webhook: {e}")
     
     return 'OK'
 
 # ═══════════════════════════════════════════════════════════════
 # معالج الرسائل
 # ═══════════════════════════════════════════════════════════════
-from message_handler import handle_text_message
-
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     """معالجة الرسائل الواردة"""
@@ -454,7 +457,7 @@ def handle_message(event):
             }
         )
     except Exception as e:
-        logger.error(f"خطأ في معالجة الرسالة: {e}", exc_info=True)
+        logger.error(f"❌ خطأ في معالجة الرسالة: {e}", exc_info=True)
 
 # ═══════════════════════════════════════════════════════════════
 # معالج الأخطاء
@@ -465,12 +468,12 @@ def not_found(error):
 
 @app.errorhandler(500)
 def internal_error(error):
-    logger.error(f"خطأ داخلي في الخادم: {error}")
+    logger.error(f"❌ خطأ داخلي في الخادم: {error}")
     return jsonify({"error": "خطأ داخلي في الخادم"}), 500
 
 @app.errorhandler(Exception)
 def handle_exception(error):
-    logger.error(f"خطأ غير متوقع: {error}", exc_info=True)
+    logger.error(f"❌ خطأ غير متوقع: {error}", exc_info=True)
     return 'OK', 200
 
 # ═══════════════════════════════════════════════════════════════
@@ -480,17 +483,20 @@ if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
     
     # بدء التنظيف التلقائي
-    cleanup_manager.start()
+    cleanup_manager.start(active_games, games_lock)
     
     # طباعة معلومات البدء
     print("\n" + "="*60)
-    print("بوت الحوت جاهز للعمل")
-    print(f"المنفذ: {port}")
-    print(f"الألعاب المتوفرة: {sum([1 for g in [SongGame, HumanAnimalPlantGame, ChainWordsGame, FastTypingGame, OppositeGame, LettersWordsGame, DifferencesGame, CompatibilityGame] if g])}/8")
+    print(" بوت الحوت جاهز للعمل")
+    print("="*60)
+    print(f"📡 المنفذ: {port}")
+    print(f"🎮 الألعاب المتوفرة: {sum([1 for g in [SongGame, HumanAnimalPlantGame, ChainWordsGame, FastTypingGame, OppositeGame, LettersWordsGame, DifferencesGame, CompatibilityGame] if g])}/8")
+    print(f"📊 قاعدة البيانات: {'✅ متصلة' if db_manager.get_connection() else '❌ غير متصلة'}")
+    print(f"🤖 الذكاء الاصطناعي: {'✅ مفعّل' if 'USE_AI' in dir() and USE_AI else '❌ معطّل'}")
     print("="*60 + "\n")
     
     try:
-        logger.info(f"بدء الخادم على المنفذ {port}")
+        logger.info(f"🚀 بدء الخادم على المنفذ {port}")
         app.run(
             host='0.0.0.0',
             port=port,
@@ -499,9 +505,9 @@ if __name__ == "__main__":
             use_reloader=False
         )
     except KeyboardInterrupt:
-        logger.info("تم إيقاف الخادم بواسطة المستخدم")
+        logger.info("⏹️ تم إيقاف الخادم بواسطة المستخدم")
         cleanup_manager.stop()
         db_manager.close_connection()
     except Exception as e:
-        logger.critical(f"فشل في تشغيل الخادم: {e}")
+        logger.critical(f"💥 فشل في تشغيل الخادم: {e}")
         sys.exit(1)
