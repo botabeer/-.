@@ -1,6 +1,9 @@
 import sqlite3
 from typing import List, Tuple
 import threading
+import logging
+
+logger = logging.getLogger("whale-bot.db")
 
 class Database:
     _lock = threading.Lock()
@@ -8,6 +11,7 @@ class Database:
     def __init__(self, db_name: str = "game_bot.db"):
         self.db_name = db_name
         self._create_tables()
+        logger.info(f"✅ قاعدة البيانات جاهزة: {db_name}")
 
     def _create_tables(self):
         with sqlite3.connect(self.db_name) as conn:
@@ -21,7 +25,6 @@ class Database:
                     last_active TIMESTAMP
                 );
             """)
-
             # سجل الألعاب
             c.execute("""
                 CREATE TABLE IF NOT EXISTS game_logs (
@@ -32,13 +35,11 @@ class Database:
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
-
             conn.commit()
 
     # --------------------------
     # عمليات اللاعبين
     # --------------------------
-
     def add_player(self, user_id: str, name: str):
         with self._lock, sqlite3.connect(self.db_name) as conn:
             c = conn.cursor()
@@ -66,7 +67,6 @@ class Database:
     # --------------------------
     # سجل الألعاب
     # --------------------------
-
     def log_game(self, user_id: str, game_name: str, result: str):
         with sqlite3.connect(self.db_name) as conn:
             c = conn.cursor()
@@ -75,3 +75,30 @@ class Database:
                 (user_id, game_name, result)
             )
             conn.commit()
+
+    # --------------------------
+    # وظائف مساعدة للكود الرئيسي
+    # --------------------------
+    def init_database(self) -> bool:
+        try:
+            self._create_tables()
+            return True
+        except Exception as e:
+            logger.error(f"❌ فشل في تهيئة قاعدة البيانات: {e}")
+            return False
+
+    def get_connection(self):
+        try:
+            return sqlite3.connect(self.db_name)
+        except Exception as e:
+            logger.error(f"❌ فشل في الحصول على الاتصال: {e}")
+            return None
+
+    def close_connection(self):
+        # SQLite connections تغلق تلقائيًا عند الخروج من with
+        logger.info("🛑 إغلاق قاعدة البيانات (إذا كان هناك اتصال مفتوح)")
+
+# --------------------------
+# إنشاء كائن جاهز للاستخدام
+# --------------------------
+db_manager = Database()
