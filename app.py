@@ -37,7 +37,7 @@ try:
 except Exception as e: logger.warning(f"Gemini AI unavailable: {e}")
 
 games = {}
-game_names = ['SongGame','HumanAnimalPlantGame','ChainWordsGame','FastTypingGame','OppositeGame','LettersWordsGame','CompatibilityGame','SpeedSortingGame']
+game_names = ['SongGame','HumanAnimalPlantGame','ChainWordsGame','FastTypingGame','OppositeGame','LettersWordsGame','CompatibilityGame','SpeedSortingGame','QuestionGame','ChallengeGame','ConfessionGame','MentionGame']
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'games'))
 for name in game_names:
     try:
@@ -144,16 +144,6 @@ def validate_input(text):
     dangerous = ['--', 'DROP', 'DELETE', 'INSERT', 'UPDATE', 'SELECT']
     return not any(d in text.upper() for d in dangerous)
 
-def load_text_file(filename):
-    try:
-        path = os.path.join('games', filename)
-        if os.path.exists(path):
-            with open(path, 'r', encoding='utf-8') as f: return [line.strip() for line in f if line.strip()]
-    except Exception as e: logger.error(f"Load {filename} failed: {e}")
-    return []
-
-QUESTIONS, CHALLENGES, CONFESSIONS, MENTION_QUESTIONS = load_text_file('questions.txt'), load_text_file('challenges.txt'), load_text_file('confessions.txt'), load_text_file('more_questions.txt')
-
 def log_error(err_type, message, details=None):
     try:
         with error_log_lock:
@@ -179,8 +169,13 @@ def get_user_profile_safe(user_id):
     with names_cache_lock: user_names_cache[user_id] = name
     return name
 
-def get_quick_reply():
-    return QuickReply(items=[QuickReplyButton(action=MessageAction(label=l, text=t)) for l,t in [("سؤال","سؤال"),("تحدي","تحدي"),("اعتراف","اعتراف"),("منشن","منشن"),("أغنية","أغنية"),("لعبة","لعبة"),("أسرع","أسرع"),("ترتيب","ترتيب"),("تكوين","تكوين"),("ضد","ضد"),("توافق","توافق"),("سلسلة","سلسلة"),("لمح","لمح"),("جاوب","جاوب")]])
+def get_quick_reply(in_game=False):
+    if in_game:
+        items = [("أغنية","أغنية"),("لعبة","لعبة"),("أسرع","أسرع"),("ترتيب","ترتيب"),("تكوين","تكوين"),("ضد","ضد"),("توافق","توافق"),("سلسلة","سلسلة"),("إيقاف","إيقاف")]
+    else:
+        items = [("أغنية","أغنية"),("لعبة","لعبة"),("أسرع","أسرع"),("ترتيب","ترتيب"),("تكوين","تكوين"),("ضد","ضد"),("توافق","توافق"),("سلسلة","سلسلة"),("سؤال","سؤال"),("تحدي","تحدي"),("اعتراف","اعتراف"),("منشن","منشن"),("نقاطي","نقاطي")]
+    items = items[:13]
+    return QuickReply(items=[QuickReplyButton(action=MessageAction(label=l, text=t)) for l,t in items])
 
 def create_card(body_contents, footer_buttons=None):
     card = {"type":"bubble", "body":{"type":"box", "layout":"vertical", "contents":body_contents, "backgroundColor":COSMIC["card"], "paddingAll":"24px", "spacing":"md"}}
@@ -191,14 +186,14 @@ def make_button(label, text, color=None):
     return {"type":"button", "action":{"type":"message", "label":label, "text":text}, "style":"primary", "color":color or COSMIC["primary"], "height":"sm"}
 
 def get_welcome_card(name):
-    games_list = [{"icon":"*","name":"أغنية","desc":"خمن الأغنية"},{"icon":"*","name":"لعبة","desc":"إنسان حيوان نبات"},{"icon":"*","name":"سلسلة","desc":"ربط الكلمات"},{"icon":"*","name":"أسرع","desc":"اكتب بسرعة"},{"icon":"*","name":"ضد","desc":"الكلمة المعاكسة"},{"icon":"*","name":"تكوين","desc":"كون كلمة"},{"icon":"*","name":"توافق","desc":"نسبة التوافق"},{"icon":"*","name":"ترتيب","desc":"رتب العناصر"}]
+    games_list = [{"icon":"*","name":"أغنية","desc":"خمن الأغنية"},{"icon":"*","name":"لعبة","desc":"إنسان حيوان نبات"},{"icon":"*","name":"سلسلة","desc":"ربط الكلمات"},{"icon":"*","name":"أسرع","desc":"اكتب بسرعة"},{"icon":"*","name":"ضد","desc":"الكلمة المعاكسة"},{"icon":"*","name":"تكوين","desc":"كون كلمة"},{"icon":"*","name":"توافق","desc":"نسبة التوافق"},{"icon":"*","name":"ترتيب","desc":"رتب العناصر"},{"icon":"*","name":"سؤال","desc":"سؤال عشوائي"},{"icon":"*","name":"تحدي","desc":"تحدي جريء"},{"icon":"*","name":"اعتراف","desc":"اعترف بشيء"},{"icon":"*","name":"منشن","desc":"منشن لشخص"}]
     game_items = [{"type":"box","layout":"horizontal","contents":[{"type":"text","text":g['icon'],"size":"lg","flex":0},{"type":"text","text":g['name'],"size":"sm","color":COSMIC["text"],"weight":"bold","flex":1,"margin":"md"},{"type":"text","text":g['desc'],"size":"xs","color":COSMIC["text_muted"],"flex":2,"align":"end"}],"margin":"sm" if i else "none"} for i,g in enumerate(games_list)]
     body = [{"type":"box","layout":"vertical","contents":[{"type":"image","url":PISCES_LOGO,"size":"full","aspectRatio":"1:1","aspectMode":"cover"}],"width":"200px","height":"200px","cornerRadius":"100px"},{"type":"text","text":"بوت الحوت","size":"xxl","weight":"bold","color":COSMIC["primary"],"align":"center","margin":"lg"},{"type":"text","text":"3D Gaming Experience","size":"xs","color":COSMIC["text_dim"],"align":"center","margin":"xs"},{"type":"separator","margin":"lg","color":COSMIC["border"]},{"type":"text","text":f"مرحباً {name}","size":"md","color":COSMIC["text"],"align":"center","margin":"md","weight":"bold"},{"type":"box","layout":"vertical","contents":game_items,"backgroundColor":COSMIC["elevated"],"cornerRadius":"12px","paddingAll":"14px","margin":"md"},{"type":"separator","margin":"md","color":COSMIC["border"]},{"type":"text","text":"بوت الحوت 2025","size":"xxs","color":COSMIC["text_muted"],"align":"center","margin":"sm"}]
     footer = [make_button("انضم","انضم",COSMIC["primary"]), make_button("انسحب","انسحب",COSMIC["accent"]), make_button("ابدأ","ابدأ",COSMIC["glow"])]
     return create_card(body, footer)
 
 def get_help_card():
-    body = [{"type":"box","layout":"vertical","contents":[{"type":"image","url":PISCES_LOGO,"size":"full","aspectRatio":"1:1","aspectMode":"cover"}],"width":"120px","height":"120px","cornerRadius":"60px"},{"type":"text","text":"دليل الاستخدام","size":"xl","weight":"bold","color":COSMIC["primary"],"align":"center","margin":"md"},{"type":"separator","margin":"lg","color":COSMIC["border"]},{"type":"box","layout":"vertical","contents":[{"type":"text","text":"الأوامر الأساسية","size":"md","weight":"bold","color":COSMIC["primary"]},{"type":"text","text":"انضم - للانضمام\nانسحب - للخروج\nنقاطي - إحصائياتك\nالصدارة - أفضل اللاعبين\nإيقاف - إنهاء اللعبة","size":"xs","color":COSMIC["text_dim"],"wrap":True,"margin":"sm"}],"backgroundColor":COSMIC["elevated"],"cornerRadius":"12px","paddingAll":"14px","margin":"md"},{"type":"box","layout":"vertical","contents":[{"type":"text","text":"أثناء اللعب","size":"md","weight":"bold","color":COSMIC["primary"]},{"type":"text","text":"اكتب جوابك مباشرة\nلمح - تلميح\nجاوب - عرض الإجابة","size":"xs","color":COSMIC["text_dim"],"wrap":True,"margin":"sm"}],"backgroundColor":COSMIC["elevated"],"cornerRadius":"12px","paddingAll":"14px","margin":"sm"},{"type":"separator","margin":"md","color":COSMIC["border"]},{"type":"text","text":"بوت الحوت 2025","size":"xxs","color":COSMIC["text_muted"],"align":"center","margin":"sm"}]
+    body = [{"type":"box","layout":"vertical","contents":[{"type":"image","url":PISCES_LOGO,"size":"full","aspectRatio":"1:1","aspectMode":"cover"}],"width":"120px","height":"120px","cornerRadius":"60px"},{"type":"text","text":"دليل الاستخدام","size":"xl","weight":"bold","color":COSMIC["primary"],"align":"center","margin":"md"},{"type":"separator","margin":"lg","color":COSMIC["border"]},{"type":"box","layout":"vertical","contents":[{"type":"text","text":"الأوامر الأساسية","size":"md","weight":"bold","color":COSMIC["primary"]},{"type":"text","text":"انضم - للانضمام\nانسحب - للخروج\nنقاطي - إحصائياتك\nالصدارة - أفضل اللاعبين\nإيقاف - إنهاء اللعبة","size":"xs","color":COSMIC["text_dim"],"wrap":True,"margin":"sm"}],"backgroundColor":COSMIC["elevated"],"cornerRadius":"12px","paddingAll":"14px","margin":"md"},{"type":"box","layout":"vertical","contents":[{"type":"text","text":"أثناء اللعب","size":"md","weight":"bold","color":COSMIC["primary"]},{"type":"text","text":"اكتب جوابك مباشرة\nالأزرار السريعة للانتقال بين الألعاب","size":"xs","color":COSMIC["text_dim"],"wrap":True,"margin":"sm"}],"backgroundColor":COSMIC["elevated"],"cornerRadius":"12px","paddingAll":"14px","margin":"sm"},{"type":"separator","margin":"md","color":COSMIC["border"]},{"type":"text","text":"بوت الحوت 2025","size":"xxs","color":COSMIC["text_muted"],"align":"center","margin":"sm"}]
     footer = [make_button("إيقاف","إيقاف",COSMIC["accent"]), make_button("نقاطي","نقاطي",COSMIC["primary"]), make_button("الصدارة","الصدارة",COSMIC["glow"])]
     return create_card(body, footer)
 
@@ -223,15 +218,9 @@ def get_leaderboard_card():
     body = [{"type":"box","layout":"vertical","contents":[{"type":"image","url":PISCES_LOGO,"size":"full","aspectRatio":"1:1","aspectMode":"cover"}],"width":"100px","height":"100px","cornerRadius":"50px"},{"type":"text","text":"لوحة الصدارة","size":"lg","weight":"bold","color":COSMIC["primary"],"align":"center","margin":"sm"},{"type":"text","text":"أفضل اللاعبين","size":"xxs","color":COSMIC["text_dim"],"align":"center","margin":"xs"},{"type":"separator","margin":"md","color":COSMIC["border"]},{"type":"box","layout":"vertical","contents":items,"margin":"sm"},{"type":"separator","margin":"md","color":COSMIC["border"]},{"type":"text","text":"بوت الحوت 2025","size":"xxs","color":COSMIC["text_muted"],"align":"center","margin":"xs"}]
     return create_card(body)
 
-def get_game_question_card(game_type, question_num, question_text, supports_hint=True):
+def get_game_question_card(game_type, question_num, question_text):
     body = [{"type":"text","text":game_type,"size":"md","weight":"bold","color":COSMIC["glow"],"align":"center"},{"type":"text","text":f"السؤال {question_num} من {QUESTIONS_PER_GAME}","size":"xs","color":COSMIC["text_dim"],"align":"center","margin":"xs"},{"type":"separator","margin":"sm","color":COSMIC["border"]},{"type":"box","layout":"vertical","contents":[{"type":"text","text":question_text,"size":"sm","color":COSMIC["text"],"wrap":True,"weight":"bold"}],"backgroundColor":COSMIC["elevated"],"cornerRadius":"10px","paddingAll":"12px","margin":"md"}]
-    if supports_hint:
-        body.append({"type":"text","text":"استخدم: لمح أو جاوب","size":"xxs","color":COSMIC["text_muted"],"align":"center","margin":"sm"})
-        footer = [make_button("لمح","لمح",COSMIC["secondary"]), make_button("جاوب","جاوب",COSMIC["accent"])]
-    else:
-        body.append({"type":"text","text":"هذه اللعبة لا تدعم لمح","size":"xxs","color":COSMIC["text_muted"],"align":"center","margin":"sm"})
-        footer = [make_button("جاوب","جاوب",COSMIC["accent"])]
-    return create_card(body, footer)
+    return create_card(body)
 
 def get_winner_card(winner_name, winner_score, all_scores, game_type):
     score_items = []
@@ -259,9 +248,8 @@ def start_game(game_id, game_class, game_type, user_id, event):
             active_games[game_id] = {'game':game, 'type':game_type, 'created_at':datetime.now(), 'participants':participants, 'answered_users':set(), 'question_num':1, 'scores':defaultdict(int)}
         response = game.start_game()
         question_text = response.text if isinstance(response, TextSendMessage) else (response[0].text if response else "ابدأ اللعبة")
-        supports_hint = game_class.__name__ in ['SongGame','OppositeGame']
-        flex_card = get_game_question_card(game_type, 1, question_text, supports_hint)
-        line_bot_api.reply_message(event.reply_token, FlexSendMessage(alt_text=f"{game_type} - السؤال 1", contents=flex_card, quick_reply=get_quick_reply()))
+        flex_card = get_game_question_card(game_type, 1, question_text)
+        line_bot_api.reply_message(event.reply_token, FlexSendMessage(alt_text=f"{game_type} - السؤال 1", contents=flex_card, quick_reply=get_quick_reply(in_game=True)))
         logger.info(f"Started {game_type} for game_id {game_id}")
         return True
     except Exception as e:
@@ -272,7 +260,7 @@ def start_game(game_id, game_class, game_type, user_id, event):
 @app.route("/", methods=['GET'])
 def home():
     games_count = sum(1 for g in games.values() if g)
-    return f"""<!DOCTYPE html><html dir="rtl"><head><title>بوت الحوت</title><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{{margin:0;padding:0;box-sizing:border-box}}body{{font-family:-apple-system,sans-serif;background:linear-gradient(135deg,{COSMIC['bg']},{COSMIC['card']});min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}}.container{{background:{COSMIC['card']};border:2px solid {COSMIC['border']};border-radius:20px;box-shadow:0 0 60px rgba(0,212,255,0.4);padding:40px;max-width:600px;width:100%}}h1{{text-align:center;font-size:2.5em;margin-bottom:10px;background:linear-gradient(135deg,{COSMIC['primary']},{COSMIC['secondary']});-webkit-background-clip:text;-webkit-text-fill-color:transparent}}.subtitle{{text-align:center;color:{COSMIC['text_dim']};margin-bottom:30px}}.status{{background:{COSMIC['elevated']};border-radius:15px;padding:20px;margin:20px 0}}.status-item{{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid {COSMIC['border']}}}.status-item:last-child{{border-bottom:none}}.label{{color:{COSMIC['text_muted']}}}.value{{color:{COSMIC['primary']};font-weight:bold}}.btn{{display:inline-block;padding:12px 24px;background:{COSMIC['primary']};color:{COSMIC['dark']};text-decoration:none;border-radius:10px;margin:5px;font-weight:600}}.footer{{text-align:center;margin-top:30px;color:{COSMIC['text_muted']};font-size:0.9em}}</style></head><body><div class="container"><h1>بوت الحوت</h1><p class="subtitle">3D Gaming Experience</p><div class="status"><div class="status-item"><span class="label">الخادم</span><span class="value">يعمل</span></div><div class="status-item"><span class="label">Gemini AI</span><span class="value">{'مفعل' if USE_AI else 'معطل'}</span></div><div class="status-item"><span class="label">اللاعبون</span><span class="value">{len(registered_players)}</span></div><div class="status-item"><span class="label">ألعاب نشطة</span><span class="value">{len(active_games)}</span></div><div class="status-item"><span class="label">ألعاب متوفرة</span><span class="value">{games_count}/8</span></div></div><div style="text-align:center;margin-top:25px"><a href="/health" class="btn">الصحة</a><a href="/errors" class="btn">الأخطاء({len(error_log)})</a></div><div class="footer">بوت الحوت 2025</div></div></body></html>"""
+    return f"""<!DOCTYPE html><html dir="rtl"><head><title>بوت الحوت</title><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{{margin:0;padding:0;box-sizing:border-box}}body{{font-family:-apple-system,sans-serif;background:linear-gradient(135deg,{COSMIC['bg']},{COSMIC['card']});min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}}.container{{background:{COSMIC['card']};border:2px solid {COSMIC['border']};border-radius:20px;box-shadow:0 0 60px rgba(0,212,255,0.4);padding:40px;max-width:600px;width:100%}}h1{{text-align:center;font-size:2.5em;margin-bottom:10px;background:linear-gradient(135deg,{COSMIC['primary']},{COSMIC['secondary']});-webkit-background-clip:text;-webkit-text-fill-color:transparent}}.subtitle{{text-align:center;color:{COSMIC['text_dim']};margin-bottom:30px}}.status{{background:{COSMIC['elevated']};border-radius:15px;padding:20px;margin:20px 0}}.status-item{{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid {COSMIC['border']}}}.status-item:last-child{{border-bottom:none}}.label{{color:{COSMIC['text_muted']}}}.value{{color:{COSMIC['primary']};font-weight:bold}}.btn{{display:inline-block;padding:12px 24px;background:{COSMIC['primary']};color:{COSMIC['dark']};text-decoration:none;border-radius:10px;margin:5px;font-weight:600}}.footer{{text-align:center;margin-top:30px;color:{COSMIC['text_muted']};font-size:0.9em}}</style></head><body><div class="container"><h1>بوت الحوت</h1><p class="subtitle">3D Gaming Experience</p><div class="status"><div class="status-item"><span class="label">الخادم</span><span class="value">يعمل</span></div><div class="status-item"><span class="label">Gemini AI</span><span class="value">{'مفعل' if USE_AI else 'معطل'}</span></div><div class="status-item"><span class="label">اللاعبون</span><span class="value">{len(registered_players)}</span></div><div class="status-item"><span class="label">ألعاب نشطة</span><span class="value">{len(active_games)}</span></div><div class="status-item"><span class="label">ألعاب متوفرة</span><span class="value">{games_count}/12</span></div></div><div style="text-align:center;margin-top:25px"><a href="/health" class="btn">الصحة</a><a href="/errors" class="btn">الأخطاء({len(error_log)})</a></div><div class="footer">بوت الحوت 2025</div></div></body></html>"""
 
 @app.route("/health", methods=['GET'])
 def health_check():
@@ -343,15 +331,10 @@ def handle_message(event):
                 else: line_bot_api.reply_message(event.reply_token, TextSendMessage(text="أنت غير مسجل", quick_reply=get_quick_reply()))
             return
         
-        if text in ['سؤال','سوال'] and QUESTIONS: line_bot_api.reply_message(event.reply_token, TextSendMessage(text=random.choice(QUESTIONS), quick_reply=get_quick_reply())); return
-        if text in ['تحدي','challenge'] and CHALLENGES: line_bot_api.reply_message(event.reply_token, TextSendMessage(text=random.choice(CHALLENGES), quick_reply=get_quick_reply())); return
-        if text in ['اعتراف','confession'] and CONFESSIONS: line_bot_api.reply_message(event.reply_token, TextSendMessage(text=random.choice(CONFESSIONS), quick_reply=get_quick_reply())); return
-        if text in ['منشن','mention'] and MENTION_QUESTIONS: line_bot_api.reply_message(event.reply_token, TextSendMessage(text=random.choice(MENTION_QUESTIONS), quick_reply=get_quick_reply())); return
-        
-        games_map = {'أغنية':(games['SongGame'],'أغنية'), 'لعبة':(games['HumanAnimalPlantGame'],'لعبة'), 'سلسلة':(games['ChainWordsGame'],'سلسلة'), 'أسرع':(games['FastTypingGame'],'أسرع'), 'ضد':(games['OppositeGame'],'ضد'), 'تكوين':(games['LettersWordsGame'],'تكوين'), 'توافق':(games['CompatibilityGame'],'توافق'), 'ترتيب':(games['SpeedSortingGame'],'ترتيب')}
+        games_map = {'أغنية':(games['SongGame'],'أغنية'), 'لعبة':(games['HumanAnimalPlantGame'],'لعبة'), 'سلسلة':(games['ChainWordsGame'],'سلسلة'), 'أسرع':(games['FastTypingGame'],'أسرع'), 'ضد':(games['OppositeGame'],'ضد'), 'تكوين':(games['LettersWordsGame'],'تكوين'), 'توافق':(games['CompatibilityGame'],'توافق'), 'ترتيب':(games['SpeedSortingGame'],'ترتيب'), 'سؤال':(games['QuestionGame'],'سؤال'), 'تحدي':(games['ChallengeGame'],'تحدي'), 'اعتراف':(games['ConfessionGame'],'اعتراف'), 'منشن':(games['MentionGame'],'منشن')}
         
         if text == 'ابدأ':
-            available_games = [k for k,v in games_map.items() if v[0] and k != 'توافق']
+            available_games = [k for k,v in games_map.items() if v[0] and k not in ['توافق','سؤال','تحدي','اعتراف','منشن']]
             if available_games:
                 random_game = random.choice(available_games)
                 game_class, game_type = games_map[random_game]
@@ -362,13 +345,29 @@ def handle_message(event):
         
         if text in games_map:
             game_class, game_type = games_map[text]
-            if text == 'توافق' and game_class:
+            if not game_class:
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"لعبة {game_type} غير متوفرة", quick_reply=get_quick_reply()))
+                return
+            if text == 'توافق':
                 with games_lock:
                     with players_lock:
                         participants = registered_players.copy()
                         participants.add(user_id)
                     active_games[game_id] = {'game':game_class(line_bot_api), 'type':'توافق', 'created_at':datetime.now(), 'participants':participants, 'answered_users':set(), 'last_game':text, 'waiting_for_names':True}
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="لعبة التوافق\n\nاكتب اسمين مفصولين بمسافة\nنص فقط\n\nمثال: ميش عبير", quick_reply=get_quick_reply()))
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="لعبة التوافق\n\nاكتب اسمين مفصولين بمسافة\nنص فقط\n\nمثال: ميش عبير", quick_reply=get_quick_reply(in_game=True)))
+                return
+            if text in ['سؤال','تحدي','اعتراف','منشن']:
+                try:
+                    game_instance = game_class(line_bot_api)
+                    result = game_instance.start_game()
+                    if isinstance(result, TextSendMessage):
+                        result.quick_reply = get_quick_reply()
+                        line_bot_api.reply_message(event.reply_token, result)
+                    else:
+                        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=str(result), quick_reply=get_quick_reply()))
+                except Exception as e:
+                    logger.error(f"{game_type} error: {e}")
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"خطأ في {game_type}", quick_reply=get_quick_reply()))
                 return
             with games_lock:
                 if game_id in active_games: active_games[game_id]['last_game'] = text
@@ -381,9 +380,9 @@ def handle_message(event):
         
         if game_data.get('type') == 'توافق' and game_data.get('waiting_for_names'):
             cleaned = text.replace('@','').strip()
-            if '@' in text: line_bot_api.reply_message(event.reply_token, TextSendMessage(text="بدون علامة @", quick_reply=get_quick_reply())); return
+            if '@' in text: line_bot_api.reply_message(event.reply_token, TextSendMessage(text="بدون علامة @", quick_reply=get_quick_reply(in_game=True))); return
             names = cleaned.split()
-            if len(names) < 2: line_bot_api.reply_message(event.reply_token, TextSendMessage(text="اكتب اسمين مفصولين بمسافة", quick_reply=get_quick_reply())); return
+            if len(names) < 2: line_bot_api.reply_message(event.reply_token, TextSendMessage(text="اكتب اسمين مفصولين بمسافة", quick_reply=get_quick_reply(in_game=True))); return
             try:
                 result = game_data['game'].check_answer(f"{names[0]} {names[1]}", user_id, display_name)
                 game_data['waiting_for_names'] = False
@@ -398,47 +397,6 @@ def handle_message(event):
         
         game = game_data['game']
         game_type = game_data['type']
-        supports_hint = game.__class__.__name__ in ['SongGame','OppositeGame']
-        
-        if text in ['لمح','تلميح','hint']:
-            if supports_hint and hasattr(game, 'get_hint'):
-                try: hint = game.get_hint(); line_bot_api.reply_message(event.reply_token, TextSendMessage(text=hint, quick_reply=get_quick_reply()))
-                except: line_bot_api.reply_message(event.reply_token, TextSendMessage(text="لا يوجد تلميح متاح", quick_reply=get_quick_reply()))
-            else: line_bot_api.reply_message(event.reply_token, TextSendMessage(text="هذه اللعبة لا تدعم لمح", quick_reply=get_quick_reply()))
-            return
-        
-        if text in ['جاوب','الجواب','answer']:
-            if hasattr(game, 'reveal_answer'):
-                try:
-                    answer = game.reveal_answer()
-                    question_num = game_data.get('question_num', 1)
-                    if question_num < QUESTIONS_PER_GAME:
-                        game_data['question_num'] = question_num + 1
-                        game_data['answered_users'] = set()
-                        next_q = game.next_question()
-                        if next_q:
-                            q_text = next_q.text if isinstance(next_q, TextSendMessage) else str(next_q)
-                            flex_card = get_game_question_card(game_type, question_num+1, q_text, supports_hint)
-                            line_bot_api.reply_message(event.reply_token, [TextSendMessage(text=f"الإجابة: {answer}"), FlexSendMessage(alt_text=f"{game_type} - السؤال {question_num+1}", contents=flex_card, quick_reply=get_quick_reply())])
-                    else:
-                        scores = game_data.get('scores', {})
-                        if scores:
-                            sorted_scores = sorted(scores.items(), key=lambda x:x[1], reverse=True)
-                            winner_id, winner_score = sorted_scores[0]
-                            winner_name = get_user_profile_safe(winner_id)
-                            all_scores = [(get_user_profile_safe(uid), score) for uid, score in sorted_scores]
-                            for uid, score in scores.items(): update_user_points(uid, get_user_profile_safe(uid), score, uid==winner_id, game_type)
-                            card = get_winner_card(winner_name, winner_score, all_scores, game_type)
-                            with games_lock:
-                                if game_id in active_games: del active_games[game_id]
-                            line_bot_api.reply_message(event.reply_token, [TextSendMessage(text=f"الإجابة: {answer}"), FlexSendMessage(alt_text="الفائز", contents=card, quick_reply=get_quick_reply())])
-                        else:
-                            with games_lock:
-                                if game_id in active_games: del active_games[game_id]
-                            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"الإجابة: {answer}\nانتهت اللعبة", quick_reply=get_quick_reply()))
-                except: line_bot_api.reply_message(event.reply_token, TextSendMessage(text="لا يمكن عرض الإجابة", quick_reply=get_quick_reply()))
-            else: line_bot_api.reply_message(event.reply_token, TextSendMessage(text="هذه اللعبة لا تدعم عرض الإجابة", quick_reply=get_quick_reply()))
-            return
         
         with players_lock:
             if user_id not in registered_players: return
@@ -459,8 +417,8 @@ def handle_message(event):
                 next_q = game.next_question()
                 if next_q:
                     q_text = next_q.text if isinstance(next_q, TextSendMessage) else str(next_q)
-                    flex_card = get_game_question_card(game_type, question_num+1, q_text, supports_hint)
-                    line_bot_api.reply_message(event.reply_token, [TextSendMessage(text=f"صحيح! +{points} نقطة"), FlexSendMessage(alt_text=f"{game_type} - السؤال {question_num+1}", contents=flex_card, quick_reply=get_quick_reply())])
+                    flex_card = get_game_question_card(game_type, question_num+1, q_text)
+                    line_bot_api.reply_message(event.reply_token, [TextSendMessage(text=f"صحيح! +{points} نقطة"), FlexSendMessage(alt_text=f"{game_type} - السؤال {question_num+1}", contents=flex_card, quick_reply=get_quick_reply(in_game=True))])
                 return
             
             if result.get('correct') and question_num >= QUESTIONS_PER_GAME:
@@ -482,7 +440,7 @@ def handle_message(event):
                 return
             
             response = result.get('response', TextSendMessage(text=result.get('message','')))
-            if isinstance(response, TextSendMessage): response.quick_reply = get_quick_reply()
+            if isinstance(response, TextSendMessage): response.quick_reply = get_quick_reply(in_game=True)
             line_bot_api.reply_message(event.reply_token, response)
         except Exception as e:
             logger.error(f"Game answer error: {e}")
@@ -537,7 +495,7 @@ if __name__ == "__main__":
     logger.info(f"Players: {len(registered_players)}")
     logger.info(f"Active Games: {len(active_games)}")
     loaded = [name for name, cls in games.items() if cls]
-    logger.info(f"Games Available ({len(loaded)}/8):")
+    logger.info(f"Games Available ({len(loaded)}/12):")
     for name in loaded: logger.info(f"  - {name}")
     if len(loaded) < len(games):
         missing = [name for name, cls in games.items() if not cls]
