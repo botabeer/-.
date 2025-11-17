@@ -11,7 +11,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 COSMIC = {"primary":"#06B6D4","secondary":"#0EA5E9","accent":"#8B5CF6","bg":"#0F172A","card":"#1E293B","elevated":"#334155","border":"#475569","text":"#F1F5F9","text_dim":"#CBD5E1","text_muted":"#94A3B8","glow":"#06B6D4"}
-PISCES_SVG = "data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2306B6D4'/%3E%3Cstop offset='1' stop-color='%230EA5E9'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg stroke='url(%23g)' stroke-width='6' fill='none' stroke-linecap='round'%3E%3Cpath d='M60 100C60 70 40 50 40 50'/%3E%3Cpath d='M60 100C60 130 40 150 40 150'/%3E%3Cline x1='50' y1='100' x2='150' y2='100'/%3E%3Cpath d='M140 100C140 70 160 50 160 50'/%3E%3Cpath d='M140 100C140 130 160 150 160 150'/%3E%3C/g%3E%3Ccircle cx='40' cy='50' r='4' fill='%2306B6D4'%3E%3Canimate attributeName='opacity' values='0.7;1;0.7' dur='2s' repeatCount='indefinite'/%3E%3C/circle%3E%3Ccircle cx='40' cy='150' r='4' fill='%2306B6D4'%3E%3Canimate attributeName='opacity' values='0.7;1;0.7' dur='2s' begin='0.5s' repeatCount='indefinite'/%3E%3C/circle%3E%3Ccircle cx='160' cy='50' r='4' fill='%2306B6D4'%3E%3Canimate attributeName='opacity' values='0.7;1;0.7' dur='2s' begin='1s' repeatCount='indefinite'/%3E%3C/circle%3E%3Ccircle cx='160' cy='150' r='4' fill='%2306B6D4'%3E%3Canimate attributeName='opacity' values='0.7;1;0.7' dur='2s' begin='1.5s' repeatCount='indefinite'/%3E%3C/circle%3E%3C/svg%3E"
+
+# شعار الحوت 3D مع تأثيرات متقدمة
+PISCES_3D_LOGO = "https://i.ibb.co/placeholder3d.png"  # ضع رابط الشعار هنا أو استخدم data URL
 
 DB_NAME,MAX_MESSAGES_PER_MINUTE,GAME_TIMEOUT_MINUTES,MAX_ERROR_LOG_SIZE,MAX_CACHE_SIZE='game_scores.db',30,15,50,1000
 
@@ -33,8 +35,8 @@ try:
                     logger.warning(f"Gemini attempt {attempt+1} failed: {e}")
                     if attempt==max_retries-1:return None
             return None
-        logger.info(f"✅ Gemini AI: {len(api_keys)} key(s)")
-except Exception as e:logger.warning(f"⚠️ Gemini AI unavailable: {e}")
+        logger.info(f"Gemini AI: {len(api_keys)} key(s)")
+except Exception as e:logger.warning(f"Gemini AI unavailable: {e}")
 
 games={}
 game_names=['SongGame','HumanAnimalPlantGame','ChainWordsGame','FastTypingGame','OppositeGame','LettersWordsGame','DifferencesGame','CompatibilityGame']
@@ -43,15 +45,15 @@ for name in game_names:
     try:
         module=__import__(name.lower().replace('game','_game'),fromlist=[name])
         games[name]=getattr(module,name)
-        logger.info(f"✅ {name}")
+        logger.info(f"Loaded {name}")
     except Exception as e:
         games[name]=None
-        logger.warning(f"⚠️ {name}: {e}")
+        logger.warning(f"{name}: {e}")
 
 app=Flask(__name__)
 TOKEN,SECRET=os.getenv('LINE_CHANNEL_ACCESS_TOKEN','').strip(),os.getenv('LINE_CHANNEL_SECRET','').strip()
 if not TOKEN or not SECRET:
-    logger.critical("❌ LINE credentials missing!")
+    logger.critical("LINE credentials missing")
     sys.exit(1)
 line_bot_api,handler=LineBotApi(TOKEN),WebhookHandler(SECRET)
 
@@ -82,9 +84,9 @@ def init_db():
             conn.execute('CREATE INDEX IF NOT EXISTS idx_points ON users(total_points DESC)')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_history_user ON game_history(user_id)')
             conn.commit()
-            logger.info("✅ DB ready")
+            logger.info("DB ready")
     except Exception as e:
-        logger.error(f"❌ DB init failed: {e}")
+        logger.error(f"DB init failed: {e}")
         raise
 init_db()
 
@@ -178,43 +180,132 @@ def make_button(label,text,color=None):
     return{"type":"button","action":{"type":"message","label":label,"text":text},"style":"primary","color":color or COSMIC["primary"],"height":"sm"}
 
 def get_welcome_card(name):
-    body=[{"type":"image","url":PISCES_SVG,"size":"full","aspectRatio":"1:1","aspectMode":"cover"},{"type":"box","layout":"vertical","contents":[{"type":"text","text":"مرحباً بك في","size":"lg","color":COSMIC["text_dim"],"align":"center"},{"type":"text","text":"بوت الحوت","size":"xxl","weight":"bold","color":COSMIC["primary"],"align":"center","margin":"md"},{"type":"separator","margin":"xl","color":COSMIC["border"]},{"type":"text","text":name,"size":"xl","weight":"bold","color":COSMIC["text"],"align":"center","margin":"xl"},{"type":"text","text":"استخدم الأزرار للبدء","size":"sm","color":COSMIC["text_muted"],"align":"center","margin":"md","wrap":True}],"paddingAll":"20px","backgroundColor":COSMIC["elevated"],"cornerRadius":"20px","margin":"xl"}]
-    footer=[make_button("انضم","انضم"),make_button("مساعدة","مساعدة",COSMIC["secondary"])]
+    body=[
+        {"type":"box","layout":"vertical","contents":[
+            {"type":"box","layout":"vertical","contents":[
+                {"type":"box","layout":"vertical","contents":[
+                    {"type":"image","url":"https://i.ibb.co/YdQ9xZK/pisces-3d-logo.png","size":"full","aspectRatio":"1:1","aspectMode":"cover","backgroundColor":COSMIC["bg"]}
+                ],"width":"300px","height":"300px","cornerRadius":"150px","margin":"none","paddingAll":"0px","backgroundColor":COSMIC["bg"]},
+                {"type":"box","layout":"vertical","contents":[
+                    {"type":"text","text":"مرحباً بك في","size":"lg","color":COSMIC["text_dim"],"align":"center","weight":"regular"},
+                    {"type":"text","text":"بوت الحوت","size":"xxl","weight":"bold","color":COSMIC["primary"],"align":"center","margin":"md","adjustMode":"shrink-to-fit"},
+                    {"type":"separator","margin":"xl","color":COSMIC["border"]},
+                    {"type":"text","text":name,"size":"xl","weight":"bold","color":COSMIC["text"],"align":"center","margin":"xl","wrap":True},
+                    {"type":"text","text":"استخدم الأزرار للبدء","size":"sm","color":COSMIC["text_muted"],"align":"center","margin":"md","wrap":True}
+                ],"paddingAll":"20px","backgroundColor":COSMIC["elevated"],"cornerRadius":"20px","margin":"xl"}
+            ],"spacing":"none"}
+        ],"paddingAll":"0px"}
+    ]
+    footer=[
+        make_button("انضم","انضم"),
+        make_button("مساعدة","مساعدة",COSMIC["secondary"])
+    ]
     return create_card(body,footer)
 
 def get_help_card():
-    body=[{"type":"text","text":"دليل الاستخدام","size":"xxl","weight":"bold","color":COSMIC["primary"],"align":"center"},{"type":"separator","margin":"xl","color":COSMIC["border"]},{"type":"box","layout":"vertical","contents":[{"type":"text","text":"الأوامر الأساسية","size":"lg","weight":"bold","color":COSMIC["primary"]},{"type":"text","text":"انضم • انسحب • نقاطي\nالصدارة • إيقاف • مساعدة","size":"sm","color":COSMIC["text_dim"],"wrap":True,"margin":"md"}],"backgroundColor":COSMIC["elevated"],"cornerRadius":"12px","paddingAll":"16px","margin":"xl"},{"type":"box","layout":"vertical","contents":[{"type":"text","text":"أثناء اللعب","size":"lg","weight":"bold","color":COSMIC["secondary"]},{"type":"text","text":"لمح - تلميح\nجاوب - الإجابة","size":"sm","color":COSMIC["text_dim"],"wrap":True,"margin":"md"}],"backgroundColor":COSMIC["elevated"],"cornerRadius":"12px","paddingAll":"16px","margin":"md"},{"type":"text","text":"بوت الحوت © 2025","size":"xs","color":COSMIC["text_muted"],"align":"center","margin":"xl"}]
+    body=[
+        {"type":"text","text":"دليل الاستخدام","size":"xxl","weight":"bold","color":COSMIC["primary"],"align":"center"},
+        {"type":"separator","margin":"xl","color":COSMIC["border"]},
+        {"type":"box","layout":"vertical","contents":[
+            {"type":"text","text":"الأوامر الأساسية","size":"lg","weight":"bold","color":COSMIC["primary"]},
+            {"type":"text","text":"انضم - انسحب - نقاطي\nالصدارة - إيقاف - مساعدة","size":"sm","color":COSMIC["text_dim"],"wrap":True,"margin":"md"}
+        ],"backgroundColor":COSMIC["elevated"],"cornerRadius":"12px","paddingAll":"16px","margin":"xl"},
+        {"type":"box","layout":"vertical","contents":[
+            {"type":"text","text":"أثناء اللعب","size":"lg","weight":"bold","color":COSMIC["secondary"]},
+            {"type":"text","text":"لمح - تلميح\nجاوب - الإجابة","size":"sm","color":COSMIC["text_dim"],"wrap":True,"margin":"md"}
+        ],"backgroundColor":COSMIC["elevated"],"cornerRadius":"12px","paddingAll":"16px","margin":"md"},
+        {"type":"separator","margin":"xl","color":COSMIC["border"]},
+        {"type":"text","text":"بوت الحوت - 2025","size":"xs","color":COSMIC["text_muted"],"align":"center","margin":"lg"}
+    ]
     return create_card(body,[make_button("انضم","انضم"),make_button("نقاطي","نقاطي",COSMIC["secondary"])])
 
 def get_stats_card(user_id,name):
     stats=get_user_stats(user_id)
     if not stats:
-        body=[{"type":"text","text":"إحصائياتك","size":"xxl","weight":"bold","color":COSMIC["primary"],"align":"center"},{"type":"separator","margin":"xl","color":COSMIC["border"]},{"type":"text","text":"لم تبدأ بعد","size":"md","color":COSMIC["text_dim"],"align":"center","margin":"xl"}]
+        body=[
+            {"type":"text","text":"إحصائياتك","size":"xxl","weight":"bold","color":COSMIC["primary"],"align":"center"},
+            {"type":"separator","margin":"xl","color":COSMIC["border"]},
+            {"type":"text","text":"لم تبدأ بعد","size":"md","color":COSMIC["text_dim"],"align":"center","margin":"xl"}
+        ]
         return create_card(body,[make_button("ابدأ الآن","انضم")])
     win_rate=(stats['wins']/stats['games_played']*100)if stats['games_played']>0 else 0
-    body=[{"type":"text","text":"إحصائياتك","size":"xxl","weight":"bold","color":COSMIC["primary"],"align":"center"},{"type":"text","text":name,"size":"md","color":COSMIC["text_dim"],"align":"center","margin":"sm"},{"type":"separator","margin":"xl","color":COSMIC["border"]},{"type":"box","layout":"vertical","contents":[{"type":"box","layout":"horizontal","contents":[{"type":"text","text":"النقاط","size":"sm","color":COSMIC["text_muted"],"flex":1},{"type":"text","text":str(stats['total_points']),"size":"xxl","weight":"bold","color":COSMIC["primary"],"flex":1,"align":"end"}]},{"type":"separator","margin":"lg","color":COSMIC["border"]},{"type":"box","layout":"horizontal","contents":[{"type":"text","text":"الألعاب","size":"sm","color":COSMIC["text_muted"],"flex":1},{"type":"text","text":str(stats['games_played']),"size":"lg","weight":"bold","color":COSMIC["text"],"flex":1,"align":"end"}],"margin":"lg"},{"type":"box","layout":"horizontal","contents":[{"type":"text","text":"الفوز","size":"sm","color":COSMIC["text_muted"],"flex":1},{"type":"text","text":str(stats['wins']),"size":"lg","weight":"bold","color":COSMIC["glow"],"flex":1,"align":"end"}],"margin":"md"},{"type":"box","layout":"horizontal","contents":[{"type":"text","text":"معدل الفوز","size":"sm","color":COSMIC["text_muted"],"flex":1},{"type":"text","text":f"{win_rate:.0f}%","size":"lg","weight":"bold","color":COSMIC["secondary"],"flex":1,"align":"end"}],"margin":"md"}],"backgroundColor":COSMIC["elevated"],"cornerRadius":"15px","paddingAll":"20px","margin":"xl"}]
+    body=[
+        {"type":"text","text":"إحصائياتك","size":"xxl","weight":"bold","color":COSMIC["primary"],"align":"center"},
+        {"type":"text","text":name,"size":"md","color":COSMIC["text_dim"],"align":"center","margin":"sm"},
+        {"type":"separator","margin":"xl","color":COSMIC["border"]},
+        {"type":"box","layout":"vertical","contents":[
+            {"type":"box","layout":"horizontal","contents":[
+                {"type":"text","text":"النقاط","size":"sm","color":COSMIC["text_muted"],"flex":1},
+                {"type":"text","text":str(stats['total_points']),"size":"xxl","weight":"bold","color":COSMIC["primary"],"flex":1,"align":"end"}
+            ]},
+            {"type":"separator","margin":"lg","color":COSMIC["border"]},
+            {"type":"box","layout":"horizontal","contents":[
+                {"type":"text","text":"الألعاب","size":"sm","color":COSMIC["text_muted"],"flex":1},
+                {"type":"text","text":str(stats['games_played']),"size":"lg","weight":"bold","color":COSMIC["text"],"flex":1,"align":"end"}
+            ],"margin":"lg"},
+            {"type":"box","layout":"horizontal","contents":[
+                {"type":"text","text":"الفوز","size":"sm","color":COSMIC["text_muted"],"flex":1},
+                {"type":"text","text":str(stats['wins']),"size":"lg","weight":"bold","color":COSMIC["glow"],"flex":1,"align":"end"}
+            ],"margin":"md"},
+            {"type":"box","layout":"horizontal","contents":[
+                {"type":"text","text":"معدل الفوز","size":"sm","color":COSMIC["text_muted"],"flex":1},
+                {"type":"text","text":f"{win_rate:.0f}%","size":"lg","weight":"bold","color":COSMIC["secondary"],"flex":1,"align":"end"}
+            ],"margin":"md"}
+        ],"backgroundColor":COSMIC["elevated"],"cornerRadius":"15px","paddingAll":"20px","margin":"xl"}
+    ]
     return create_card(body,[make_button("الصدارة","الصدارة",COSMIC["secondary"])])
 
 def get_leaderboard_card():
     leaders=get_leaderboard()
     if not leaders:
-        body=[{"type":"text","text":"لوحة الصدارة","size":"xxl","weight":"bold","color":COSMIC["primary"],"align":"center"},{"type":"text","text":"لا توجد بيانات","size":"md","color":COSMIC["text_dim"],"align":"center","margin":"xl"}]
+        body=[
+            {"type":"text","text":"لوحة الصدارة","size":"xxl","weight":"bold","color":COSMIC["primary"],"align":"center"},
+            {"type":"text","text":"لا توجد بيانات","size":"md","color":COSMIC["text_dim"],"align":"center","margin":"xl"}
+        ]
         return create_card(body)
     items=[]
     for i,leader in enumerate(leaders,1):
-        rank="👑"if i==1 else"🥈"if i==2 else"🥉"if i==3 else f"#{i}"
+        rank="[1]"if i==1 else"[2]"if i==2 else"[3]"if i==3 else f"#{i}"
         color=COSMIC["primary"]if i==1 else COSMIC["text"]if i<=3 else COSMIC["text_muted"]
-        items.append({"type":"box","layout":"horizontal","contents":[{"type":"text","text":rank,"size":"lg","color":color,"flex":0,"weight":"bold"},{"type":"text","text":leader['display_name'],"size":"sm","color":color,"flex":3,"margin":"md","wrap":True,"weight":"bold"if i<=3 else"regular"},{"type":"text","text":str(leader['total_points']),"size":"lg"if i<=3 else"md","color":color,"flex":1,"align":"end","weight":"bold"}],"backgroundColor":COSMIC["elevated"]if i==1 else COSMIC["card"],"cornerRadius":"12px","paddingAll":"16px","margin":"sm"if i>1 else"md"})
-    body=[{"type":"text","text":"لوحة الصدارة","size":"xxl","weight":"bold","color":COSMIC["primary"],"align":"center"},{"type":"text","text":"أفضل اللاعبين","size":"sm","color":COSMIC["text_dim"],"align":"center","margin":"sm"},{"type":"separator","margin":"xl","color":COSMIC["border"]},{"type":"box","layout":"vertical","contents":items,"margin":"lg"}]
+        items.append({"type":"box","layout":"horizontal","contents":[
+            {"type":"text","text":rank,"size":"lg","color":color,"flex":0,"weight":"bold"},
+            {"type":"text","text":leader['display_name'],"size":"sm","color":color,"flex":3,"margin":"md","wrap":True,"weight":"bold"if i<=3 else"regular"},
+            {"type":"text","text":str(leader['total_points']),"size":"lg"if i<=3 else"md","color":color,"flex":1,"align":"end","weight":"bold"}
+        ],"backgroundColor":COSMIC["elevated"]if i==1 else COSMIC["card"],"cornerRadius":"12px","paddingAll":"16px","margin":"sm"if i>1 else"md"})
+    body=[
+        {"type":"text","text":"لوحة الصدارة","size":"xxl","weight":"bold","color":COSMIC["primary"],"align":"center"},
+        {"type":"text","text":"أفضل اللاعبين","size":"sm","color":COSMIC["text_dim"],"align":"center","margin":"sm"},
+        {"type":"separator","margin":"xl","color":COSMIC["border"]},
+        {"type":"box","layout":"vertical","contents":items,"margin":"lg"}
+    ]
     return create_card(body)
 
 def get_winner_card(winner_name,winner_score,all_scores):
     score_items=[]
     for i,(name,score)in enumerate(all_scores,1):
-        rank_text=f"{'🥇'if i==1 else'🥈'if i==2 else'🥉'if i==3 else'#'+str(i)} المركز"
+        rank_text=f"[{i}] المركز"
         color=COSMIC["primary"]if i==1 else COSMIC["text"]if i<=3 else COSMIC["text_muted"]
-        score_items.append({"type":"box","layout":"horizontal","contents":[{"type":"box","layout":"vertical","contents":[{"type":"text","text":rank_text,"size":"xs","color":COSMIC["text_muted"]},{"type":"text","text":name,"size":"sm","color":color,"weight":"bold","wrap":True}],"flex":3},{"type":"text","text":str(score),"size":"xl"if i==1 else"lg","color":color,"weight":"bold","align":"end","flex":1}],"backgroundColor":COSMIC["elevated"]if i==1 else COSMIC["card"],"cornerRadius":"12px","paddingAll":"16px","margin":"sm"if i>1 else"none"})
-    body=[{"type":"box","layout":"vertical","contents":[{"type":"text","text":"✨","size":"xxl","align":"center"},{"type":"text","text":"انتهت اللعبة","size":"xl","weight":"bold","color":COSMIC["primary"],"align":"center","margin":"md"}],"backgroundColor":COSMIC["elevated"],"cornerRadius":"15px","paddingAll":"24px"},{"type":"separator","margin":"xl","color":COSMIC["border"]},{"type":"box","layout":"vertical","contents":[{"type":"text","text":"الفائز","size":"sm","color":COSMIC["text_muted"],"align":"center"},{"type":"text","text":winner_name,"size":"xxl","weight":"bold","color":COSMIC["primary"],"align":"center","margin":"sm","wrap":True},{"type":"text","text":f"{winner_score} نقطة","size":"lg","weight":"bold","color":COSMIC["secondary"],"align":"center","margin":"md"}],"margin":"xl"},{"type":"separator","margin":"xl","color":COSMIC["border"]},{"type":"text","text":"النتائج النهائية","size":"lg","weight":"bold","color":COSMIC["text"],"margin":"xl"},{"type":"box","layout":"vertical","contents":score_items,"margin":"md"}]
+        score_items.append({"type":"box","layout":"horizontal","contents":[
+            {"type":"box","layout":"vertical","contents":[
+                {"type":"text","text":rank_text,"size":"xs","color":COSMIC["text_muted"]},
+                {"type":"text","text":name,"size":"sm","color":color,"weight":"bold","wrap":True}
+            ],"flex":3},
+            {"type":"text","text":str(score),"size":"xl"if i==1 else"lg","color":color,"weight":"bold","align":"end","flex":1}
+        ],"backgroundColor":COSMIC["elevated"]if i==1 else COSMIC["card"],"cornerRadius":"12px","paddingAll":"16px","margin":"sm"if i>1 else"none"})
+    body=[
+        {"type":"box","layout":"vertical","contents":[
+            {"type":"text","text":"انتهت اللعبة","size":"xl","weight":"bold","color":COSMIC["primary"],"align":"center","margin":"md"}
+        ],"backgroundColor":COSMIC["elevated"],"cornerRadius":"15px","paddingAll":"24px"},
+        {"type":"separator","margin":"xl","color":COSMIC["border"]},
+        {"type":"box","layout":"vertical","contents":[
+            {"type":"text","text":"الفائز","size":"sm","color":COSMIC["text_muted"],"align":"center"},
+            {"type":"text","text":winner_name,"size":"xxl","weight":"bold","color":COSMIC["primary"],"align":"center","margin":"sm","wrap":True},
+            {"type":"text","text":f"{winner_score} نقطة","size":"lg","weight":"bold","color":COSMIC["secondary"],"align":"center","margin":"md"}
+        ],"margin":"xl"},
+        {"type":"separator","margin":"xl","color":COSMIC["border"]},
+        {"type":"text","text":"النتائج النهائية","size":"lg","weight":"bold","color":COSMIC["text"],"margin":"xl"},
+        {"type":"box","layout":"vertical","contents":score_items,"margin":"md"}
+    ]
     footer=[make_button("لعب مرة أخرى","أغنية"),make_button("الصدارة","الصدارة",COSMIC["secondary"])]
     return create_card(body,footer)
 
@@ -239,7 +330,7 @@ def start_game(game_id,game_class,game_type,user_id,event):
             for r in response:
                 if isinstance(r,TextSendMessage):r.quick_reply=get_quick_reply()
         line_bot_api.reply_message(event.reply_token,response)
-        logger.info(f"✅ Started {game_type}")
+        logger.info(f"Started {game_type}")
         return True
     except Exception as e:
         logger.error(f"Start {game_type} failed: {e}")
@@ -249,7 +340,7 @@ def start_game(game_id,game_class,game_type,user_id,event):
 @app.route("/",methods=['GET'])
 def home():
     games_count=sum(1 for g in games.values()if g)
-    return f"""<!DOCTYPE html><html dir="rtl"><head><title>بوت الحوت</title><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>*{{margin:0;padding:0;box-sizing:border-box}}body{{font-family:-apple-system,sans-serif;background:linear-gradient(135deg,{COSMIC['bg']},{COSMIC['card']});min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}}.container{{background:{COSMIC['card']};border:2px solid {COSMIC['border']};border-radius:20px;box-shadow:0 0 40px rgba(6,182,212,0.3);padding:40px;max-width:600px;width:100%}}h1{{text-align:center;font-size:2.5em;margin-bottom:10px;background:linear-gradient(135deg,{COSMIC['primary']},{COSMIC['secondary']});-webkit-background-clip:text;-webkit-text-fill-color:transparent}}.subtitle{{text-align:center;color:{COSMIC['text_dim']};margin-bottom:30px}}.status{{background:{COSMIC['elevated']};border-radius:15px;padding:20px;margin:20px 0}}.status-item{{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid {COSMIC['border']}}}.status-item:last-child{{border-bottom:none}}.label{{color:{COSMIC['text_muted']}}}.value{{color:{COSMIC['primary']};font-weight:bold}}.btn{{display:inline-block;padding:12px 24px;background:{COSMIC['primary']};color:{COSMIC['bg']};text-decoration:none;border-radius:10px;margin:5px;font-weight:600}}.footer{{text-align:center;margin-top:30px;color:{COSMIC['text_muted']};font-size:0.9em}}</style></head><body><div class="container"><h1>بوت الحوت</h1><p class="subtitle">Cosmic Gaming Experience</p><div class="status"><div class="status-item"><span class="label">الخادم</span><span class="value">✅ يعمل</span></div><div class="status-item"><span class="label">Gemini AI</span><span class="value">{'✅ مفعّل'if USE_AI else'⚠️ معطّل'}</span></div><div class="status-item"><span class="label">اللاعبون</span><span class="value">{len(registered_players)}</span></div><div class="status-item"><span class="label">ألعاب نشطة</span><span class="value">{len(active_games)}</span></div><div class="status-item"><span class="label">ألعاب متوفرة</span><span class="value">{games_count}/8</span></div></div><div style="text-align:center;margin-top:25px"><a href="/health" class="btn">الصحة</a><a href="/errors" class="btn">الأخطاء({len(error_log)})</a></div><div class="footer">بوت الحوت © 2025</div></div></body></html>"""
+    return f"""<!DOCTYPE html><html dir="rtl"><head><title>بوت الحوت</title><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>*{{margin:0;padding:0;box-sizing:border-box}}body{{font-family:-apple-system,sans-serif;background:linear-gradient(135deg,{COSMIC['bg']},{COSMIC['card']});min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}}.container{{background:{COSMIC['card']};border:2px solid {COSMIC['border']};border-radius:20px;box-shadow:0 0 40px rgba(6,182,212,0.3);padding:40px;max-width:600px;width:100%}}h1{{text-align:center;font-size:2.5em;margin-bottom:10px;background:linear-gradient(135deg,{COSMIC['primary']},{COSMIC['secondary']});-webkit-background-clip:text;-webkit-text-fill-color:transparent}}.subtitle{{text-align:center;color:{COSMIC['text_dim']};margin-bottom:30px}}.status{{background:{COSMIC['elevated']};border-radius:15px;padding:20px;margin:20px 0}}.status-item{{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid {COSMIC['border']}}}.status-item:last-child{{border-bottom:none}}.label{{color:{COSMIC['text_muted']}}}.value{{color:{COSMIC['primary']};font-weight:bold}}.btn{{display:inline-block;padding:12px 24px;background:{COSMIC['primary']};color:{COSMIC['bg']};text-decoration:none;border-radius:10px;margin:5px;font-weight:600}}.footer{{text-align:center;margin-top:30px;color:{COSMIC['text_muted']};font-size:0.9em}}</style></head><body><div class="container"><h1>بوت الحوت</h1><p class="subtitle">Cosmic Gaming Experience</p><div class="status"><div class="status-item"><span class="label">الخادم</span><span class="value">يعمل</span></div><div class="status-item"><span class="label">Gemini AI</span><span class="value">{'مفعل'if USE_AI else'معطل'}</span></div><div class="status-item"><span class="label">اللاعبون</span><span class="value">{len(registered_players)}</span></div><div class="status-item"><span class="label">ألعاب نشطة</span><span class="value">{len(active_games)}</span></div><div class="status-item"><span class="label">ألعاب متوفرة</span><span class="value">{games_count}/8</span></div></div><div style="text-align:center;margin-top:25px"><a href="/health" class="btn">الصحة</a><a href="/errors" class="btn">الأخطاء({len(error_log)})</a></div><div class="footer">بوت الحوت - 2025</div></div></body></html>"""
 
 @app.route("/health",methods=['GET'])
 def health_check():
@@ -259,10 +350,10 @@ def health_check():
 def view_errors():
     with error_log_lock:errors=list(reversed(error_log))
     html=f"""<!DOCTYPE html><html dir="rtl"><head><title>سجل الأخطاء</title><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{{font-family:-apple-system,sans-serif;background:{COSMIC['bg']};color:{COSMIC['text']};padding:20px}}.container{{max-width:1200px;margin:0 auto;background:{COSMIC['card']};border-radius:20px;padding:30px;border:2px solid {COSMIC['border']}}}h1{{color:{COSMIC['primary']};margin-bottom:20px}}.error-item{{background:{COSMIC['elevated']};border-left:4px solid {COSMIC['glow']};padding:15px;margin:15px 0;border-radius:8px}}.error-header{{display:flex;justify-content:space-between;margin-bottom:10px}}.error-type{{font-weight:bold;color:{COSMIC['glow']}}}.error-time{{color:{COSMIC['text_muted']};font-size:0.9em}}.error-message{{color:{COSMIC['text_dim']};margin:10px 0;font-family:monospace;font-size:0.9em}}.no-errors{{text-align:center;padding:40px;color:{COSMIC['glow']}}}.btn{{display:inline-block;margin-top:20px;padding:10px 20px;background:{COSMIC['primary']};color:{COSMIC['bg']};text-decoration:none;border-radius:8px}}</style></head><body><div class="container"><h1>سجل الأخطاء</h1>"""
-    if not errors:html+='<div class="no-errors">✅ لا توجد أخطاء</div>'
+    if not errors:html+='<div class="no-errors">لا توجد أخطاء</div>'
     else:
         for err in errors:html+=f"""<div class="error-item"><div class="error-header"><span class="error-type">{err.get('type','Unknown')}</span><span class="error-time">{err.get('timestamp','Unknown')}</span></div><div class="error-message">{err.get('message','No message')}</div></div>"""
-    html+='<a href="/" class="btn">← العودة</a></div></body></html>'
+    html+='<a href="/" class="btn">العودة</a></div></body></html>'
     return html
 
 @app.route("/callback",methods=['POST'])
@@ -312,7 +403,7 @@ def handle_message(event):
         if text in['انضم','تسجيل','join']:
             with players_lock:
                 if user_id in registered_players:line_bot_api.reply_message(event.reply_token,TextSendMessage(text=f"أنت مسجل بالفعل يا {display_name}",quick_reply=get_quick_reply()))
-                else:registered_players.add(user_id);line_bot_api.reply_message(event.reply_token,TextSendMessage(text=f"مرحباً {display_name}! تم التسجيل بنجاح",quick_reply=get_quick_reply()))
+                else:registered_players.add(user_id);line_bot_api.reply_message(event.reply_token,TextSendMessage(text=f"مرحباً {display_name} تم التسجيل بنجاح",quick_reply=get_quick_reply()))
             return
         if text in['انسحب','خروج']:
             with players_lock:
@@ -335,7 +426,7 @@ def handle_message(event):
                         participants=registered_players.copy()
                         participants.add(user_id)
                     active_games[game_id]={'game':game_class(line_bot_api),'type':'توافق','created_at':datetime.now(),'participants':participants,'answered_users':set(),'last_game':text,'waiting_for_names':True}
-                line_bot_api.reply_message(event.reply_token,TextSendMessage(text="لعبة التوافق\n\nاكتب اسمين مفصولين بمسافة\n⚠️ نص فقط\n\nمثال: ميش عبير",quick_reply=get_quick_reply()))
+                line_bot_api.reply_message(event.reply_token,TextSendMessage(text="لعبة التوافق\n\nاكتب اسمين مفصولين بمسافة\nنص فقط\n\nمثال: ميش عبير",quick_reply=get_quick_reply()))
                 return
             if game_id in active_games:active_games[game_id]['last_game']=text
             start_game(game_id,game_class,game_type,user_id,event)
@@ -444,19 +535,19 @@ def handle_error(error):
 if __name__=="__main__":
     port=int(os.environ.get('PORT',5000))
     logger.info("="*60)
-    logger.info("🌌 بوت الحوت - Cosmic Depth Edition")
+    logger.info("بوت الحوت - Cosmic Depth Edition")
     logger.info("="*60)
     logger.info(f"Port: {port}")
-    logger.info(f"AI: {'✅'if USE_AI else'⚠️'}")
+    logger.info(f"AI: {'Enabled'if USE_AI else'Disabled'}")
     logger.info(f"Players: {len(registered_players)}")
     logger.info(f"Active Games: {len(active_games)}")
     loaded=[name for name,cls in games.items()if cls]
     logger.info(f"Games Available ({len(loaded)}/8):")
-    for name in loaded:logger.info(f"  ✓ {name}")
+    for name in loaded:logger.info(f"  - {name}")
     if len(loaded)<len(games):
         missing=[name for name,cls in games.items()if not cls]
         logger.warning(f"Games Unavailable ({len(missing)}):")
-        for name in missing:logger.warning(f"  ✗ {name}")
+        for name in missing:logger.warning(f"  - {name}")
     logger.info("="*60)
     try:app.run(host='0.0.0.0',port=port,debug=False,threaded=True)
     except Exception as e:logger.error(f"Failed to start: {e}");log_error('app_start',e);sys.exit(1)
