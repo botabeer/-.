@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 COSMIC = {"primary":"#00D4FF","secondary":"#0099FF","accent":"#004D66","bg":"#0A0E27","card":"#111827","elevated":"#1F2937","border":"#00D4FF","text":"#FFFFFF","text_dim":"#8B9DC3","text_muted":"#56607C","glow":"#00D4FF","dark":"#0A0E1A"}
-PISCES_LOGO = "https://i.imgur.com/your-uploaded-image.png"
+PISCES_LOGO = "https://i.imgur.com/qcWILGi.jpeg"
 DB_NAME, MAX_MESSAGES_PER_MINUTE, GAME_TIMEOUT_MINUTES, MAX_ERROR_LOG_SIZE, MAX_CACHE_SIZE, QUESTIONS_PER_GAME = 'game_scores.db', 30, 15, 50, 1000, 5
 
 USE_AI, ask_gemini = False, None
