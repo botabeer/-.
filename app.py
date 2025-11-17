@@ -26,24 +26,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cosmic-bot")
 
-# نظام ألوان Cosmic Depth
+# نظام ألوان 3D Experience - Dark Mode
 COSMIC = {
-    "primary": "#00d4ff",
-    "secondary": "#0099ff",
-    "bg": "#0a0e27",
-    "card": "#1a1f3a",
-    "elevated": "#2a2f45",
-    "border": "#2a2f45",
-    "text": "#ffffff",
-    "text_dim": "#8b9dc3",
-    "text_muted": "#6c7a8e",
-    "success": "#34C759",
-    "warning": "#FF9500",
-    "error": "#FF3B30"
+    "primary": "#06B6D4",
+    "secondary": "#0EA5E9",
+    "bg": "#0a0e1a",
+    "card": "#111827",
+    "elevated": "#1f2937",
+    "elevated_high": "#374151",
+    "border": "#374151",
+    "text": "#F1F5F9",
+    "text_dim": "#94A3B8",
+    "text_muted": "#64748B",
+    "success": "#06B6D4",
+    "warning": "#06B6D4",
+    "error": "#06B6D4",
+    "glow": "#06B6D4"
 }
 
 # شعار SVG متحرك (برج الحوت)
-PISCES_SVG = """data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2300d4ff'/%3E%3Cstop offset='1' stop-color='%230099ff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cg stroke='url(%23g)' stroke-width='6' fill='none' stroke-linecap='round'%3E%3Cpath d='M60 100C60 70 40 50 40 50'/%3E%3Cpath d='M60 100C60 130 40 150 40 150'/%3E%3Cline x1='50' y1='100' x2='150' y2='100'/%3E%3Cpath d='M140 100C140 70 160 50 160 50'/%3E%3Cpath d='M140 100C140 130 160 150 160 150'/%3E%3C/g%3E%3Ccircle cx='40' cy='50' r='4' fill='%2300d4ff'%3E%3Canimate attributeName='opacity' values='0.7;1;0.7' dur='2s' repeatCount='indefinite'/%3E%3C/circle%3E%3Ccircle cx='40' cy='150' r='4' fill='%2300d4ff'%3E%3Canimate attributeName='opacity' values='0.7;1;0.7' dur='2s' begin='0.5s' repeatCount='indefinite'/%3E%3C/circle%3E%3Ccircle cx='160' cy='50' r='4' fill='%2300d4ff'%3E%3Canimate attributeName='opacity' values='0.7;1;0.7' dur='2s' begin='1s' repeatCount='indefinite'/%3E%3C/circle%3E%3Ccircle cx='160' cy='150' r='4' fill='%2300d4ff'%3E%3Canimate attributeName='opacity' values='0.7;1;0.7' dur='2s' begin='1.5s' repeatCount='indefinite'/%3E%3C/circle%3E%3C/svg%3E"""
+PISCES_SVG = """data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2306B6D4'/%3E%3Cstop offset='1' stop-color='%230EA5E9'/%3E%3C/linearGradient%3E%3CradialGradient id='glow'%3E%3Cstop offset='0' stop-color='%2306B6D4' stop-opacity='0.8'/%3E%3Cstop offset='1' stop-color='%2306B6D4' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='100' cy='100' r='90' fill='url(%23glow)' opacity='0.3'%3E%3Canimate attributeName='r' values='80;95;80' dur='3s' repeatCount='indefinite'/%3E%3C/circle%3E%3Cg stroke='url(%23g)' stroke-width='6' fill='none' stroke-linecap='round'%3E%3Cpath d='M60 100C60 70 40 50 40 50'/%3E%3Cpath d='M60 100C60 130 40 150 40 150'/%3E%3Cline x1='50' y1='100' x2='150' y2='100'/%3E%3Cpath d='M140 100C140 70 160 50 160 50'/%3E%3Cpath d='M140 100C140 130 160 150 160 150'/%3E%3C/g%3E%3Ccircle cx='40' cy='50' r='5' fill='%2306B6D4' filter='url(%23glow)'%3E%3Canimate attributeName='opacity' values='0.6;1;0.6' dur='2s' repeatCount='indefinite'/%3E%3C/circle%3E%3Ccircle cx='40' cy='150' r='5' fill='%2306B6D4'%3E%3Canimate attributeName='opacity' values='0.6;1;0.6' dur='2s' begin='0.5s' repeatCount='indefinite'/%3E%3C/circle%3E%3Ccircle cx='160' cy='50' r='5' fill='%2306B6D4'%3E%3Canimate attributeName='opacity' values='0.6;1;0.6' dur='2s' begin='1s' repeatCount='indefinite'/%3E%3C/circle%3E%3Ccircle cx='160' cy='150' r='5' fill='%2306B6D4'%3E%3Canimate attributeName='opacity' values='0.6;1;0.6' dur='2s' begin='1.5s' repeatCount='indefinite'/%3E%3C/circle%3E%3C/svg%3E"""
 
 # ==================== إعداد Gemini AI ====================
 
@@ -296,19 +298,58 @@ def get_user_profile_safe(user_id):
 
 def get_quick_reply():
     return QuickReply(items=[
-        QuickReplyButton(action=MessageAction(label="▪️سؤال", text="سؤال")),
-        QuickReplyButton(action=MessageAction(label="▪️تحدي", text="تحدي")),
-        QuickReplyButton(action=MessageAction(label="▪️اعتراف", text="اعتراف")),
-        QuickReplyButton(action=MessageAction(label="▪️منشن", text="منشن")),
-        QuickReplyButton(action=MessageAction(label="▫️أغنية", text="أغنية")),
-        QuickReplyButton(action=MessageAction(label="▫️لعبة", text="لعبة")),
-        QuickReplyButton(action=MessageAction(label="▫️سلسلة", text="سلسلة")),
-        QuickReplyButton(action=MessageAction(label="▫️أسرع", text="أسرع")),
-        QuickReplyButton(action=MessageAction(label="▫️ضد", text="ضد")),
-        QuickReplyButton(action=MessageAction(label="▫️تكوين", text="تكوين")),
-        QuickReplyButton(action=MessageAction(label="▫️اختلاف", text="اختلاف")),
-        QuickReplyButton(action=MessageAction(label="▫️توافق", text="توافق"))
+        QuickReplyButton(action=MessageAction(label="سؤال", text="سؤال")),
+        QuickReplyButton(action=MessageAction(label="تحدي", text="تحدي")),
+        QuickReplyButton(action=MessageAction(label="اعتراف", text="اعتراف")),
+        QuickReplyButton(action=MessageAction(label="منشن", text="منشن")),
+        QuickReplyButton(action=MessageAction(label="أغنية", text="أغنية")),
+        QuickReplyButton(action=MessageAction(label="لعبة", text="لعبة")),
+        QuickReplyButton(action=MessageAction(label="سلسلة", text="سلسلة")),
+        QuickReplyButton(action=MessageAction(label="أسرع", text="أسرع")),
+        QuickReplyButton(action=MessageAction(label="ضد", text="ضد")),
+        QuickReplyButton(action=MessageAction(label="تكوين", text="تكوين")),
+        QuickReplyButton(action=MessageAction(label="اختلاف", text="اختلاف")),
+        QuickReplyButton(action=MessageAction(label="توافق", text="توافق"))
     ])
+
+def create_3d_box(contents, margin="none"):
+    """صندوق بتأثير ثلاثي الأبعاد"""
+    return {
+        "type": "box",
+        "layout": "vertical",
+        "contents": contents,
+        "backgroundColor": COSMIC["elevated"],
+        "cornerRadius": "16px",
+        "paddingAll": "20px",
+        "margin": margin,
+        "borderWidth": "1px",
+        "borderColor": COSMIC["border"]
+    }
+
+def create_glow_text(text, size="xl", color=None):
+    """نص مع توهج"""
+    return {
+        "type": "text",
+        "text": text,
+        "size": size,
+        "weight": "bold",
+        "color": color or COSMIC["primary"],
+        "align": "center"
+    }
+
+def make_3d_button(label, text, style="primary"):
+    """زر بتأثير ثلاثي الأبعاد"""
+    return {
+        "type": "button",
+        "action": {
+            "type": "message",
+            "label": label,
+            "text": text
+        },
+        "style": style,
+        "color": COSMIC["primary"] if style == "primary" else COSMIC["elevated_high"],
+        "height": "md"
+    }
 
 def create_card(body_contents, footer_buttons=None):
     """دالة موحدة لإنشاء البطاقات"""
@@ -335,19 +376,6 @@ def create_card(body_contents, footer_buttons=None):
     
     return card
 
-def make_button(label, text, style="primary", color=None):
-    return {
-        "type": "button",
-        "action": {
-            "type": "message",
-            "label": label,
-            "text": text
-        },
-        "style": style,
-        "color": color or (COSMIC["primary"] if style == "primary" else COSMIC["elevated"]),
-        "height": "sm"
-    }
-
 def get_welcome_card(name):
     body = [
         {
@@ -357,90 +385,204 @@ def get_welcome_card(name):
             "aspectRatio": "1:1",
             "aspectMode": "cover"
         },
-        {
-            "type": "box",
-            "layout": "vertical",
-            "contents": [
-                {
-                    "type": "text",
-                    "text": "مرحباً بك في",
-                    "size": "lg",
-                    "color": COSMIC["text_dim"],
-                    "align": "center"
-                },
-                {
-                    "type": "text",
-                    "text": "بوت الحوت",
-                    "size": "xxl",
-                    "weight": "bold",
-                    "color": COSMIC["primary"],
-                    "align": "center",
-                    "margin": "md"
-                },
-                {
-                    "type": "separator",
-                    "margin": "xl",
-                    "color": COSMIC["border"]
-                },
-                {
-                    "type": "text",
-                    "text": name,
-                    "size": "xl",
-                    "weight": "bold",
-                    "color": COSMIC["text"],
-                    "align": "center",
-                    "margin": "xl"
-                },
-                {
-                    "type": "text",
-                    "text": "استخدم الأزرار للبدء",
-                    "size": "sm",
-                    "color": COSMIC["text_muted"],
-                    "align": "center",
-                    "margin": "md",
-                    "wrap": True
-                }
-            ],
-            "paddingAll": "20px",
-            "backgroundColor": COSMIC["elevated"],
-            "cornerRadius": "20px",
-            "margin": "xl"
-        }
+        create_3d_box([
+            {
+                "type": "text",
+                "text": "مرحباً بك في",
+                "size": "md",
+                "color": COSMIC["text_dim"],
+                "align": "center"
+            },
+            create_glow_text("بوت الحوت", "xxl"),
+            {
+                "type": "separator",
+                "margin": "lg",
+                "color": COSMIC["border"]
+            },
+            {
+                "type": "text",
+                "text": name,
+                "size": "xl",
+                "weight": "bold",
+                "color": COSMIC["text"],
+                "align": "center",
+                "margin": "lg"
+            }
+        ], "xl")
     ]
     
     footer = [
-        make_button("⚡ انضم", "انضم"),
-        make_button("📖 مساعدة", "مساعدة", "secondary")
+        make_3d_button("انضم", "انضم"),
+        make_3d_button("انسحب", "انسحب", "secondary"),
+        make_3d_button("العب", "أغنية")
     ]
     
     return create_card(body, footer)
 
-def get_registration_card(name):
-    body = [
-        {
+def get_help_carousel():
+    """كاروسيل المساعدة مع 4 بطاقات"""
+    
+    # البطاقة 1: الأوامر الأساسية
+    card1 = {
+        "type": "bubble",
+        "body": {
             "type": "box",
             "layout": "vertical",
             "contents": [
+                create_glow_text("الأوامر", "xl"),
                 {
-                    "type": "text",
-                    "text": "✨",
-                    "size": "xxl",
-                    "align": "center"
+                    "type": "separator",
+                    "margin": "lg",
+                    "color": COSMIC["border"]
                 },
+                create_3d_box([
+                    {
+                        "type": "text",
+                        "text": "انضم • انسحب\nنقاطي • الصدارة\nإيقاف • مساعدة",
+                        "size": "sm",
+                        "color": COSMIC["text_dim"],
+                        "wrap": True,
+                        "align": "center"
+                    }
+                ], "lg")
+            ],
+            "backgroundColor": COSMIC["card"],
+            "paddingAll": "24px"
+        }
+    }
+    
+    # البطاقة 2: أوامر النصوص
+    card2 = {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                create_glow_text("النصوص", "xl"),
+                {
+                    "type": "separator",
+                    "margin": "lg",
+                    "color": COSMIC["border"]
+                },
+                create_3d_box([
+                    {
+                        "type": "text",
+                        "text": "سؤال • تحدي\nاعتراف • منشن",
+                        "size": "sm",
+                        "color": COSMIC["text_dim"],
+                        "wrap": True,
+                        "align": "center"
+                    }
+                ], "lg"),
                 {
                     "type": "text",
-                    "text": "تم التسجيل بنجاح",
-                    "size": "xl",
-                    "weight": "bold",
-                    "color": COSMIC["primary"],
+                    "text": "مثال: اكتب \"سؤال\"",
+                    "size": "xs",
+                    "color": COSMIC["text_muted"],
                     "align": "center",
                     "margin": "md"
                 }
             ],
-            "paddingAll": "20px",
-            "backgroundColor": COSMIC["elevated"],
-            "cornerRadius": "15px"
-        },
+            "backgroundColor": COSMIC["card"],
+            "paddingAll": "24px"
+        }
+    }
+    
+    # البطاقة 3: الألعاب
+    card3 = {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                create_glow_text("الألعاب", "xl"),
+                {
+                    "type": "separator",
+                    "margin": "lg",
+                    "color": COSMIC["border"]
+                },
+                create_3d_box([
+                    {
+                        "type": "text",
+                        "text": "أغنية • لعبة • سلسلة\nأسرع • ضد • تكوين\nاختلاف • توافق",
+                        "size": "sm",
+                        "color": COSMIC["text_dim"],
+                        "wrap": True,
+                        "align": "center"
+                    }
+                ], "lg"),
+                {
+                    "type": "text",
+                    "text": "5 جولات لكل لعبة",
+                    "size": "xs",
+                    "color": COSMIC["text_muted"],
+                    "align": "center",
+                    "margin": "md"
+                }
+            ],
+            "backgroundColor": COSMIC["card"],
+            "paddingAll": "24px"
+        }
+    }
+    
+    # البطاقة 4: أثناء اللعب
+    card4 = {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                create_glow_text("أثناء اللعب", "xl"),
+                {
+                    "type": "separator",
+                    "margin": "lg",
+                    "color": COSMIC["border"]
+                },
+                create_3d_box([
+                    {
+                        "type": "text",
+                        "text": "لمح - تلميح\nجاوب - الإجابة",
+                        "size": "sm",
+                        "color": COSMIC["text_dim"],
+                        "wrap": True,
+                        "align": "center"
+                    }
+                ], "lg"),
+                {
+                    "type": "separator",
+                    "margin": "lg",
+                    "color": COSMIC["border"]
+                },
+                {
+                    "type": "text",
+                    "text": "بوت الحوت © 2025",
+                    "size": "xs",
+                    "color": COSMIC["text_muted"],
+                    "align": "center",
+                    "margin": "lg"
+                }
+            ],
+            "backgroundColor": COSMIC["card"],
+            "paddingAll": "24px"
+        }
+    }
+    
+    return {
+        "type": "carousel",
+        "contents": [card1, card2, card3, card4]
+    }
+
+def get_registration_card(name):
+    body = [
+        create_3d_box([
+            {
+                "type": "text",
+                "text": "✨",
+                "size": "xxl",
+                "align": "center"
+            },
+            create_glow_text("تم التسجيل", "xl")
+        ]),
         {
             "type": "separator",
             "margin": "xl",
@@ -454,19 +596,10 @@ def get_registration_card(name):
             "color": COSMIC["text"],
             "align": "center",
             "margin": "xl"
-        },
-        {
-            "type": "text",
-            "text": "يمكنك الآن اللعب وجمع النقاط",
-            "size": "sm",
-            "color": COSMIC["text_dim"],
-            "align": "center",
-            "wrap": True,
-            "margin": "md"
         }
     ]
     
-    return create_card(body, [make_button("🎮 ابدأ اللعب", "أغنية")])
+    return create_card(body, [make_3d_button("ابدأ اللعب", "أغنية")])
 
 def get_withdrawal_card(name):
     body = [
@@ -487,119 +620,20 @@ def get_withdrawal_card(name):
             "type": "text",
             "text": name,
             "size": "lg",
-            "weight": "bold",
             "color": COSMIC["text"],
             "align": "center",
             "margin": "xl"
-        },
-        {
-            "type": "text",
-            "text": "نتمنى رؤيتك مرة أخرى",
-            "size": "sm",
-            "color": COSMIC["text_dim"],
-            "align": "center",
-            "margin": "md"
         }
     ]
     
     return create_card(body)
-
-def get_help_card():
-    body = [
-        {
-            "type": "text",
-            "text": "📖 دليل الاستخدام",
-            "size": "xxl",
-            "weight": "bold",
-            "color": COSMIC["primary"],
-            "align": "center"
-        },
-        {
-            "type": "separator",
-            "margin": "xl",
-            "color": COSMIC["border"]
-        },
-        {
-            "type": "box",
-            "layout": "vertical",
-            "contents": [
-                {
-                    "type": "text",
-                    "text": "⚡ الأوامر الأساسية",
-                    "size": "lg",
-                    "weight": "bold",
-                    "color": COSMIC["primary"]
-                },
-                {
-                    "type": "text",
-                    "text": "▫️ انضم • انسحب • نقاطي\n▫️ الصدارة • إيقاف • مساعدة",
-                    "size": "sm",
-                    "color": COSMIC["text_dim"],
-                    "wrap": True,
-                    "margin": "md"
-                }
-            ],
-            "backgroundColor": COSMIC["elevated"],
-            "cornerRadius": "12px",
-            "paddingAll": "16px",
-            "margin": "xl"
-        },
-        {
-            "type": "box",
-            "layout": "vertical",
-            "contents": [
-                {
-                    "type": "text",
-                    "text": "🎮 أثناء اللعب",
-                    "size": "lg",
-                    "weight": "bold",
-                    "color": COSMIC["secondary"]
-                },
-                {
-                    "type": "text",
-                    "text": "▫️ لمح - تلميح\n▫️ جاوب - الإجابة",
-                    "size": "sm",
-                    "color": COSMIC["text_dim"],
-                    "wrap": True,
-                    "margin": "md"
-                }
-            ],
-            "backgroundColor": COSMIC["elevated"],
-            "cornerRadius": "12px",
-            "paddingAll": "16px",
-            "margin": "md"
-        },
-        {
-            "type": "text",
-            "text": "© Bot Al-Hout 2025",
-            "size": "xs",
-            "color": COSMIC["text_muted"],
-            "align": "center",
-            "margin": "xl"
-        }
-    ]
-    
-    footer = [
-        make_button("⚡ انضم", "انضم"),
-        make_button("📊 نقاطي", "نقاطي", "secondary"),
-        make_button("🏆 الصدارة", "الصدارة", "secondary")
-    ]
-    
-    return create_card(body, footer)
 
 def get_stats_card(user_id, name):
     stats = get_user_stats(user_id)
     
     if not stats:
         body = [
-            {
-                "type": "text",
-                "text": "📊 إحصائياتك",
-                "size": "xxl",
-                "weight": "bold",
-                "color": COSMIC["primary"],
-                "align": "center"
-            },
+            create_glow_text("إحصائياتك", "xxl"),
             {
                 "type": "separator",
                 "margin": "xl",
@@ -614,23 +648,16 @@ def get_stats_card(user_id, name):
                 "margin": "xl"
             }
         ]
-        return create_card(body, [make_button("⚡ ابدأ الآن", "انضم")])
+        return create_card(body, [make_3d_button("ابدأ الآن", "انضم")])
     
     win_rate = (stats['wins'] / stats['games_played'] * 100) if stats['games_played'] > 0 else 0
     
     body = [
-        {
-            "type": "text",
-            "text": "📊 إحصائياتك",
-            "size": "xxl",
-            "weight": "bold",
-            "color": COSMIC["primary"],
-            "align": "center"
-        },
+        create_glow_text("إحصائياتك", "xxl"),
         {
             "type": "text",
             "text": name,
-            "size": "md",
+            "size": "sm",
             "color": COSMIC["text_dim"],
             "align": "center",
             "margin": "sm"
@@ -640,129 +667,104 @@ def get_stats_card(user_id, name):
             "margin": "xl",
             "color": COSMIC["border"]
         },
-        {
-            "type": "box",
-            "layout": "vertical",
-            "contents": [
-                {
-                    "type": "box",
-                    "layout": "horizontal",
-                    "contents": [
-                        {
-                            "type": "text",
-                            "text": "⭐ النقاط",
-                            "size": "sm",
-                            "color": COSMIC["text_muted"],
-                            "flex": 1
-                        },
-                        {
-                            "type": "text",
-                            "text": str(stats['total_points']),
-                            "size": "xxl",
-                            "weight": "bold",
-                            "color": COSMIC["primary"],
-                            "flex": 1,
-                            "align": "end"
-                        }
-                    ]
-                },
-                {
-                    "type": "separator",
-                    "margin": "lg",
-                    "color": COSMIC["border"]
-                },
-                {
-                    "type": "box",
-                    "layout": "horizontal",
-                    "contents": [
-                        {
-                            "type": "text",
-                            "text": "🎮 الألعاب",
-                            "size": "sm",
-                            "color": COSMIC["text_muted"],
-                            "flex": 1
-                        },
-                        {
-                            "type": "text",
-                            "text": str(stats['games_played']),
-                            "size": "lg",
-                            "weight": "bold",
-                            "color": COSMIC["text"],
-                            "flex": 1,
-                            "align": "end"
-                        }
-                    ],
-                    "margin": "lg"
-                },
-                {
-                    "type": "box",
-                    "layout": "horizontal",
-                    "contents": [
-                        {
-                            "type": "text",
-                            "text": "🏆 الفوز",
-                            "size": "sm",
-                            "color": COSMIC["text_muted"],
-                            "flex": 1
-                        },
-                        {
-                            "type": "text",
-                            "text": str(stats['wins']),
-                            "size": "lg",
-                            "weight": "bold",
-                            "color": COSMIC["success"],
-                            "flex": 1,
-                            "align": "end"
-                        }
-                    ],
-                    "margin": "md"
-                },
-                {
-                    "type": "box",
-                    "layout": "horizontal",
-                    "contents": [
-                        {
-                            "type": "text",
-                            "text": "📈 معدل الفوز",
-                            "size": "sm",
-                            "color": COSMIC["text_muted"],
-                            "flex": 1
-                        },
-                        {
-                            "type": "text",
-                            "text": f"{win_rate:.0f}%",
-                            "size": "lg",
-                            "weight": "bold",
-                            "color": COSMIC["secondary"],
-                            "flex": 1,
-                            "align": "end"
-                        }
-                    ],
-                    "margin": "md"
-                }
-            ],
-            "backgroundColor": COSMIC["elevated"],
-            "cornerRadius": "15px",
-            "paddingAll": "20px",
-            "margin": "xl"
-        }
+        create_3d_box([
+            {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": "النقاط",
+                        "size": "sm",
+                        "color": COSMIC["text_muted"],
+                        "flex": 1
+                    },
+                    create_glow_text(str(stats['total_points']), "xxl", COSMIC["primary"])
+                ]
+            }
+        ], "xl"),
+        create_3d_box([
+            {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": "الألعاب",
+                        "size": "sm",
+                        "color": COSMIC["text_muted"],
+                        "flex": 1
+                    },
+                    {
+                        "type": "text",
+                        "text": str(stats['games_played']),
+                        "size": "lg",
+                        "weight": "bold",
+                        "color": COSMIC["text"],
+                        "flex": 1,
+                        "align": "end"
+                    }
+                ]
+            }
+        ], "md"),
+        create_3d_box([
+            {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": "الفوز",
+                        "size": "sm",
+                        "color": COSMIC["text_muted"],
+                        "flex": 1
+                    },
+                    {
+                        "type": "text",
+                        "text": str(stats['wins']),
+                        "size": "lg",
+                        "weight": "bold",
+                        "color": COSMIC["primary"],
+                        "flex": 1,
+                        "align": "end"
+                    }
+                ]
+            }
+        ], "md"),
+        create_3d_box([
+            {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": "معدل الفوز",
+                        "size": "sm",
+                        "color": COSMIC["text_muted"],
+                        "flex": 1
+                    },
+                    {
+                        "type": "text",
+                        "text": f"{win_rate:.0f}%",
+                        "size": "lg",
+                        "weight": "bold",
+                        "color": COSMIC["secondary"],
+                        "flex": 1,
+                        "align": "end"
+                    }
+                ]
+            }
+        ], "md")
     ]
     
-    return create_card(body, [make_button("🏆 الصدارة", "الصدارة", "primary", COSMIC["secondary"])])
+    return create_card(body, [make_3d_button("الصدارة", "الصدارة")])
 
 def get_leaderboard_card():
     leaders = get_leaderboard()
     
     if not leaders:
         body = [
-            {
-                "type": "text",
-                "text": "🏆 لوحة الصدارة",
-                "size": "xxl",
-                "weight": "bold",
-                "color": COSMIC["primary"],
-                "align": "center"
-            },
+            create_glow_text("لوحة الصدارة", "xxl"),
             {
                 "type": "text",
                 "text": "لا توجد بيانات",
@@ -779,59 +781,50 @@ def get_leaderboard_card():
         if i == 1:
             rank, color = "👑", COSMIC["primary"]
         elif i == 2:
-            rank, color = "🥈", COSMIC["text"]
+            rank, color = "🥈", COSMIC["secondary"]
         elif i == 3:
-            rank, color = "🥉", COSMIC["text_dim"]
+            rank, color = "🥉", COSMIC["text"]
         else:
             rank, color = f"#{i}", COSMIC["text_muted"]
         
-        items.append({
-            "type": "box",
-            "layout": "horizontal",
-            "contents": [
-                {
-                    "type": "text",
-                    "text": rank,
-                    "size": "lg",
-                    "color": color,
-                    "flex": 0,
-                    "weight": "bold"
-                },
-                {
-                    "type": "text",
-                    "text": leader['display_name'],
-                    "size": "sm",
-                    "color": color,
-                    "flex": 3,
-                    "margin": "md",
-                    "wrap": True,
-                    "weight": "bold" if i <= 3 else "regular"
-                },
-                {
-                    "type": "text",
-                    "text": str(leader['total_points']),
-                    "size": "lg" if i <= 3 else "md",
-                    "color": color,
-                    "flex": 1,
-                    "align": "end",
-                    "weight": "bold"
-                }
-            ],
-            "backgroundColor": COSMIC["elevated"] if i == 1 else COSMIC["card"],
-            "cornerRadius": "12px",
-            "paddingAll": "16px",
-            "margin": "sm" if i > 1 else "md"
-        })
+        items.append(create_3d_box([
+            {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [
+                    {
+                        "type": "text",
+                        "text": rank,
+                        "size": "lg",
+                        "color": color,
+                        "flex": 0,
+                        "weight": "bold"
+                    },
+                    {
+                        "type": "text",
+                        "text": leader['display_name'],
+                        "size": "sm",
+                        "color": color,
+                        "flex": 3,
+                        "margin": "md",
+                        "wrap": True,
+                        "weight": "bold" if i <= 3 else "regular"
+                    },
+                    {
+                        "type": "text",
+                        "text": str(leader['total_points']),
+                        "size": "lg" if i <= 3 else "md",
+                        "color": color,
+                        "flex": 1,
+                        "align": "end",
+                        "weight": "bold"
+                    }
+                ]
+            }
+        ], "sm" if i > 1 else "md"))
     
     body = [
-        {
-            "type": "text",
-            "text": "🏆 لوحة الصدارة",
-            "size": "xxl",
-            "weight": "bold",
-            "color": COSMIC["primary"],
-            "align": "center"
-        },
+        create_glow_text("لوحة الصدارة", "xxl"),
         {
             "type": "text",
             "text": "أفضل اللاعبين",
@@ -855,78 +848,102 @@ def get_leaderboard_card():
     
     return create_card(body)
 
+def get_game_card(question, round_num, total_rounds, game_type):
+    """بطاقة اللعبة مع معلومات الجولة"""
+    
+    # تحديد الألعاب التي تدعم التلميحات
+    hint_games = ['أغنية', 'لعبة', 'ضد', 'تكوين']
+    
+    body = [
+        create_3d_box([
+            {
+                "type": "text",
+                "text": f"الجولة {round_num}/{total_rounds}",
+                "size": "sm",
+                "color": COSMIC["text_muted"],
+                "align": "center"
+            },
+            create_glow_text(game_type, "xl"),
+            {
+                "type": "separator",
+                "margin": "md",
+                "color": COSMIC["border"]
+            },
+            {
+                "type": "text",
+                "text": question,
+                "size": "lg",
+                "color": COSMIC["text"],
+                "align": "center",
+                "margin": "md",
+                "wrap": True,
+                "weight": "bold"
+            }
+        ])
+    ]
+    
+    footer = []
+    if game_type in hint_games:
+        footer.append(make_3d_button("لمح", "لمح", "secondary"))
+    footer.append(make_3d_button("جاوب", "جاوب", "secondary"))
+    
+    return create_card(body, footer if footer else None)
+
 def get_winner_card(winner_name, winner_score, all_scores):
     score_items = []
     for i, (name, score) in enumerate(all_scores, 1):
         rank_text = f"{'🥇' if i == 1 else '🥈' if i == 2 else '🥉' if i == 3 else '#' + str(i)} المركز"
-        color = COSMIC["primary"] if i == 1 else COSMIC["text"] if i <= 3 else COSMIC["text_muted"]
+        color = COSMIC["primary"] if i == 1 else COSMIC["secondary"] if i <= 3 else COSMIC["text_muted"]
         
-        score_items.append({
-            "type": "box",
-            "layout": "horizontal",
-            "contents": [
-                {
-                    "type": "box",
-                    "layout": "vertical",
-                    "contents": [
-                        {
-                            "type": "text",
-                            "text": rank_text,
-                            "size": "xs",
-                            "color": COSMIC["text_muted"]
-                        },
-                        {
-                            "type": "text",
-                            "text": name,
-                            "size": "sm",
-                            "color": color,
-                            "weight": "bold",
-                            "wrap": True
-                        }
-                    ],
-                    "flex": 3
-                },
-                {
-                    "type": "text",
-                    "text": str(score),
-                    "size": "xl" if i == 1 else "lg",
-                    "color": color,
-                    "weight": "bold",
-                    "align": "end",
-                    "flex": 1
-                }
-            ],
-            "backgroundColor": COSMIC["elevated"] if i == 1 else COSMIC["card"],
-            "cornerRadius": "12px",
-            "paddingAll": "16px",
-            "margin": "sm" if i > 1 else "none"
-        })
+        score_items.append(create_3d_box([
+            {
+                "type": "box",
+                "layout": "horizontal",
+                "contents": [
+                    {
+                        "type": "box",
+                        "layout": "vertical",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": rank_text,
+                                "size": "xs",
+                                "color": COSMIC["text_muted"]
+                            },
+                            {
+                                "type": "text",
+                                "text": name,
+                                "size": "sm",
+                                "color": color,
+                                "weight": "bold",
+                                "wrap": True
+                            }
+                        ],
+                        "flex": 3
+                    },
+                    {
+                        "type": "text",
+                        "text": str(score),
+                        "size": "xl" if i == 1 else "lg",
+                        "color": color,
+                        "weight": "bold",
+                        "align": "end",
+                        "flex": 1
+                    }
+                ]
+            }
+        ], "sm" if i > 1 else "md"))
     
     body = [
-        {
-            "type": "box",
-            "layout": "vertical",
-            "contents": [
-                {
-                    "type": "text",
-                    "text": "✨",
-                    "size": "xxl",
-                    "align": "center"
-                },
-                {
-                    "type": "text",
-                    "text": "انتهت اللعبة",
-                    "size": "xl",
-                    "weight": "bold",
-                    "color": COSMIC["primary"],
-                    "align": "center",
-                    "margin": "md"
-                }
-            ],
-            "backgroundColor": COSMIC["elevated"],
-            "cornerRadius": "15px",
-            "paddingAll": "24px"
-        },
+        create_3d_box([
+            {
+                "type": "text",
+                "text": "✨",
+                "size": "xxl",
+                "align": "center"
+            },
+            create_glow_text("انتهت اللعبة", "xl")
+        ]),
         {
             "type": "separator",
             "margin": "xl",
@@ -938,24 +955,15 @@ def get_winner_card(winner_name, winner_score, all_scores):
             "contents": [
                 {
                     "type": "text",
-                    "text": "🏆 الفائز",
+                    "text": "الفائز",
                     "size": "sm",
                     "color": COSMIC["text_muted"],
                     "align": "center"
                 },
+                create_glow_text(winner_name, "xxl"),
                 {
                     "type": "text",
-                    "text": winner_name,
-                    "size": "xxl",
-                    "weight": "bold",
-                    "color": COSMIC["primary"],
-                    "align": "center",
-                    "margin": "sm",
-                    "wrap": True
-                },
-                {
-                    "type": "text",
-                    "text": f"⭐ {winner_score} نقطة",
+                    "text": f"{winner_score} نقطة",
                     "size": "lg",
                     "weight": "bold",
                     "color": COSMIC["secondary"],
@@ -972,11 +980,12 @@ def get_winner_card(winner_name, winner_score, all_scores):
         },
         {
             "type": "text",
-            "text": "📊 النتائج النهائية",
+            "text": "النتائج النهائية",
             "size": "lg",
             "weight": "bold",
             "color": COSMIC["text"],
-            "margin": "xl"
+            "margin": "xl",
+            "align": "center"
         },
         {
             "type": "box",
@@ -987,8 +996,8 @@ def get_winner_card(winner_name, winner_score, all_scores):
     ]
     
     footer = [
-        make_button("🎮 لعب مرة أخرى", "أغنية"),
-        make_button("🏆 الصدارة", "الصدارة", "secondary")
+        make_3d_button("لعب مرة أخرى", "أغنية"),
+        make_3d_button("الصدارة", "الصدارة", "secondary")
     ]
     
     return create_card(body, footer)
@@ -999,7 +1008,7 @@ def start_game(game_id, game_class, game_type, user_id, event):
     if not game_class:
         try:
             line_bot_api.reply_message(event.reply_token,
-                TextSendMessage(text=f"▫️ لعبة {game_type} غير متوفرة", quick_reply=get_quick_reply()))
+                TextSendMessage(text=f"لعبة {game_type} غير متوفرة", quick_reply=get_quick_reply()))
         except:
             pass
         return False
@@ -1020,7 +1029,9 @@ def start_game(game_id, game_class, game_type, user_id, event):
                 'type': game_type,
                 'created_at': datetime.now(),
                 'participants': participants,
-                'answered_users': set()
+                'answered_users': set(),
+                'round': 1,
+                'total_rounds': 5
             }
         
         response = game.start_game()
@@ -1048,7 +1059,7 @@ def home():
     return f"""<!DOCTYPE html>
 <html dir="rtl">
 <head>
-    <title>بوت الحوت - Cosmic</title>
+    <title>بوت الحوت - 3D Experience</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
@@ -1065,8 +1076,8 @@ def home():
         .container {{
             background: {COSMIC['card']};
             border: 2px solid {COSMIC['border']};
-            border-radius: 20px;
-            box-shadow: 0 0 40px rgba(0,212,255,0.3);
+            border-radius: 24px;
+            box-shadow: 0 0 60px rgba(6,182,212,0.4), 0 20px 40px rgba(0,0,0,0.5);
             padding: 40px;
             max-width: 600px;
             width: 100%;
@@ -1078,13 +1089,20 @@ def home():
             background: linear-gradient(135deg, {COSMIC['primary']}, {COSMIC['secondary']});
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px rgba(6,182,212,0.5);
         }}
-        .subtitle {{ text-align: center; color: {COSMIC['text_dim']}; margin-bottom: 30px; }}
+        .subtitle {{ 
+            text-align: center; 
+            color: {COSMIC['text_dim']}; 
+            margin-bottom: 30px; 
+        }}
         .status {{
             background: {COSMIC['elevated']};
-            border-radius: 15px;
+            border: 1px solid {COSMIC['border']};
+            border-radius: 16px;
             padding: 20px;
             margin: 20px 0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }}
         .status-item {{
             display: flex;
@@ -1094,27 +1112,39 @@ def home():
         }}
         .status-item:last-child {{ border-bottom: none; }}
         .label {{ color: {COSMIC['text_muted']}; }}
-        .value {{ color: {COSMIC['primary']}; font-weight: bold; }}
+        .value {{ 
+            color: {COSMIC['primary']}; 
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(6,182,212,0.5);
+        }}
         .btn {{
             display: inline-block;
             padding: 12px 24px;
             background: {COSMIC['primary']};
             color: {COSMIC['bg']};
             text-decoration: none;
-            border-radius: 10px;
+            border-radius: 12px;
             margin: 5px;
             font-weight: 600;
+            box-shadow: 0 4px 12px rgba(6,182,212,0.4);
+            transition: all 0.3s;
         }}
-        .btn-danger {{
-            background: {COSMIC['error']};
+        .btn:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(6,182,212,0.6);
         }}
-        .footer {{ text-align: center; margin-top: 30px; color: {COSMIC['text_muted']}; font-size: 0.9em; }}
+        .footer {{ 
+            text-align: center; 
+            margin-top: 30px; 
+            color: {COSMIC['text_muted']}; 
+            font-size: 0.9em; 
+        }}
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🌌 بوت الحوت</h1>
-        <p class="subtitle">Cosmic Gaming Experience</p>
+        <h1>بوت الحوت</h1>
+        <p class="subtitle">3D Gaming Experience</p>
         
         <div class="status">
             <div class="status-item">
@@ -1139,26 +1169,23 @@ def home():
             </div>
             <div class="status-item">
                 <span class="label">أخطاء مسجلة</span>
-                <span class="value {'class="btn-danger"' if error_log else ''}">
-                    {len(error_log)}
-                </span>
+                <span class="value">{len(error_log)}</span>
             </div>
         </div>
         
         <div style="text-align: center; margin-top: 25px;">
-            <a href="/health" class="btn">🔍 الصحة</a>
-            <a href="/errors" class="btn {'btn-danger' if error_log else ''}">🐛 الأخطاء ({len(error_log)})</a>
-            <a href="/debug" class="btn">🔧 التشخيص</a>
+            <a href="/health" class="btn">الصحة</a>
+            <a href="/errors" class="btn">الأخطاء</a>
+            <a href="/debug" class="btn">التشخيص</a>
         </div>
         
-        <div class="footer">© Bot Al-Hout 2025 - Cosmic Depth</div>
+        <div class="footer">بوت الحوت © 2025</div>
     </div>
 </body>
 </html>"""
 
 @app.route("/errors", methods=['GET'])
 def view_errors():
-    """عرض سجل الأخطاء"""
     with error_log_lock:
         errors = list(reversed(error_log))
     
@@ -1186,43 +1213,15 @@ def view_errors():
         h1 {{ color: {COSMIC['primary']}; margin-bottom: 20px; }}
         .error-item {{
             background: {COSMIC['elevated']};
-            border-left: 4px solid {COSMIC['error']};
+            border-left: 4px solid {COSMIC['primary']};
             padding: 15px;
             margin: 15px 0;
             border-radius: 8px;
         }}
-        .error-header {{
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 10px;
-        }}
-        .error-type {{
-            font-weight: bold;
-            color: {COSMIC['error']};
-        }}
-        .error-time {{
-            color: {COSMIC['text_muted']};
-            font-size: 0.9em;
-        }}
-        .error-message {{
-            color: {COSMIC['text_dim']};
-            margin: 10px 0;
-            font-family: monospace;
-            font-size: 0.9em;
-        }}
-        .error-traceback {{
-            background: {COSMIC['bg']};
-            padding: 10px;
-            border-radius: 5px;
-            font-size: 0.85em;
-            color: {COSMIC['text_muted']};
-            overflow-x: auto;
-            margin-top: 10px;
-        }}
         .no-errors {{
             text-align: center;
             padding: 40px;
-            color: {COSMIC['success']};
+            color: {COSMIC['primary']};
         }}
         .btn {{
             display: inline-block;
@@ -1237,39 +1236,20 @@ def view_errors():
 </head>
 <body>
     <div class="container">
-        <h1>🐛 سجل الأخطاء</h1>
+        <h1>سجل الأخطاء</h1>
 """
     
     if not errors:
         html += '<div class="no-errors">✅ لا توجد أخطاء مسجلة</div>'
     else:
         for err in errors:
-            html += f"""
-        <div class="error-item">
-            <div class="error-header">
-                <span class="error-type">{err.get('type', 'Unknown')}</span>
-                <span class="error-time">{err.get('timestamp', 'Unknown')}</span>
-            </div>
-            <div class="error-message">{err.get('message', 'No message')}</div>
-"""
-            
-            if err.get('details'):
-                html += '<div style="margin-top: 10px; font-size: 0.85em;">'
-                for key, value in err['details'].items():
-                    html += f'<div><strong>{key}:</strong> {value}</div>'
-                html += '</div>'
-            
-            if err.get('traceback'):
-                html += f'<div class="error-traceback">{err["traceback"]}</div>'
-            
-            html += '</div>'
+            html += f'<div class="error-item">{err.get("type", "Unknown")}: {err.get("message", "No message")}</div>'
     
-    html += '<a href="/" class="btn">← العودة</a></div></body></html>'
+    html += '<a href="/" class="btn">العودة</a></div></body></html>'
     return html
 
 @app.route("/debug", methods=['GET'])
 def debug_info():
-    """معلومات التشخيص"""
     games_status = {name: "✅" if cls else "❌" for name, cls in games.items()}
     
     return {
@@ -1282,20 +1262,9 @@ def debug_info():
             "error_count": len(error_log)
         },
         "ai": {
-            "enabled": USE_AI,
-            "gemini_available": USE_AI
+            "enabled": USE_AI
         },
-        "games": games_status,
-        "database": {
-            "name": DB_NAME,
-            "exists": os.path.exists(DB_NAME)
-        },
-        "files": {
-            "questions": len(QUESTIONS),
-            "challenges": len(CHALLENGES),
-            "confessions": len(CONFESSIONS),
-            "mentions": len(MENTION_QUESTIONS)
-        }
+        "games": games_status
     }, 200
 
 @app.route("/health", methods=['GET'])
@@ -1305,9 +1274,7 @@ def health_check():
         "timestamp": datetime.now().isoformat(),
         "active_games": len(active_games),
         "registered_players": len(registered_players),
-        "ai_enabled": USE_AI,
-        "cosmic_theme": "enabled",
-        "errors": len(error_log)
+        "ai_enabled": USE_AI
     }, 200
 
 @app.route("/callback", methods=['POST'])
@@ -1335,7 +1302,6 @@ def callback():
 def handle_message(event):
     user_id = None
     text = None
-    display_name = None
     
     try:
         user_id = event.source.user_id
@@ -1344,20 +1310,15 @@ def handle_message(event):
         if not user_id or not text:
             return
         
-        # تسجيل تلقائي
         with players_lock:
             if user_id not in registered_players:
                 registered_players.add(user_id)
                 ensure_user_exists(user_id)
         
-        # Rate limit
         if not check_rate_limit(user_id):
             return
         
-        # اسم المستخدم
         display_name = get_user_profile_safe(user_id)
-        
-        # معرف اللعبة
         game_id = getattr(event.source, 'group_id', user_id)
         
         logger.info(f"📨 {display_name}: {text[:50]}")
@@ -1373,7 +1334,7 @@ def handle_message(event):
         if text in ['مساعدة', 'help']:
             line_bot_api.reply_message(event.reply_token,
                 FlexSendMessage(alt_text="المساعدة", 
-                    contents=get_help_card(), quick_reply=get_quick_reply()))
+                    contents=get_help_carousel(), quick_reply=get_quick_reply()))
             return
         
         if text in ['نقاطي', 'إحصائياتي', 'احصائياتي']:
@@ -1394,17 +1355,17 @@ def handle_message(event):
                     game_type = active_games[game_id]['type']
                     del active_games[game_id]
                     line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text=f"▪️ تم إيقاف {game_type}", quick_reply=get_quick_reply()))
+                        TextSendMessage(text=f"تم إيقاف {game_type}", quick_reply=get_quick_reply()))
                 else:
                     line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text="▫️ لا توجد لعبة", quick_reply=get_quick_reply()))
+                        TextSendMessage(text="لا توجد لعبة", quick_reply=get_quick_reply()))
             return
         
         if text in ['انضم', 'تسجيل', 'join']:
             with players_lock:
                 if user_id in registered_players:
                     line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text=f"▪️ أنت مسجل يا {display_name}", quick_reply=get_quick_reply()))
+                        TextSendMessage(text=f"أنت مسجل يا {display_name}", quick_reply=get_quick_reply()))
                 else:
                     registered_players.add(user_id)
                     line_bot_api.reply_message(event.reply_token,
@@ -1421,28 +1382,28 @@ def handle_message(event):
                             contents=get_withdrawal_card(display_name), quick_reply=get_quick_reply()))
                 else:
                     line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text="▫️ غير مسجل", quick_reply=get_quick_reply()))
+                        TextSendMessage(text="غير مسجل", quick_reply=get_quick_reply()))
             return
         
         # أوامر نصية
         if text in ['سؤال', 'سوال'] and QUESTIONS:
             line_bot_api.reply_message(event.reply_token,
-                TextSendMessage(text=f"▪️ {random.choice(QUESTIONS)}", quick_reply=get_quick_reply()))
+                TextSendMessage(text=random.choice(QUESTIONS), quick_reply=get_quick_reply()))
             return
         
         if text in ['تحدي', 'challenge'] and CHALLENGES:
             line_bot_api.reply_message(event.reply_token,
-                TextSendMessage(text=f"▪️ {random.choice(CHALLENGES)}", quick_reply=get_quick_reply()))
+                TextSendMessage(text=random.choice(CHALLENGES), quick_reply=get_quick_reply()))
             return
         
         if text in ['اعتراف', 'confession'] and CONFESSIONS:
             line_bot_api.reply_message(event.reply_token,
-                TextSendMessage(text=f"▪️ {random.choice(CONFESSIONS)}", quick_reply=get_quick_reply()))
+                TextSendMessage(text=random.choice(CONFESSIONS), quick_reply=get_quick_reply()))
             return
         
         if text in ['منشن', 'mention'] and MENTION_QUESTIONS:
             line_bot_api.reply_message(event.reply_token,
-                TextSendMessage(text=f"▪️ {random.choice(MENTION_QUESTIONS)}", quick_reply=get_quick_reply()))
+                TextSendMessage(text=random.choice(MENTION_QUESTIONS), quick_reply=get_quick_reply()))
             return
         
         # الألعاب
@@ -1460,7 +1421,6 @@ def handle_message(event):
         if text in games_map:
             game_class, game_type = games_map[text]
             
-            # معالجة خاصة للتوافق
             if text == 'توافق' and game_class:
                 with games_lock:
                     with players_lock:
@@ -1478,7 +1438,7 @@ def handle_message(event):
                     }
                 
                 line_bot_api.reply_message(event.reply_token,
-                    TextSendMessage(text="▪️ لعبة التوافق\n\nاكتب اسمين مفصولين بمسافة\n⚠️ نص فقط\n\nمثال: ميش عبير",
+                    TextSendMessage(text="لعبة التوافق\n\nاكتب اسمين مفصولين بمسافة\nمثال: ميش عبير",
                         quick_reply=get_quick_reply()))
                 return
             
@@ -1497,13 +1457,170 @@ def handle_message(event):
                 
                 if '@' in text:
                     line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text="▫️ بدون @", quick_reply=get_quick_reply()))
+                        TextSendMessage(text="بدون @", quick_reply=get_quick_reply()))
                     return
                 
+                response = result.get('response', TextSendMessage(text=result.get('message', '')))
+                if isinstance(response, TextSendMessage):
+                    response.quick_reply = get_quick_reply()
+                elif isinstance(response, list):
+                    for r in response:
+                        if isinstance(r, TextSendMessage):
+                            r.quick_reply = get_quick_reply()
+                
+                line_bot_api.reply_message(event.reply_token, response)
+                
+            except Exception as e:
+                logger.error(f"❌ خطأ إجابة: {e}")
+                log_error('game_answer', e, {'user_id': user_id[-4:], 'game_type': game_type})
+    
+    except Exception as e:
+        logger.error(f"❌ خطأ عام: {e}")
+        log_error('handle_message', e, {
+            'user_id': user_id[-4:] if user_id else 'Unknown',
+            'text': text[:100] if text else 'Unknown'
+        })
+        
+        try:
+            if hasattr(event, 'reply_token') and event.reply_token:
+                line_bot_api.reply_message(event.reply_token,
+                    TextSendMessage(text="حدث خطأ مؤقت. حاول مرة أخرى.", quick_reply=get_quick_reply()))
+        except:
+            pass
+
+# ==================== Cleanup Thread ====================
+
+def cleanup_old_games():
+    """تنظيف الألعاب القديمة والبيانات"""
+    while True:
+        try:
+            time.sleep(300)  # كل 5 دقائق
+            now = datetime.now()
+            
+            to_delete = []
+            with games_lock:
+                for gid, data in active_games.items():
+                    if now - data.get('created_at', now) > timedelta(minutes=15):
+                        to_delete.append(gid)
+                
+                for gid in to_delete:
+                    del active_games[gid]
+                
+                if to_delete:
+                    logger.info(f"🗑️ حذف {len(to_delete)} لعبة قديمة")
+            
+            with names_cache_lock:
+                if len(user_names_cache) > 1000:
+                    user_names_cache.clear()
+                    logger.info("🧹 تنظيف الأسماء")
+            
+            with error_log_lock:
+                if len(error_log) > 100:
+                    error_log[:] = error_log[-50:]
+                    logger.info("🧹 تنظيف سجل الأخطاء")
+        
+        except Exception as e:
+            logger.error(f"❌ خطأ تنظيف: {e}")
+            log_error('cleanup', e)
+
+cleanup_thread = threading.Thread(target=cleanup_old_games, daemon=True)
+cleanup_thread.start()
+
+# ==================== Error Handlers ====================
+
+@app.errorhandler(InvalidSignatureError)
+def handle_invalid_signature(error):
+    logger.error(f"❌ توقيع غير صالح: {error}")
+    log_error('invalid_signature', error)
+    return 'Invalid Signature', 400
+
+@app.errorhandler(400)
+def bad_request(error):
+    logger.warning(f"⚠️ طلب غير صالح: {error}")
+    return 'Bad Request', 400
+
+@app.errorhandler(404)
+def not_found(error):
+    return 'Not Found', 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"❌ خطأ داخلي: {error}")
+    log_error('internal_error', error)
+    return 'Internal Server Error', 500
+
+@app.errorhandler(Exception)
+def handle_error(error):
+    logger.error(f"❌ خطأ غير متوقع: {error}")
+    log_error('unexpected_error', error)
+    
+    if request.path == '/callback':
+        return 'OK', 200
+    
+    return 'Internal Server Error', 500
+
+# ==================== Syntax Checker ====================
+
+def check_syntax():
+    """فحص أخطاء الـ syntax"""
+    try:
+        import ast
+        with open(__file__, 'r', encoding='utf-8') as f:
+            code = f.read()
+        ast.parse(code)
+        logger.info("✅ لا توجد أخطاء syntax")
+        return True
+    except SyntaxError as e:
+        logger.error(f"❌ خطأ syntax في السطر {e.lineno}: {e.msg}")
+        logger.error(f"   النص: {e.text}")
+        return False
+    except Exception as e:
+        logger.error(f"❌ خطأ في فحص الكود: {e}")
+        return False
+
+# ==================== Main ====================
+
+if __name__ == "__main__":
+    logger.info("🔍 فحص الكود...")
+    if not check_syntax():
+        logger.error("❌ فشل فحص الكود - توقف التشغيل")
+        sys.exit(1)
+    
+    port = int(os.environ.get('PORT', 5000))
+    
+    logger.info("=" * 60)
+    logger.info("🌌 بوت الحوت - 3D Experience")
+    logger.info("=" * 60)
+    logger.info(f"🔌 المنفذ: {port}")
+    logger.info(f"🤖 AI: {'✅' if USE_AI else '⚠️'}")
+    logger.info(f"📊 اللاعبون: {len(registered_players)}")
+    logger.info(f"🎮 الألعاب النشطة: {len(active_games)}")
+    
+    loaded = [name for name, cls in games.items() if cls]
+    logger.info(f"🎯 الألعاب المتوفرة ({len(loaded)}/8):")
+    for name in loaded:
+        logger.info(f"   ✓ {name}")
+    
+    if len(loaded) < len(games):
+        missing = [name for name, cls in games.items() if not cls]
+        logger.warning(f"⚠️ ألعاب غير متوفرة ({len(missing)}):")
+        for name in missing:
+            logger.warning(f"   ✗ {name}")
+    
+    logger.info(f"🎨 التصميم: 3D Dark Mode")
+    logger.info(f"🔧 مصحح الأخطاء: مفعّل")
+    logger.info("=" * 60)
+    
+    try:
+        app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+    except Exception as e:
+        logger.error(f"❌ فشل تشغيل التطبيق: {e}")
+        log_error('app_start', e)
+        sys.exit(1)
                 names = cleaned.split()
                 if len(names) < 2:
                     line_bot_api.reply_message(event.reply_token,
-                        TextSendMessage(text="▫️ اسمين مفصولين", quick_reply=get_quick_reply()))
+                        TextSendMessage(text="اسمين مفصولين", quick_reply=get_quick_reply()))
                     return
                 
                 try:
@@ -1554,6 +1671,7 @@ def handle_message(event):
                 
                 if result.get('next_question'):
                     game_data['answered_users'] = set()
+                    game_data['round'] = game_data.get('round', 1) + 1
                     next_q = game.next_question()
                     if next_q:
                         if isinstance(next_q, TextSendMessage):
@@ -1569,7 +1687,6 @@ def handle_message(event):
                     
                     if result.get('winner_card'):
                         card = result['winner_card']
-                        # تحديث زر "لعب مرة أخرى"
                         if 'footer' in card:
                             for btn in card['footer'].get('contents', []):
                                 if 'لعب' in btn.get('action', {}).get('label', ''):
@@ -1583,167 +1700,3 @@ def handle_message(event):
                             response.quick_reply = get_quick_reply()
                         line_bot_api.reply_message(event.reply_token, response)
                     return
-                
-                response = result.get('response', TextSendMessage(text=result.get('message', '')))
-                if isinstance(response, TextSendMessage):
-                    response.quick_reply = get_quick_reply()
-                elif isinstance(response, list):
-                    for r in response:
-                        if isinstance(r, TextSendMessage):
-                            r.quick_reply = get_quick_reply()
-                
-                line_bot_api.reply_message(event.reply_token, response)
-                
-            except Exception as e:
-                logger.error(f"❌ خطأ إجابة: {e}")
-                log_error('game_answer', e, {'user_id': user_id[-4:], 'game_type': game_type})
-    
-    except Exception as e:
-        logger.error(f"❌ خطأ عام: {e}")
-        log_error('handle_message', e, {
-            'user_id': user_id[-4:] if user_id else 'Unknown',
-            'text': text[:100] if text else 'Unknown'
-        })
-        
-        # محاولة إرسال رسالة خطأ للمستخدم
-        try:
-            if hasattr(event, 'reply_token') and event.reply_token:
-                line_bot_api.reply_message(event.reply_token,
-                    TextSendMessage(text="▫️ حدث خطأ مؤقت. حاول مرة أخرى.", quick_reply=get_quick_reply()))
-        except:
-            pass
-
-# ==================== Cleanup Thread ====================
-
-def cleanup_old_games():
-    """تنظيف الألعاب القديمة والبيانات"""
-    while True:
-        try:
-            time.sleep(300)  # كل 5 دقائق
-            now = datetime.now()
-            
-            # تنظيف الألعاب
-            to_delete = []
-            with games_lock:
-                for gid, data in active_games.items():
-                    if now - data.get('created_at', now) > timedelta(minutes=15):
-                        to_delete.append(gid)
-                
-                for gid in to_delete:
-                    del active_games[gid]
-                
-                if to_delete:
-                    logger.info(f"🗑️ حذف {len(to_delete)} لعبة قديمة")
-            
-            # تنظيف الأسماء
-            with names_cache_lock:
-                if len(user_names_cache) > 1000:
-                    user_names_cache.clear()
-                    logger.info("🧹 تنظيف الأسماء")
-            
-            # تنظيف الأخطاء القديمة
-            with error_log_lock:
-                if len(error_log) > 100:
-                    error_log[:] = error_log[-50:]
-                    logger.info("🧹 تنظيف سجل الأخطاء")
-        
-        except Exception as e:
-            logger.error(f"❌ خطأ تنظيف: {e}")
-            log_error('cleanup', e)
-
-cleanup_thread = threading.Thread(target=cleanup_old_games, daemon=True)
-cleanup_thread.start()
-
-# ==================== Error Handlers ====================
-
-@app.errorhandler(InvalidSignatureError)
-def handle_invalid_signature(error):
-    logger.error(f"❌ توقيع غير صالح: {error}")
-    log_error('invalid_signature', error)
-    return 'Invalid Signature', 400
-
-@app.errorhandler(400)
-def bad_request(error):
-    logger.warning(f"⚠️ طلب غير صالح: {error}")
-    return 'Bad Request', 400
-
-@app.errorhandler(404)
-def not_found(error):
-    return 'Not Found', 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    logger.error(f"❌ خطأ داخلي: {error}")
-    log_error('internal_error', error)
-    return 'Internal Server Error', 500
-
-@app.errorhandler(Exception)
-def handle_error(error):
-    logger.error(f"❌ خطأ غير متوقع: {error}")
-    log_error('unexpected_error', error)
-    
-    # إرجاع 200 للـ webhook للحفاظ على الاتصال
-    if request.path == '/callback':
-        return 'OK', 200
-    
-    return 'Internal Server Error', 500
-
-# ==================== Syntax Checker ====================
-
-def check_syntax():
-    """فحص أخطاء الـ syntax"""
-    try:
-        import ast
-        with open(__file__, 'r', encoding='utf-8') as f:
-            code = f.read()
-        ast.parse(code)
-        logger.info("✅ لا توجد أخطاء syntax")
-        return True
-    except SyntaxError as e:
-        logger.error(f"❌ خطأ syntax في السطر {e.lineno}: {e.msg}")
-        logger.error(f"   النص: {e.text}")
-        return False
-    except Exception as e:
-        logger.error(f"❌ خطأ في فحص الكود: {e}")
-        return False
-
-# ==================== Main ====================
-
-if __name__ == "__main__":
-    # فحص الـ syntax قبل التشغيل
-    logger.info("🔍 فحص الكود...")
-    if not check_syntax():
-        logger.error("❌ فشل فحص الكود - توقف التشغيل")
-        sys.exit(1)
-    
-    port = int(os.environ.get('PORT', 5000))
-    
-    logger.info("=" * 60)
-    logger.info("🌌 بوت الحوت - Cosmic Depth Edition")
-    logger.info("=" * 60)
-    logger.info(f"🔌 المنفذ: {port}")
-    logger.info(f"🤖 AI: {'✅' if USE_AI else '⚠️'}")
-    logger.info(f"📊 اللاعبون: {len(registered_players)}")
-    logger.info(f"🎮 الألعاب النشطة: {len(active_games)}")
-    
-    loaded = [name for name, cls in games.items() if cls]
-    logger.info(f"🎯 الألعاب المتوفرة ({len(loaded)}/8):")
-    for name in loaded:
-        logger.info(f"   ✓ {name}")
-    
-    if len(loaded) < len(games):
-        missing = [name for name, cls in games.items() if not cls]
-        logger.warning(f"⚠️ ألعاب غير متوفرة ({len(missing)}):")
-        for name in missing:
-            logger.warning(f"   ✗ {name}")
-    
-    logger.info(f"🎨 التصميم: Cosmic Depth")
-    logger.info(f"🔧 مصحح الأخطاء: مفعّل")
-    logger.info("=" * 60)
-    
-    try:
-        app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
-    except Exception as e:
-        logger.error(f"❌ فشل تشغيل التطبيق: {e}")
-        log_error('app_start', e)
-        sys.exit(1)
