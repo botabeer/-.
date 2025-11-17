@@ -37,7 +37,6 @@ class LettersWordsGame:
         ]
 
     def normalize_text(self, text):
-        """تطبيع النص لقبول جميع أشكال الحروف"""
         if not text:
             return ""
         text = text.strip().lower()
@@ -50,7 +49,6 @@ class LettersWordsGame:
         return text
 
     def get_neumorphism_card(self, title, question_num, letters_str, instruction):
-        """تصميم Flex Message احترافي بعرض الحروف في مربعات"""
         letters_list = letters_str.split()
         letter_boxes = [{
             "type": "box",
@@ -59,7 +57,6 @@ class LettersWordsGame:
             "backgroundColor":"#1F2937","cornerRadius":"12px","width":"50px","height":"60px","justifyContent":"center","paddingAll":"8px"
         } for l in letters_list]
         
-        # تقسيم الصفوف (3 × 3)
         first_row = letter_boxes[:3]
         second_row = letter_boxes[3:] if len(letter_boxes)>3 else []
         letters_display = {"type":"box","layout":"vertical","contents":[{"type":"box","layout":"horizontal","contents":first_row,"spacing":"md","justifyContent":"center"}]}
@@ -82,6 +79,7 @@ class LettersWordsGame:
         }
         return bubble
 
+    # --- بداية اللعبة ---
     def start_game(self):
         self.current_question = 1
         self.players_scores = {}
@@ -107,19 +105,31 @@ class LettersWordsGame:
             letters_str=letters_str,
             instruction=f"كوّن {self.words_per_question} كلمات صحيحة من الحروف"
         )
-        return FlexSendMessage(alt_text=f"سؤال {self.current_question}", contents=flex_card)
 
+        return {"response": FlexSendMessage(alt_text=f"سؤال {self.current_question}", contents=flex_card),
+                "points": 0, "correct": False, "next_question": True}
+
+    # --- التلميح ---
     def get_hint(self):
         if self.hint_used:
-            return TextSendMessage(text="▫️ تم استخدام التلميح مسبقاً")
+            return {"response": TextSendMessage(text="▫️ تم استخدام التلميح مسبقاً"),
+                    "points": 0, "correct": False, "next_question": False}
         self.hint_used = True
         example_word = random.choice(list(self.valid_words_set))
         first_letter = example_word[0]
         word_length = len(example_word)
         pattern = first_letter + " " + " ".join(["_"]*(word_length-1))
         hint_msg = f"💡 تلميح\n{pattern}\nعدد الحروف: {word_length}\n⚠️ النقاط ستصبح 1 بدل 2"
-        return TextSendMessage(text=hint_msg)
+        return {"response": TextSendMessage(text=hint_msg),
+                "points": 0, "correct": False, "next_question": False}
 
+    # --- عرض الإجابات ---
+    def show_answer(self):
+        suggestions = sorted(self.valid_words_set,key=len,reverse=True)[:4]
+        return {"response": TextSendMessage(text=f"✓ بعض الكلمات الصحيحة:\n{', '.join(suggestions)}"),
+                "points": 0, "correct": False, "next_question": False}
+
+    # --- التحقق من الإجابة ---
     def check_answer(self, answer, user_id, display_name):
         answer_word = self.normalize_text(answer)
         if answer_word in ['لمح','تلميح','hint']:
@@ -127,20 +137,24 @@ class LettersWordsGame:
         if answer_word in ['جاوب','الحل','answer']:
             return self.show_answer()
         if answer_word in self.used_words:
-            return TextSendMessage(text=f"▫️ الكلمة '{answer}' مستخدمة مسبقاً")
+            return {"response": TextSendMessage(text=f"▫️ الكلمة '{answer}' مستخدمة مسبقاً"),
+                    "points": 0, "correct": False, "next_question": False}
 
         letters_copy = self.available_letters.copy()
         for char in answer_word:
             if char in letters_copy:
                 letters_copy.remove(char)
             else:
-                return TextSendMessage(text=f"▫️ لا يمكن تكوين '{answer}' من الحروف: {' '.join(self.available_letters)}")
+                return {"response": TextSendMessage(text=f"▫️ لا يمكن تكوين '{answer}' من الحروف: {' '.join(self.available_letters)}"),
+                        "points": 0, "correct": False, "next_question": False}
 
         if len(answer_word)<2:
-            return TextSendMessage(text="▫️ الكلمة يجب أن تكون حرفين على الأقل")
+            return {"response": TextSendMessage(text="▫️ الكلمة يجب أن تكون حرفين على الأقل"),
+                    "points": 0, "correct": False, "next_question": False}
 
         if answer_word not in {self.normalize_text(w) for w in self.valid_words_set}:
-            return TextSendMessage(text=f"▫️ '{answer}' ليست كلمة صحيحة")
+            return {"response": TextSendMessage(text=f"▫️ '{answer}' ليست كلمة صحيحة"),
+                    "points": 0, "correct": False, "next_question": False}
 
         self.used_words.add(answer_word)
         if user_id not in self.players_words:
@@ -153,18 +167,19 @@ class LettersWordsGame:
         self.players_scores[display_name]['score'] += points
 
         if self.players_words[user_id]>=self.words_per_question:
-            self.current_question+=1
-            if self.current_question>self.max_questions:
-                return self._end_game()
-            return TextSendMessage(text=f"✅ أحسنت يا {display_name}!\n{self.next_question().alt_text}")
+            self.current_question += 1
+            if self.current_question > self.max_questions:
+                resp = self._end_game()
+                return {"response": resp, "points": points, "correct": True, "next_question": False}
+            next_q = self.next_question()
+            return {"response": TextSendMessage(text=f"✅ أحسنت يا {display_name}!\n{next_q['response'].alt_text}"),
+                    "points": points, "correct": True, "next_question": True}
         else:
             remaining = self.words_per_question - self.players_words[user_id]
-            return TextSendMessage(text=f"✅ صحيح يا {display_name}!\nكلمة أخرى ({remaining} متبقية)")
+            return {"response": TextSendMessage(text=f"✅ صحيح يا {display_name}!\nكلمة أخرى ({remaining} متبقية)"),
+                    "points": points, "correct": True, "next_question": False}
 
-    def show_answer(self):
-        suggestions = sorted(self.valid_words_set,key=len,reverse=True)[:4]
-        return TextSendMessage(text=f"✓ بعض الكلمات الصحيحة:\n{', '.join(suggestions)}")
-
+    # --- نهاية اللعبة ---
     def _end_game(self):
         if not self.players_scores:
             return TextSendMessage(text="▫️ انتهت اللعبة\nلم يشارك أحد")
