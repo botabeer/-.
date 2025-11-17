@@ -6,6 +6,7 @@ from .opposite_game import OppositeGame
 from .letters_words_game import LettersWordsGame
 from .differences_game import DifferencesGame
 from .compatibility_game import CompatibilityGame
+from .speed_sorting_game import SpeedSortingGame
 
 __all__ = [
     "SongGame",
@@ -15,5 +16,6 @@ __all__ = [
     "OppositeGame",
     "LettersWordsGame",
     "DifferencesGame",
-    "CompatibilityGame"
+    "CompatibilityGame",
+    "SpeedSortingGame"
 ]
