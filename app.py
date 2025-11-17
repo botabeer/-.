@@ -1,4 +1,4 @@
-"""بوت الحوت v3.1 - نظام ألعاب تفاعلية محسّن"""
+"""بوت الحوت v3.2 - نسخة نهائية محسّنة"""
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError, LineBotApiError
@@ -9,14 +9,14 @@ from collections import defaultdict, deque, Counter
 from functools import lru_cache
 from queue import Queue
 
-# إعداد Logging محسّن
+# إعداد Logging
 os.makedirs('logs', exist_ok=True)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s',
                    handlers=[logging.StreamHandler(sys.stdout),
                            logging.handlers.RotatingFileHandler('logs/bot.log', maxBytes=10*1024*1024, backupCount=5, encoding='utf-8')])
 logger = logging.getLogger("whale-bot")
 
-print("\n" + "═"*60 + "\nبوت الحوت v3.1 - محسّن\n" + "═"*60 + "\n")
+print("\n" + "═"*60 + "\nبوت الحوت v3.2\n" + "═"*60 + "\n")
 
 # الإعدادات
 LINE_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
@@ -27,11 +27,13 @@ app = Flask(__name__)
 line_bot_api = LineBotApi(LINE_TOKEN) if LINE_TOKEN else None
 handler = WebhookHandler(LINE_SECRET) if LINE_SECRET else None
 
-# بيانات مشتركة
-active_games = {}
-registered_players = set()
+active_games, registered_players = {}, set()
 
-# Rate Limiter محسّن
+# ألوان موحدة (نفس صورة الحوت)
+C = {'bg':'#0F172A','card':'#1E293B','card2':'#334155','text':'#F1F5F9','text2':'#94A3B8',
+     'sep':'#475569','cyan':'#06B6D4','cyan_glow':'#22D3EE','purple':'#8B5CF6','success':'#10B981'}
+
+# Rate Limiter
 class RateLimiter:
     def __init__(self, max_req=10, window=60):
         self.max_req, self.window = max_req, window
@@ -56,7 +58,6 @@ class Metrics:
         self.msgs = Counter()
         self.games = Counter()
         self.start = datetime.now()
-    
     def log_msg(self, uid): self.msgs[uid] += 1
     def log_game(self, gtype): self.games[gtype] += 1
     def stats(self): 
@@ -66,7 +67,7 @@ class Metrics:
 
 metrics = Metrics()
 
-# Gemini AI محسّن
+# Gemini AI
 USE_AI, model = False, None
 try:
     import google.generativeai as genai
@@ -81,7 +82,6 @@ except Exception as e:
 class GeminiClient:
     def __init__(self, keys):
         self.keys, self.idx, self.lock = keys, 0, threading.Lock()
-    
     def ask(self, prompt):
         if not USE_AI or not self.keys: return None
         for _ in range(len(self.keys)):
@@ -89,7 +89,7 @@ class GeminiClient:
                 r = model.generate_content(prompt)
                 if r and r.text: return r.text.strip()[:1000]
             except Exception as e:
-                logger.error(f"Gemini خطأ: {e}")
+                logger.error(f"Gemini: {e}")
                 with self.lock:
                     self.idx = (self.idx + 1) % len(self.keys)
                     genai.configure(api_key=self.keys[self.idx])
@@ -97,7 +97,7 @@ class GeminiClient:
 
 gemini = GeminiClient(GEMINI_KEYS) if GEMINI_KEYS else None
 
-# قاعدة بيانات محسّنة
+# قاعدة بيانات
 DB = 'whale_bot.db'
 
 class DBPool:
@@ -107,7 +107,6 @@ class DBPool:
             conn = sqlite3.connect(db, check_same_thread=False)
             conn.row_factory = sqlite3.Row
             self.pool.put(conn)
-    
     def execute(self, query, params=()):
         conn = self.pool.get()
         try:
@@ -117,11 +116,9 @@ class DBPool:
             return c
         finally:
             self.pool.put(conn)
-    
     def fetchone(self, query, params=()):
         c = self.execute(query, params)
         return dict(c.fetchone()) if c.rowcount else None
-    
     def fetchall(self, query, params=()):
         c = self.execute(query, params)
         return [dict(r) for r in c.fetchall()]
@@ -140,13 +137,13 @@ def init_db():
         logger.info("قاعدة البيانات جاهزة")
         return True
     except Exception as e:
-        logger.error(f"DB خطأ: {e}")
+        logger.error(f"DB: {e}")
         return False
 
 init_db()
 db = DBPool(DB)
 
-# دوال مساعدة محسّنة
+# دوال مساعدة
 def safe_text(t, max_len=500):
     return str(t or "").strip()[:max_len].replace('"','').replace("'",'')
 
@@ -170,7 +167,7 @@ def update_user(uid, name):
     try:
         db.execute('INSERT OR REPLACE INTO players (user_id,display_name,last_active) VALUES (?,?,?)',
                   (uid, safe_text(name,100), datetime.now().isoformat()))
-    except Exception as e: logger.error(f"تحديث خطأ: {e}")
+    except Exception as e: logger.error(f"تحديث: {e}")
 
 def update_points(uid, name, pts, won=False):
     try:
@@ -182,7 +179,7 @@ def update_points(uid, name, pts, won=False):
         else:
             db.execute('INSERT INTO players VALUES (?,?,?,1,?,?)',
                       (uid, safe_text(name,100), max(0,pts), 1 if won else 0, datetime.now().isoformat()))
-    except Exception as e: logger.error(f"نقاط خطأ: {e}")
+    except Exception as e: logger.error(f"نقاط: {e}")
 
 def get_stats(uid):
     return db.fetchone('SELECT * FROM players WHERE user_id=?', (uid,))
@@ -194,8 +191,8 @@ def cleanup_inactive():
     try:
         cutoff = (datetime.now()-timedelta(days=45)).isoformat()
         c = db.execute('DELETE FROM players WHERE last_active<?', (cutoff,))
-        if c.rowcount: logger.info(f"حذف {c.rowcount} مستخدم غير نشط")
-    except Exception as e: logger.error(f"تنظيف خطأ: {e}")
+        if c.rowcount: logger.info(f"حذف {c.rowcount} مستخدم")
+    except Exception as e: logger.error(f"تنظيف: {e}")
 
 threading.Thread(target=lambda: [time.sleep(21600) or cleanup_inactive() for _ in iter(int,1)], daemon=True).start()
 
@@ -208,7 +205,7 @@ def load_txt(name):
         logger.warning(f"{name}.txt غير موجود")
         return []
 
-QUESTIONS, CHALLENGES, CONFESSIONS, MENTIONS = [load_txt(x) for x in ['questions','challenges','confessions','mentions']]
+QUESTIONS, CHALLENGES, CONFESSIONS, MENTIONS = [load_txt(x) for x in ['questions','challenges','confessions','more_questions']]
 q_idx = c_idx = cf_idx = m_idx = 0
 
 def next_content(items, idx_name):
@@ -224,107 +221,206 @@ def get_qr():
     btns = ["أغنية","لعبة","سلسلة","أسرع","ضد","تكوين","ترتيب","كلمة","لون","سؤال","تحدي","اعتراف","منشن"]
     return QuickReply(items=[QuickReplyButton(action=MessageAction(label=f"▫️ {b}",text=b)) for b in btns])
 
-# Flex Cards مضغوطة
-C = {'bg':'#0F172A','card':'#1E293B','text':'#F1F5F9','text2':'#94A3B8','sep':'#334155','btn':'#06B6D4'}
+# مكونات Flex محسّنة
+def create_glass_box(contents, margin="md"):
+    """صندوق زجاجي ثري دي"""
+    return {
+        "type":"box","layout":"vertical","contents":contents,
+        "backgroundColor":C['card'],"cornerRadius":"16px","paddingAll":"20px","margin":margin,
+        "borderWidth":"2px","borderColor":"#ffffff10",
+        "action":None
+    }
 
-def create_card(title, body_contents, footer_btns=None):
-    return {"type":"bubble","size":"kilo",
-            "body":{"type":"box","layout":"vertical","contents":[
-                {"type":"text","text":title,"size":"xl","weight":"bold","color":C['text'],"align":"center"},
-                {"type":"separator","margin":"lg","color":C['sep']}] + body_contents,
-                "paddingAll":"24px","backgroundColor":C['bg']},
-            "footer":{"type":"box","layout":"vertical",
-                     "contents":[{"type":"button","action":{"type":"message","label":b[0],"text":b[1]},
-                                 "style":"primary" if i==0 else "secondary","color":C['btn'] if i==0 else None,
-                                 "margin":"sm" if i>0 else None} for i,b in enumerate(footer_btns)],
-                     "paddingAll":"16px","backgroundColor":C['bg']} if footer_btns else None}
+def create_glow_text(text, size="xl", glow=True):
+    """نص متوهج"""
+    return {
+        "type":"text","text":text,"size":size,"weight":"bold",
+        "color":C['cyan_glow'] if glow else C['text'],"align":"center"
+    }
 
+def create_progress_bar(current, total):
+    """شريط تقدم"""
+    return {
+        "type":"box","layout":"horizontal","contents":[
+            {"type":"box","layout":"vertical","contents":[],
+             "backgroundColor":C['cyan'],"height":"6px","flex":current,"cornerRadius":"3px"},
+            {"type":"box","layout":"vertical","contents":[],
+             "backgroundColor":C['card2'],"height":"6px","flex":total-current,"cornerRadius":"3px"}
+        ],"spacing":"xs","margin":"xl"
+    }
+
+# Flex Cards محسّنة
 def welcome_card():
-    games = "▫️ أغنية: خمن المغني\n▫️ لعبة: إنسان حيوان نبات\n▫️ سلسلة: كلمة بآخر حرف\n▫️ أسرع: أسرع إجابة\n▫️ ضد: عكس الكلمة\n▫️ تكوين | ترتيب | كلمة | لون"
-    fun = "▫️ سؤال | تحدي | اعتراف | منشن"
-    return create_card("بوت الحوت", [
-        {"type":"box","layout":"vertical","contents":[
-            {"type":"box","layout":"horizontal","contents":[
-                {"type":"box","layout":"vertical","contents":[
-                    {"type":"text","text":"♓","size":"4xl","color":C['btn'],"align":"center","weight":"bold"}
-                ],"width":"80px","height":"80px","backgroundColor":C['card'],"cornerRadius":"40px",
-                "justifyContent":"center","alignItems":"center","offsetTop":"0px"}
-            ],"justifyContent":"center","alignItems":"center"},
-            {"type":"text","text":"نظام ألعاب تفاعلية","size":"sm","color":C['text2'],"align":"center","margin":"md"}
-        ],"margin":"lg"},
-        {"type":"box","layout":"vertical","contents":[
-            {"type":"text","text":"الألعاب","size":"md","weight":"bold","color":C['text']},
-            {"type":"text","text":games,"size":"xs","color":C['text2'],"wrap":True,"margin":"md"}
-        ],"backgroundColor":C['card'],"cornerRadius":"12px","paddingAll":"16px","margin":"lg"},
-        {"type":"box","layout":"vertical","contents":[
-            {"type":"text","text":"التسلية (بدون نقاط)","size":"md","weight":"bold","color":C['text']},
-            {"type":"text","text":fun,"size":"xs","color":C['text2'],"wrap":True,"margin":"md"}
-        ],"backgroundColor":C['card'],"cornerRadius":"12px","paddingAll":"16px","margin":"md"}
-    ], [("المساعدة","مساعدة"),("نقاطي","نقاطي"),("الصدارة","الصدارة")])
+    return {
+        "type":"bubble","size":"kilo",
+        "body":{
+            "type":"box","layout":"vertical","contents":[
+                # الشعار المتوهج
+                create_glass_box([
+                    {"type":"text","text":"♓","size":"4xl","color":C['cyan_glow'],"align":"center","weight":"bold",
+                     "action":None}
+                ],"none"),
+                {"type":"text","text":"بوت الحوت","size":"xxl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
+                {"type":"text","text":"نظام ألعاب تفاعلية","size":"sm","color":C['text2'],"align":"center","margin":"sm"},
+                {"type":"separator","margin":"lg","color":C['sep']},
+                
+                # الألعاب
+                create_glass_box([
+                    {"type":"text","text":"🎮 الألعاب","size":"md","weight":"bold","color":C['text']},
+                    {"type":"text","text":"أغنية | لعبة | سلسلة | أسرع\nضد | تكوين | ترتيب | كلمة | لون",
+                     "size":"xs","color":C['text2'],"wrap":True,"margin":"sm"}
+                ]),
+                
+                # التسلية
+                create_glass_box([
+                    {"type":"text","text":"🎯 التسلية","size":"md","weight":"bold","color":C['text']},
+                    {"type":"text","text":"سؤال | تحدي | اعتراف | منشن | اختلاف | توافق",
+                     "size":"xs","color":C['text2'],"wrap":True,"margin":"sm"}
+                ])
+            ],
+            "backgroundColor":C['bg'],"paddingAll":"24px"
+        },
+        "footer":{
+            "type":"box","layout":"vertical","contents":[
+                {"type":"button","action":{"type":"message","label":"🎮 ابدأ اللعب","text":"مساعدة"},
+                 "style":"primary","color":C['cyan'],"height":"md"},
+                {"type":"box","layout":"horizontal","contents":[
+                    {"type":"button","action":{"type":"message","label":"📊 نقاطي","text":"نقاطي"},
+                     "style":"secondary","flex":1},
+                    {"type":"button","action":{"type":"message","label":"🏆 الصدارة","text":"الصدارة"},
+                     "style":"secondary","flex":1}
+                ],"spacing":"sm","margin":"sm"}
+            ],"paddingAll":"16px","backgroundColor":C['bg']}
+    }
 
 def help_card():
-    return create_card("المساعدة", [
-        {"type":"box","layout":"vertical","contents":[
-            {"type":"text","text":"أوامر اللعب","size":"md","weight":"bold","color":C['text']},
-            {"type":"text","text":"▫️ لمح: تلميح (-1)\n▫️ جاوب: عرض الحل\n▫️ إيقاف: إنهاء","size":"xs","color":C['text2'],"wrap":True,"margin":"md"}
-        ],"backgroundColor":C['card'],"cornerRadius":"12px","paddingAll":"16px","margin":"lg"},
-        {"type":"box","layout":"vertical","contents":[
-            {"type":"text","text":"الإحصائيات","size":"md","weight":"bold","color":C['text']},
-            {"type":"text","text":"▫️ نقاطي | الصدارة","size":"xs","color":C['text2'],"wrap":True,"margin":"md"}
-        ],"backgroundColor":C['card'],"cornerRadius":"12px","paddingAll":"16px","margin":"md"}
-    ], [("انضم","انضم"),("نقاطي","نقاطي")])
+    return {
+        "type":"bubble","size":"kilo",
+        "body":{
+            "type":"box","layout":"vertical","contents":[
+                {"type":"text","text":"📖 المساعدة","size":"xl","weight":"bold","color":C['cyan'],"align":"center"},
+                {"type":"separator","margin":"lg","color":C['sep']},
+                
+                create_glass_box([
+                    {"type":"text","text":"🎮 أوامر اللعب","size":"md","weight":"bold","color":C['text']},
+                    {"type":"text","text":"▫️ لمح: تلميح (-1 نقطة)\n▫️ جاوب: عرض الحل\n▫️ إيقاف: إنهاء اللعبة",
+                     "size":"xs","color":C['text2'],"wrap":True,"margin":"sm"}
+                ]),
+                
+                create_glass_box([
+                    {"type":"text","text":"📊 الإحصائيات","size":"md","weight":"bold","color":C['text']},
+                    {"type":"text","text":"▫️ نقاطي: عرض نقاطك\n▫️ الصدارة: أفضل اللاعبين",
+                     "size":"xs","color":C['text2'],"wrap":True,"margin":"sm"}
+                ])
+            ],
+            "backgroundColor":C['bg'],"paddingAll":"24px"
+        },
+        "footer":{
+            "type":"box","layout":"vertical","contents":[
+                {"type":"button","action":{"type":"message","label":"✅ انضم الآن","text":"انضم"},
+                 "style":"primary","color":C['success'],"height":"md"},
+                {"type":"button","action":{"type":"message","label":"❌ انسحب","text":"انسحب"},
+                 "style":"secondary","margin":"sm"}
+            ],"paddingAll":"16px","backgroundColor":C['bg']}
+    }
 
 def stats_card(uid, name, is_reg):
     stats = get_stats(uid)
     if not stats:
-        return create_card("إحصائياتك", [
-            {"type":"text","text":name,"size":"md","color":C['text'],"align":"center","margin":"lg"},
-            {"type":"text","text":"مسجل" if is_reg else "غير مسجل","size":"xs","color":"#34C759" if is_reg else C['text2'],"align":"center","margin":"sm"},
-            {"type":"text","text":"لم تبدأ بعد" if is_reg else "سجل أولاً","size":"md","color":C['text2'],"align":"center","margin":"lg"}
-        ], [("انضم","انضم")] if not is_reg else None)
+        return {
+            "type":"bubble","size":"kilo",
+            "body":{
+                "type":"box","layout":"vertical","contents":[
+                    {"type":"text","text":"📊 إحصائياتك","size":"xl","weight":"bold","color":C['cyan'],"align":"center"},
+                    {"type":"separator","margin":"lg","color":C['sep']},
+                    create_glass_box([
+                        {"type":"text","text":name,"size":"lg","color":C['text'],"align":"center"},
+                        {"type":"text","text":"مسجل ✓" if is_reg else "غير مسجل","size":"sm",
+                         "color":C['success'] if is_reg else C['text2'],"align":"center","margin":"sm"},
+                        {"type":"text","text":"لم تبدأ بعد" if is_reg else "سجل للبدء","size":"md",
+                         "color":C['text2'],"align":"center","margin":"md"}
+                    ])
+                ],"backgroundColor":C['bg'],"paddingAll":"24px"},
+            "footer":{"type":"box","layout":"vertical","contents":[
+                {"type":"button","action":{"type":"message","label":"✅ انضم","text":"انضم"},
+                 "style":"primary","color":C['success']}
+            ],"paddingAll":"16px","backgroundColor":C['bg']} if not is_reg else None
+        }
     
     wr = (stats['wins']/stats['games_played']*100) if stats['games_played']>0 else 0
-    return create_card("إحصائياتك", [
-        {"type":"text","text":name,"size":"md","color":C['text'],"align":"center","margin":"lg"},
-        {"type":"box","layout":"vertical","contents":[
-            {"type":"box","layout":"horizontal","contents":[
-                {"type":"text","text":"النقاط","size":"sm","color":C['text2'],"flex":1},
-                {"type":"text","text":str(stats['total_points']),"size":"xxl","weight":"bold","color":C['btn'],"flex":1,"align":"end"}
-            ]},
-            {"type":"separator","margin":"lg","color":C['sep']},
-            {"type":"box","layout":"horizontal","contents":[
-                {"type":"text","text":"الألعاب","size":"sm","color":C['text2'],"flex":1},
-                {"type":"text","text":str(stats['games_played']),"size":"md","color":C['text'],"flex":1,"align":"end"}
-            ],"margin":"lg"},
-            {"type":"box","layout":"horizontal","contents":[
-                {"type":"text","text":"الفوز","size":"sm","color":C['text2'],"flex":1},
-                {"type":"text","text":str(stats['wins']),"size":"md","color":C['text'],"flex":1,"align":"end"}
-            ],"margin":"md"},
-            {"type":"box","layout":"horizontal","contents":[
-                {"type":"text","text":"معدل الفوز","size":"sm","color":C['text2'],"flex":1},
-                {"type":"text","text":f"{wr:.0f}%","size":"md","color":C['text'],"flex":1,"align":"end"}
-            ],"margin":"md"}
-        ],"backgroundColor":C['card'],"cornerRadius":"12px","paddingAll":"16px","margin":"lg"}
-    ], [("الصدارة","الصدارة")])
+    return {
+        "type":"bubble","size":"kilo",
+        "body":{
+            "type":"box","layout":"vertical","contents":[
+                {"type":"text","text":"📊 إحصائياتك","size":"xl","weight":"bold","color":C['cyan'],"align":"center"},
+                {"type":"separator","margin":"lg","color":C['sep']},
+                create_glass_box([
+                    {"type":"text","text":name,"size":"lg","color":C['text'],"align":"center"},
+                    {"type":"text","text":"مسجل ✓","size":"sm","color":C['success'],"align":"center","margin":"sm"}
+                ],"md"),
+                create_glass_box([
+                    {"type":"box","layout":"horizontal","contents":[
+                        {"type":"text","text":"💎 النقاط","size":"sm","color":C['text2'],"flex":1},
+                        {"type":"text","text":str(stats['total_points']),"size":"xxl","weight":"bold",
+                         "color":C['cyan_glow'],"flex":1,"align":"end"}
+                    ]},
+                    {"type":"separator","margin":"md","color":C['sep']},
+                    {"type":"box","layout":"horizontal","contents":[
+                        {"type":"text","text":"🎮 الألعاب","size":"sm","color":C['text2'],"flex":1},
+                        {"type":"text","text":str(stats['games_played']),"size":"lg","color":C['text'],"flex":1,"align":"end"}
+                    ],"margin":"md"},
+                    {"type":"box","layout":"horizontal","contents":[
+                        {"type":"text","text":"🏆 الفوز","size":"sm","color":C['text2'],"flex":1},
+                        {"type":"text","text":str(stats['wins']),"size":"lg","color":C['text'],"flex":1,"align":"end"}
+                    ],"margin":"sm"},
+                    {"type":"box","layout":"horizontal","contents":[
+                        {"type":"text","text":"📈 المعدل","size":"sm","color":C['text2'],"flex":1},
+                        {"type":"text","text":f"{wr:.0f}%","size":"lg","color":C['text'],"flex":1,"align":"end"}
+                    ],"margin":"sm"}
+                ])
+            ],"backgroundColor":C['bg'],"paddingAll":"24px"},
+        "footer":{"type":"box","layout":"vertical","contents":[
+            {"type":"button","action":{"type":"message","label":"🏆 الصدارة","text":"الصدارة"},
+             "style":"secondary"}
+        ],"paddingAll":"16px","backgroundColor":C['bg']}
+    }
 
 def leaderboard_card():
     leaders = get_leaderboard()
     if not leaders:
-        return create_card("لوحة الصدارة", [{"type":"text","text":"لا توجد بيانات","size":"md","color":C['text2'],"align":"center","margin":"lg"}])
+        return {
+            "type":"bubble","size":"kilo",
+            "body":{"type":"box","layout":"vertical","contents":[
+                {"type":"text","text":"🏆 لوحة الصدارة","size":"xl","weight":"bold","color":C['cyan'],"align":"center"},
+                {"type":"separator","margin":"lg","color":C['sep']},
+                {"type":"text","text":"لا توجد بيانات","size":"md","color":C['text2'],"align":"center","margin":"lg"}
+            ],"backgroundColor":C['bg'],"paddingAll":"24px"}
+        }
     
     items = []
     for i,l in enumerate(leaders,1):
-        rank = ["🥇","🥈","🥉"][i-1] if i<=3 else str(i)
-        items.append({"type":"box","layout":"horizontal","contents":[
-            {"type":"text","text":rank,"size":"sm","weight":"bold","flex":0,"color":C['text']},
-            {"type":"text","text":l['display_name'],"size":"sm","flex":3,"margin":"md","wrap":True,"color":C['text']},
-            {"type":"text","text":str(l['total_points']),"size":"sm","weight":"bold","flex":1,"align":"end","color":C['btn']}
-        ],"backgroundColor":C['card'],"cornerRadius":"12px","paddingAll":"12px","margin":"sm" if i>1 else "md"})
+        rank = ["🥇","🥈","🥉"][i-1] if i<=3 else f"#{i}"
+        items.append({
+            "type":"box","layout":"horizontal","contents":[
+                {"type":"text","text":rank,"size":"md" if i<=3 else "sm","weight":"bold","flex":0,"color":C['cyan'] if i<=3 else C['text']},
+                {"type":"text","text":l['display_name'],"size":"sm","flex":3,"margin":"md","wrap":True,
+                 "color":C['cyan'] if i==1 else C['text']},
+                {"type":"text","text":str(l['total_points']),"size":"lg" if i==1 else "md","weight":"bold",
+                 "flex":1,"align":"end","color":C['cyan_glow'] if i==1 else C['text2']}
+            ],"backgroundColor":C['card'] if i<=3 else C['card2'],"cornerRadius":"12px","paddingAll":"14px",
+            "margin":"sm" if i>1 else "md","borderWidth":"2px" if i==1 else "1px",
+            "borderColor":C['cyan'] if i==1 else "#ffffff05"
+        })
     
-    return create_card("لوحة الصدارة", [
-        {"type":"text","text":"أفضل اللاعبين","size":"sm","color":C['text2'],"align":"center","margin":"md"},
-        {"type":"box","layout":"vertical","contents":items,"margin":"lg"}
-    ])
+    return {
+        "type":"bubble","size":"kilo",
+        "body":{"type":"box","layout":"vertical","contents":[
+            {"type":"text","text":"🏆 لوحة الصدارة","size":"xl","weight":"bold","color":C['cyan'],"align":"center"},
+            {"type":"separator","margin":"lg","color":C['sep']},
+            {"type":"text","text":"أفضل اللاعبين","size":"sm","color":C['text2'],"align":"center","margin":"md"},
+            {"type":"box","layout":"vertical","contents":items,"margin":"md"}
+        ],"backgroundColor":C['bg'],"paddingAll":"24px"}
+    }
 
 # استيراد الألعاب
 try:
@@ -371,10 +467,10 @@ def handle_message(event):
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"⏹️ تم إيقاف {g['type']}" if g else "لا توجد لعبة",quick_reply=get_qr()))
         if txt in ['انضم','تسجيل','join']:
             if uid in registered_players:
-                return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"أنت مسجل يا {name}",quick_reply=get_qr()))
+                return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"✓ أنت مسجل يا {name}",quick_reply=get_qr()))
             registered_players.add(uid)
             logger.info(f"تسجيل: {name}")
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"✅ تم تسجيلك يا {name}",quick_reply=get_qr()))
+            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"✅ تم تسجيلك يا {name}\nابدأ اللعب الآن!",quick_reply=get_qr()))
         if txt in ['انسحب','خروج']:
             if uid not in registered_players:
                 return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="غير مسجل",quick_reply=get_qr()))
@@ -394,7 +490,8 @@ def handle_message(event):
         # ألعاب
         is_reg = uid in registered_players
         if GAMES_LOADED:
-            gmap = {'أغنية':'song','لعبة':'game','سلسلة':'chain','أسرع':'fast','ضد':'opposite','تكوين':'build','ترتيب':'order','كلمة':'word','لون':'color','اختلاف':'diff','توافق':'compat'}
+            gmap = {'أغنية':'song','لعبة':'game','سلسلة':'chain','أسرع':'fast','ضد':'opposite',
+                   'تكوين':'build','ترتيب':'order','كلمة':'word','لون':'color','اختلاف':'diff','توافق':'compat'}
             if txt in gmap:
                 if not is_reg:
                     return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ سجل أولاً: انضم",quick_reply=get_qr()))
@@ -408,7 +505,7 @@ def handle_message(event):
                 if r: return line_bot_api.reply_message(event.reply_token,r)
     
     except Exception as e:
-        logger.error(f"معالجة خطأ: {e}", exc_info=True)
+        logger.error(f"معالجة: {e}", exc_info=True)
 
 # Routes
 @app.route("/", methods=['GET'])
@@ -417,16 +514,19 @@ def home():
     return f"""<!DOCTYPE html>
 <html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>بوت الحوت</title><style>*{{margin:0;padding:0;box-sizing:border-box}}
-body{{font-family:-apple-system,sans-serif;background:#0F172A;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}}
-.container{{background:#1E293B;border-radius:24px;box-shadow:0 20px 60px rgba(6,182,212,0.3);padding:40px;max-width:600px;width:100%;border:2px solid rgba(6,182,212,0.2)}}
-h1{{color:#06B6D4;font-size:2.5em;margin-bottom:8px;text-align:center;font-weight:700;text-shadow:0 0 30px rgba(6,182,212,0.5)}}
-.logo{{font-size:4em;text-align:center;margin-bottom:10px;filter:drop-shadow(0 0 20px rgba(6,182,212,0.8))}}
-.subtitle{{color:#94A3B8;font-size:1em;text-align:center;margin-bottom:30px}}
-.status{{background:#0F172A;border-radius:16px;padding:24px;margin:20px 0;border:1px solid #334155}}
-.item{{display:flex;justify-content:space-between;padding:16px 0;border-bottom:1px solid #334155}}
+body{{font-family:-apple-system,sans-serif;background:#0F172A;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;position:relative;overflow:hidden}}
+body::before{{content:'';position:absolute;width:500px;height:500px;background:radial-gradient(circle,rgba(6,182,212,0.15),transparent 70%);border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%);animation:pulse 4s ease-in-out infinite}}
+@keyframes pulse{{0%,100%{{transform:translate(-50%,-50%) scale(1);opacity:0.3}}50%{{transform:translate(-50%,-50%) scale(1.1);opacity:0.6}}}}
+.container{{background:linear-gradient(135deg,#1E293B 0%,#0F172A 100%);border-radius:24px;box-shadow:0 0 60px rgba(6,182,212,0.4),0 20px 60px rgba(0,0,0,0.6);padding:40px;max-width:600px;width:100%;border:2px solid rgba(6,182,212,0.3);position:relative;z-index:1;backdrop-filter:blur(20px)}}
+.logo{{font-size:5em;text-align:center;margin-bottom:10px;filter:drop-shadow(0 0 30px rgba(6,182,212,0.9)) drop-shadow(0 0 50px rgba(6,182,212,0.6));animation:glow 3s ease-in-out infinite}}
+@keyframes glow{{0%,100%{{filter:drop-shadow(0 0 30px rgba(6,182,212,0.9)) drop-shadow(0 0 50px rgba(6,182,212,0.6))}}50%{{filter:drop-shadow(0 0 40px rgba(6,182,212,1)) drop-shadow(0 0 70px rgba(6,182,212,0.8))}}}}
+h1{{color:#06B6D4;font-size:2.5em;margin-bottom:8px;text-align:center;font-weight:700;text-shadow:0 0 30px rgba(6,182,212,0.6),0 0 50px rgba(6,182,212,0.4)}}
+.subtitle{{color:#94A3B8;font-size:1em;text-align:center;margin-bottom:30px;text-shadow:0 2px 10px rgba(0,0,0,0.5)}}
+.status{{background:rgba(30,41,59,0.5);border-radius:16px;padding:24px;margin:20px 0;border:1px solid rgba(6,182,212,0.2);backdrop-filter:blur(10px)}}
+.item{{display:flex;justify-content:space-between;padding:16px 0;border-bottom:1px solid rgba(71,85,105,0.3)}}
 .item:last-child{{border:none}}.label{{color:#94A3B8;font-size:0.95em}}.value{{color:#F1F5F9;font-weight:700;font-size:1.1em}}
 .badge{{padding:6px 14px;border-radius:20px;font-size:0.85em;font-weight:600}}
-.success{{background:rgba(6,182,212,0.2);color:#06B6D4;box-shadow:0 0 15px rgba(6,182,212,0.3)}}
+.success{{background:rgba(6,182,212,0.2);color:#06B6D4;box-shadow:0 0 20px rgba(6,182,212,0.4);border:1px solid rgba(6,182,212,0.3)}}
 .footer{{text-align:center;margin-top:30px;color:#64748B;font-size:0.85em}}
 </style></head><body><div class="container"><div class="logo">♓</div>
 <h1>بوت الحوت</h1><div class="subtitle">نظام ألعاب تفاعلية محسّن</div>
@@ -436,12 +536,12 @@ h1{{color:#06B6D4;font-size:2.5em;margin-bottom:8px;text-align:center;font-weigh
 <div class="item"><span class="label">الألعاب النشطة</span><span class="value">{len(active_games)}</span></div>
 <div class="item"><span class="label">إجمالي الرسائل</span><span class="value">{m['total_msgs']}</span></div>
 <div class="item"><span class="label">وقت التشغيل</span><span class="value">{int(m['uptime']/3600)}ساعة</span></div>
-</div><div class="footer">بوت الحوت v3.1 © 2025</div></div></body></html>"""
+</div><div class="footer">بوت الحوت v3.2 © 2025</div></div></body></html>"""
 
 @app.route("/health", methods=['GET'])
 def health():
     m = metrics.stats()
-    return {"status":"healthy","version":"3.1.0","timestamp":datetime.now().isoformat(),
+    return {"status":"healthy","version":"3.2.0","timestamp":datetime.now().isoformat(),
             "active_games":len(active_games),"registered_players":len(registered_players),
             "ai_enabled":USE_AI,"metrics":m}
 
@@ -455,7 +555,7 @@ def callback():
         logger.error("توقيع غير صالح")
         abort(400)
     except Exception as e:
-        logger.error(f"webhook خطأ: {e}")
+        logger.error(f"webhook: {e}")
     return 'OK'
 
 @app.errorhandler(404)
