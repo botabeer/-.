@@ -34,21 +34,24 @@ class CompatibilityGame:
         return compatibility
     
     def get_compatibility_message(self, compatibility):
+        """إرجاع وصف التوافق بدون إيموجي"""
         if compatibility >= 90:
-            return " توافق مثالي", ""
+            return "توافق مثالي"
         elif compatibility >= 75:
-            return " توافق ممتاز", ""
+            return "توافق ممتاز"
         elif compatibility >= 60:
-            return " توافق جيد", ""
+            return "توافق جيد"
         else:
-            return " توافق متوسط", ""
+            return "توافق متوسط"
     
     def start_game(self):
+        """بدء اللعبة وإرسال رسالة تعليمات"""
         return TextSendMessage(
-            text="▪️ لعبة التوافق 🖤\n\n▫️ اكتب اسمين مفصولين بمسافة\n\n💡 مثال: اسم اسم"
+            text="لعبة التوافق\n\nاكتب اسمين مفصولين بمسافة\nمثال: اسم1 اسم2"
         )
     
-    def check_answer(self, answer, user_id, display_name):
+    def check_answer(self, answer, user_id=None, display_name=None):
+        """التحقق من الأسماء وحساب النتيجة"""
         if not self.waiting_for_names:
             return None
         
@@ -57,7 +60,7 @@ class CompatibilityGame:
         if len(parts) < 2:
             return {
                 'response': TextSendMessage(
-                    text="⚠️ يجب كتابة اسمين مفصولين بمسافة\n\n💡 مثال: اسم اسم"
+                    text="يجب كتابة اسمين مفصولين بمسافة\nمثال: اسم1 اسم2"
                 ),
                 'points': 0,
                 'correct': False,
@@ -69,14 +72,14 @@ class CompatibilityGame:
         name2 = ' '.join(parts[1:])
         
         compatibility = self.calculate_compatibility(name1, name2)
-        message, emoji = self.get_compatibility_message(compatibility)
+        message = self.get_compatibility_message(compatibility)
 
         self.waiting_for_names = False
         
         result_text = (
-            f"▪️ نسبة التوافق\n\n"
-            f"{name1} 🖤 {name2}\n\n"
-            f"{emoji} {compatibility}%\n\n"
+            f"نسبة التوافق\n\n"
+            f"{name1} و {name2}\n\n"
+            f"{compatibility}%\n\n"
             f"{message}"
         )
         
