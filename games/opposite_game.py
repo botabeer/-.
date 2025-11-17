@@ -13,7 +13,6 @@ class OppositeGame:
         self.C={'bg':'#0A0F1A','card':'#0F1823','card2':'#1A2332','text':'#E0F7FF','text2':'#7DD3FC','sep':'#00D9FF','cyan':'#00D9FF','glow':'#00E5FF','dark':'#030712'}
         self.all_words=[
             {"word":"كبير","opposite":"صغير","hint":"حجم"},
-            {"word":"طويل","opposite":"قصير","hint":"طول"},
             {"word":"سريع","opposite":"بطيء","hint":"سرعة"},
             {"word":"ساخن","opposite":"بارد","hint":"حرارة"},
             {"word":"قوي","opposite":"ضعيف","hint":"قوة"},
