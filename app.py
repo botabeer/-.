@@ -1,5 +1,3 @@
-# app.py - بوت الحوت المحسن
-
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
@@ -7,10 +5,10 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage, FlexSendM
 import os
 import sqlite3
 import logging
-from datetime import datetime, timedelta
 import random
 import time
 from collections import defaultdict
+from datetime import datetime
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,29 +17,19 @@ from config import *
 
 # تحميل الألعاب
 GAMES_LOADED = False
-GAMES_SOURCE = None
-
 try:
     import importlib.util
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    games_file = os.path.join(current_dir, 'games.py')
-    
-    if os.path.exists(games_file):
-        spec = importlib.util.spec_from_file_location("games_module", games_file)
-        games_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(games_module)
-        start_game = games_module.start_game
-        check_game_answer = games_module.check_game_answer
-        get_hint = games_module.get_hint
-        show_answer = games_module.show_answer
-        GAMES_LOADED = True
-        GAMES_SOURCE = "games.py"
-        logger.info("✓ تم تحميل الألعاب بنجاح")
-    else:
-        raise FileNotFoundError("games.py غير موجود")
+    spec = importlib.util.spec_from_file_location("games", "games.py")
+    games = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(games)
+    start_game = games.start_game
+    check_game_answer = games.check_game_answer
+    get_hint = games.get_hint
+    show_answer = games.show_answer
+    GAMES_LOADED = True
+    logger.info("✓ تم تحميل الألعاب")
 except Exception as e:
-    logger.error(f"✗ فشل تحميل الألعاب: {e}")
-    GAMES_LOADED = False
+    logger.error(f"✗ خطأ تحميل الألعاب: {e}")
 
 app = Flask(__name__)
 line_bot_api = LineBotApi(os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
@@ -50,8 +38,7 @@ handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
 active_games = {}
 rate_limiter = defaultdict(list)
 
-# ============= قاعدة البيانات =============
-
+# قاعدة البيانات
 def init_db():
     try:
         conn = sqlite3.connect(DB_NAME)
@@ -59,78 +46,48 @@ def init_db():
         cursor.executescript(DB_SCHEMA)
         conn.commit()
         conn.close()
-        logger.info("✓ تم تهيئة قاعدة البيانات")
+        logger.info("✓ قاعدة البيانات جاهزة")
     except Exception as e:
-        logger.error(f"✗ خطأ في قاعدة البيانات: {e}")
+        logger.error(f"✗ خطأ قاعدة البيانات: {e}")
+
+def db_execute(query, params=(), fetch=False):
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        result = cursor.fetchall() if fetch else None
+        conn.commit()
+        conn.close()
+        return result
+    except Exception as e:
+        logger.error(f"DB Error: {e}")
+        return None
 
 def register_user(user_id, name):
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
-        cursor.execute('INSERT OR REPLACE INTO players (user_id, name, last_active) VALUES (?, ?, CURRENT_TIMESTAMP)', (user_id, name))
-        conn.commit()
-        conn.close()
-        return True
-    except:
-        return False
+    return db_execute('INSERT OR REPLACE INTO players (user_id, name, last_active) VALUES (?, ?, CURRENT_TIMESTAMP)', (user_id, name))
 
 def update_user_name(user_id, name):
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
-        cursor.execute('UPDATE players SET name = ?, last_active = CURRENT_TIMESTAMP WHERE user_id = ?', (name, user_id))
-        conn.commit()
-        conn.close()
-    except:
-        pass
+    db_execute('UPDATE players SET name = ?, last_active = CURRENT_TIMESTAMP WHERE user_id = ?', (name, user_id))
 
 def is_registered(user_id):
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
-        cursor.execute('SELECT user_id FROM players WHERE user_id = ?', (user_id,))
-        result = cursor.fetchone()
-        conn.close()
-        return result is not None
-    except:
-        return False
+    result = db_execute('SELECT user_id FROM players WHERE user_id = ?', (user_id,), fetch=True)
+    return result is not None and len(result) > 0
 
 def update_points(user_id, points):
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
-        cursor.execute('UPDATE players SET points = points + ?, last_active = CURRENT_TIMESTAMP WHERE user_id = ?', (points, user_id))
-        conn.commit()
-        conn.close()
-    except:
-        pass
+    db_execute('UPDATE players SET points = points + ?, last_active = CURRENT_TIMESTAMP WHERE user_id = ?', (points, user_id))
 
 def get_user_stats(user_id):
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
-        cursor.execute('SELECT name, points, games_played, games_won FROM players WHERE user_id = ?', (user_id,))
-        result = cursor.fetchone()
-        conn.close()
-        if result:
-            return {'name': result[0], 'points': result[1], 'games_played': result[2], 'games_won': result[3]}
-        return None
-    except:
-        return None
+    result = db_execute('SELECT name, points, games_played, games_won FROM players WHERE user_id = ?', (user_id,), fetch=True)
+    if result and len(result) > 0:
+        r = result[0]
+        return {'name': r[0], 'points': r[1], 'games_played': r[2], 'games_won': r[3]}
+    return None
 
 def get_leaderboard(limit=10):
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
-        cursor.execute('SELECT name, points, games_won FROM players ORDER BY points DESC, games_won DESC LIMIT ?', (limit,))
-        results = cursor.fetchall()
-        conn.close()
-        return results
-    except:
-        return []
+    result = db_execute('SELECT name, points, games_won FROM players ORDER BY points DESC, games_won DESC LIMIT ?', (limit,), fetch=True)
+    return result if result else []
 
-# ============= Rate Limiter =============
-
+# Rate Limiter
 def check_rate_limit(user_id):
     now = time.time()
     user_requests = rate_limiter[user_id]
@@ -140,24 +97,19 @@ def check_rate_limit(user_id):
     user_requests.append(now)
     return True
 
-# ============= Quick Reply =============
-
+# Quick Reply
 def create_quick_reply():
-    return QuickReply(items=[
-        QuickReplyButton(action=MessageAction(label="أسرع", text="أسرع")),
-        QuickReplyButton(action=MessageAction(label="لعبة", text="لعبة")),
-        QuickReplyButton(action=MessageAction(label="سلسلة", text="سلسلة")),
-        QuickReplyButton(action=MessageAction(label="أغنية", text="أغنية")),
-        QuickReplyButton(action=MessageAction(label="ضد", text="ضد")),
-        QuickReplyButton(action=MessageAction(label="ترتيب", text="ترتيب")),
-        QuickReplyButton(action=MessageAction(label="تكوين", text="تكوين")),
-        QuickReplyButton(action=MessageAction(label="توافق", text="توافق")),
-        QuickReplyButton(action=MessageAction(label="سؤال", text="سؤال")),
-        QuickReplyButton(action=MessageAction(label="تحدي", text="تحدي"))
-    ])
+    items = [
+        QuickReplyButton(action=MessageAction(label=label, text=text))
+        for label, text in [
+            ("⏱️ أسرع", "أسرع"), ("🎮 لعبة", "لعبة"), ("🔗 سلسلة", "سلسلة"),
+            ("🎵 أغنية", "أغنية"), ("⚖️ ضد", "ضد"), ("📋 ترتيب", "ترتيب"),
+            ("🔤 تكوين", "تكوين"), ("💕 توافق", "توافق"), ("❓ سؤال", "سؤال"), ("🏆 تحدي", "تحدي")
+        ]
+    ]
+    return QuickReply(items=items)
 
-# ============= Flex Messages =============
-
+# Flex Messages
 def create_welcome_card():
     return {
         "type": "bubble",
@@ -194,14 +146,17 @@ def create_welcome_card():
                                 "paddingAll": "18px",
                                 "margin": "md",
                                 "contents": [
-                                    {"type": "text", "text": "⏱️ أسرع - أول من يكتب الكلمة/الدعاء الصحيح", "size": "sm", "color": C['text'], "wrap": True},
-                                    {"type": "text", "text": "🎮 لعبة - إنسان، حيوان، نبات، بلد", "size": "sm", "color": C['text'], "wrap": True, "margin": "sm"},
-                                    {"type": "text", "text": "🔗 سلسلة - كلمات متصلة", "size": "sm", "color": C['text'], "wrap": True, "margin": "sm"},
-                                    {"type": "text", "text": "🎵 أغنية - تخمين المغني", "size": "sm", "color": C['text'], "wrap": True, "margin": "sm"},
-                                    {"type": "text", "text": "⚖️ ضد - عكس الكلمة", "size": "sm", "color": C['text'], "wrap": True, "margin": "sm"},
-                                    {"type": "text", "text": "📋 ترتيب - ترتيب العناصر", "size": "sm", "color": C['text'], "wrap": True, "margin": "sm"},
-                                    {"type": "text", "text": "🔤 تكوين - تكوين 3 كلمات", "size": "sm", "color": C['text'], "wrap": True, "margin": "sm"},
-                                    {"type": "text", "text": "💕 توافق - نسبة التوافق", "size": "sm", "color": C['text'], "wrap": True, "margin": "sm"}
+                                    {"type": "text", "text": f"{i}. {desc}", "size": "sm", "color": C['text'], "wrap": True, "margin": "xs" if i > 1 else "none"}
+                                    for i, desc in enumerate([
+                                        "⏱️ أسرع - أول من يكتب الكلمة/الدعاء",
+                                        "🎮 لعبة - إنسان، حيوان، نبات، بلد",
+                                        "🔗 سلسلة - كلمات متصلة",
+                                        "🎵 أغنية - تخمين المغني",
+                                        "⚖️ ضد - عكس الكلمة",
+                                        "📋 ترتيب - ترتيب العناصر",
+                                        "🔤 تكوين - 3 كلمات من حروف",
+                                        "💕 توافق - نسبة التوافق"
+                                    ], 1)
                                 ]
                             },
                             {"type": "text", "text": "محتوى ترفيهي\nسؤال • تحدي • اعتراف • منشن", "align": "center", "size": "sm", "color": C['text2'], "margin": "lg", "wrap": True},
@@ -243,11 +198,14 @@ def create_help_card():
                     "paddingAll": "16px",
                     "margin": "md",
                     "contents": [
-                        {"type": "text", "text": "• لمح → تلميح ذكي (-1 نقطة)", "size": "sm", "color": C['text'], "wrap": True},
-                        {"type": "text", "text": "• جاوب → عرض الجواب والانتقال", "size": "sm", "color": C['text'], "wrap": True, "margin": "xs"},
-                        {"type": "text", "text": "• إيقاف → إنهاء اللعبة فوراً", "size": "sm", "color": C['text'], "wrap": True, "margin": "xs"},
-                        {"type": "text", "text": "• نقاطي → إحصائياتك الشخصية", "size": "sm", "color": C['text'], "wrap": True, "margin": "xs"},
-                        {"type": "text", "text": "• الصدارة → أفضل 10 لاعبين", "size": "sm", "color": C['text'], "wrap": True, "margin": "xs"}
+                        {"type": "text", "text": cmd, "size": "sm", "color": C['text'], "wrap": True, "margin": "xs" if i > 0 else "none"}
+                        for i, cmd in enumerate([
+                            "• لمح → تلميح ذكي (-1 نقطة)",
+                            "• جاوب → عرض الإجابة والانتقال",
+                            "• إيقاف → إنهاء اللعبة فوراً",
+                            "• نقاطي → إحصائياتك الشخصية",
+                            "• الصدارة → أفضل 10 لاعبين"
+                        ])
                     ]
                 },
                 {"type": "text", "text": "© بوت الحوت 2025", "align": "center", "size": "xs", "color": C['text2'], "margin": "lg"}
@@ -318,147 +276,159 @@ def create_leaderboard_card(leaderboard):
         }
     }
 
-# ============= معالجة الرسائل =============
-
+# معالجة الرسائل
 @app.route("/callback", methods=['POST'])
 def callback():
-    signature = request.headers['X-Line-Signature']
+    signature = request.headers.get('X-Line-Signature', '')
     body = request.get_data(as_text=True)
+    
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
+        logger.error("Invalid signature")
         abort(400)
+    except Exception as e:
+        logger.error(f"Callback error: {e}")
+        abort(500)
+    
     return 'OK'
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    user_id = event.source.user_id
-    text = event.message.text.strip()
-    group_id = getattr(event.source, 'group_id', user_id)
-    
-    if not check_rate_limit(user_id):
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['rate_limited']))
-        return
-    
     try:
-        profile = line_bot_api.get_profile(user_id)
-        user_name = profile.display_name
-    except:
-        user_name = "مستخدم"
-    
-    if not is_registered(user_id):
-        register_user(user_id, user_name)
-    else:
-        update_user_name(user_id, user_name)
-    
-    text_lower = text.lower()
-    
-    # أوامر البداية
-    if any(cmd in text_lower for cmd in CMDS['start'] + ['بوت', 'whale', 'مرحبا', 'السلام']):
-        flex = FlexSendMessage(alt_text="بوت الحوت", contents=create_welcome_card())
-        line_bot_api.reply_message(event.reply_token, flex, quick_reply=create_quick_reply())
-        return
-    
-    # المساعدة
-    if any(cmd in text_lower for cmd in CMDS['help']):
-        flex = FlexSendMessage(alt_text="المساعدة", contents=create_help_card())
-        line_bot_api.reply_message(event.reply_token, flex, quick_reply=create_quick_reply())
-        return
-    
-    # الإحصائيات
-    if any(cmd in text_lower for cmd in CMDS['stats']):
-        stats = get_user_stats(user_id)
-        if stats:
-            flex = FlexSendMessage(alt_text="إحصائياتك", contents=create_stats_card(stats))
-            line_bot_api.reply_message(event.reply_token, flex, quick_reply=create_quick_reply())
-        else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="لم يتم العثور على إحصائيات", quick_reply=create_quick_reply()))
-        return
-    
-    # الصدارة
-    if any(cmd in text_lower for cmd in CMDS['leaderboard']):
-        leaderboard = get_leaderboard()
-        if leaderboard:
-            flex = FlexSendMessage(alt_text="لوحة الصدارة", contents=create_leaderboard_card(leaderboard))
-            line_bot_api.reply_message(event.reply_token, flex, quick_reply=create_quick_reply())
-        else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="لا توجد بيانات للصدارة", quick_reply=create_quick_reply()))
-        return
-    
-    # بدء لعبة عشوائية
-    if text in ['ابدأ', 'start', 'بدء']:
-        if group_id in active_games:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['already_playing'], quick_reply=create_quick_reply()))
+        user_id = event.source.user_id
+        text = event.message.text.strip()
+        group_id = getattr(event.source, 'group_id', user_id)
+        
+        if not check_rate_limit(user_id):
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['rate_limited']))
             return
         
-        if GAMES_LOADED:
-            game_type = random.choice(GAMES_LIST[:8])
-            result = start_game(group_id, game_type, user_id, user_name)
-            active_games[group_id] = result['game_data']
+        try:
+            profile = line_bot_api.get_profile(user_id)
+            user_name = profile.display_name
+        except:
+            user_name = "مستخدم"
+        
+        if not is_registered(user_id):
+            register_user(user_id, user_name)
+        else:
+            update_user_name(user_id, user_name)
+        
+        text_lower = text.lower()
+        
+        # أوامر البداية
+        if any(cmd in text_lower for cmd in CMDS['start'] + ['بوت', 'whale', 'مرحبا', 'السلام']):
+            flex = FlexSendMessage(alt_text="بوت الحوت", contents=create_welcome_card())
+            line_bot_api.reply_message(event.reply_token, flex)
+            return
+        
+        # المساعدة
+        if any(cmd in text_lower for cmd in CMDS['help']):
+            flex = FlexSendMessage(alt_text="المساعدة", contents=create_help_card())
+            line_bot_api.reply_message(event.reply_token, flex)
+            return
+        
+        # الإحصائيات
+        if any(cmd in text_lower for cmd in CMDS['stats']):
+            stats = get_user_stats(user_id)
+            if stats:
+                flex = FlexSendMessage(alt_text="إحصائياتك", contents=create_stats_card(stats))
+                line_bot_api.reply_message(event.reply_token, flex)
+            else:
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="لم يتم العثور على إحصائيات"))
+            return
+        
+        # الصدارة
+        if any(cmd in text_lower for cmd in CMDS['leaderboard']):
+            leaderboard = get_leaderboard()
+            if leaderboard:
+                flex = FlexSendMessage(alt_text="لوحة الصدارة", contents=create_leaderboard_card(leaderboard))
+                line_bot_api.reply_message(event.reply_token, flex)
+            else:
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="لا توجد بيانات للصدارة"))
+            return
+        
+        # بدء لعبة عشوائية
+        if text in ['ابدأ', 'start', 'بدء']:
+            if group_id in active_games:
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['already_playing']))
+                return
+            
+            if GAMES_LOADED:
+                game_type = random.choice(GAMES_LIST[:8])
+                result = start_game(group_id, game_type, user_id, user_name)
+                active_games[group_id] = result['game_data']
+                
+                if result.get('flex'):
+                    flex = FlexSendMessage(alt_text=result['message'], contents=result['flex'])
+                    line_bot_api.reply_message(event.reply_token, flex)
+                else:
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=result['message']))
+            else:
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="الألعاب غير متوفرة حالياً"))
+            return
+        
+        # إيقاف اللعبة
+        if any(cmd in text_lower for cmd in CMDS['stop']):
+            if group_id in active_games:
+                del active_games[group_id]
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['game_stopped']))
+            else:
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['no_active_game']))
+            return
+        
+        # التلميح
+        if any(cmd in text_lower for cmd in CMDS['hint']):
+            if group_id in active_games and GAMES_LOADED:
+                game = active_games[group_id]
+                hint_text = get_hint(game)
+                if hint_text:
+                    update_points(user_id, POINTS['hint'])
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=hint_text))
+                else:
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="التلميح غير متوفر لهذه اللعبة"))
+            else:
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['no_active_game']))
+            return
+        
+        # جاوب
+        if any(cmd in text_lower for cmd in CMDS['answer']):
+            if group_id in active_games and GAMES_LOADED:
+                game = active_games[group_id]
+                answer_result = show_answer(game, group_id, active_games)
+                
+                if answer_result.get('flex'):
+                    flex = FlexSendMessage(alt_text=answer_result['message'], contents=answer_result['flex'])
+                    line_bot_api.reply_message(event.reply_token, flex)
+                else:
+                    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=answer_result['message']))
+            else:
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['no_active_game']))
+            return
+        
+        # التحقق من الإجابة
+        if group_id in active_games and GAMES_LOADED:
+            game = active_games[group_id]
+            result = check_game_answer(game, text, user_id, user_name, group_id, active_games)
+            
+            if result['correct']:
+                update_points(user_id, POINTS['correct'])
             
             if result.get('flex'):
                 flex = FlexSendMessage(alt_text=result['message'], contents=result['flex'])
-                line_bot_api.reply_message(event.reply_token, flex, quick_reply=create_quick_reply())
-            else:
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=result['message'], quick_reply=create_quick_reply()))
-        else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="الألعاب غير متوفرة حالياً", quick_reply=create_quick_reply()))
-        return
+                line_bot_api.reply_message(event.reply_token, flex)
+            elif result.get('message'):
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=result['message']))
     
-    # إيقاف اللعبة
-    if any(cmd in text_lower for cmd in CMDS['stop']):
-        if group_id in active_games:
-            del active_games[group_id]
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['game_stopped'], quick_reply=create_quick_reply()))
-        else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['no_active_game'], quick_reply=create_quick_reply()))
-        return
-    
-    # التلميح
-    if any(cmd in text_lower for cmd in CMDS['hint']):
-        if group_id in active_games and GAMES_LOADED:
-            game = active_games[group_id]
-            hint_text = get_hint(game)
-            if hint_text:
-                update_points(user_id, POINTS['hint'])
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=hint_text, quick_reply=create_quick_reply()))
-            else:
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="التلميح غير متوفر لهذه اللعبة", quick_reply=create_quick_reply()))
-        else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['no_active_game'], quick_reply=create_quick_reply()))
-        return
-    
-    # جاوب
-    if any(cmd in text_lower for cmd in CMDS['answer']):
-        if group_id in active_games and GAMES_LOADED:
-            game = active_games[group_id]
-            answer_result = show_answer(game, group_id, active_games)
-            
-            if answer_result.get('flex'):
-                flex = FlexSendMessage(alt_text=answer_result['message'], contents=answer_result['flex'])
-                line_bot_api.reply_message(event.reply_token, flex, quick_reply=create_quick_reply())
-            else:
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=answer_result['message'], quick_reply=create_quick_reply()))
-        else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['no_active_game'], quick_reply=create_quick_reply()))
-        return
-    
-    # التحقق من الإجابة
-    if group_id in active_games and GAMES_LOADED:
-        game = active_games[group_id]
-        result = check_game_answer(game, text, user_id, user_name, group_id, active_games)
-        
-        if result['correct']:
-            update_points(user_id, POINTS['correct'])
-        
-        if result.get('flex'):
-            flex = FlexSendMessage(alt_text=result['message'], contents=result['flex'])
-            line_bot_api.reply_message(event.reply_token, flex, quick_reply=create_quick_reply())
-        elif result.get('message'):
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=result['message'], quick_reply=create_quick_reply()))
+    except Exception as e:
+        logger.error(f"Handle message error: {e}")
+        try:
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="حدث خطأ، يرجى المحاولة مرة أخرى"))
+        except:
+            pass
 
-# ============= الصفحة الرئيسية =============
-
+# الصفحة الرئيسية
 @app.route("/")
 def index():
     status = "✓ متوفرة" if GAMES_LOADED else "✗ غير متوفرة"
@@ -507,16 +477,12 @@ def index():
     </html>
     """
 
-# ============= تشغيل التطبيق =============
-
+# تشغيل التطبيق
 if __name__ == "__main__":
     print("="*50)
     print("🐋 بوت الحوت - حالة البدء")
     print("="*50)
-    if GAMES_LOADED:
-        print(f"✓ تم تحميل الألعاب: {GAMES_SOURCE}")
-    else:
-        print("✗ تحذير: لم يتم تحميل الألعاب")
+    print(f"{'✓' if GAMES_LOADED else '✗'} تحميل الألعاب: {'نجح' if GAMES_LOADED else 'فشل'}")
     print("="*50)
     
     init_db()
