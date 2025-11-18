@@ -318,7 +318,7 @@ def help_card():
         "footer":{
             "type":"box","layout":"vertical","contents":[
                 {"type":"button","action":{"type":"message","label":"✅ انضم الآن","text":"انضم"},
-                 "style":"primary","color":C['success'],"height":"md"},
+                 "style":"primary","color":C['cyan'],"height":"md"},
                 {"type":"button","action":{"type":"message","label":"❌ انسحب","text":"انسحب"},
                  "style":"secondary","margin":"sm"}
             ],"paddingAll":"16px","backgroundColor":C['bg']}
