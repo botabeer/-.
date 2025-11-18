@@ -24,50 +24,54 @@ logger = logging.getLogger(__name__)
 # استيراد الإعدادات
 from config import *
 
-# استيراد الألعاب مع نظام بديل محسّن
+# استيراد الألعاب مع نظام بديل محسّن ومبسط
 GAMES_LOADED = False
 GAMES_SOURCE = None
 
-# المحاولة الأولى: استيراد من games.py مباشرة
+# المحاولة الأولى: استيراد مباشر من games.py في المجلد الحالي
 try:
-    import games as games_module
-    # التحقق من وجود الدوال المطلوبة
-    if hasattr(games_module, 'start_game'):
-        from games import start_game, check_game_answer, get_hint, show_answer
-        GAMES_LOADED = True
-        GAMES_SOURCE = "games.py"
-        logger.info("تم تحميل games.py بنجاح")
-    else:
-        raise ImportError("games.py لا يحتوي على الدوال المطلوبة")
-except (ImportError, AttributeError) as e:
-    logger.warning(f"فشل تحميل games.py: {e}")
+    import importlib.util
+    import os
     
-    # المحاولة الثانية: استيراد من مجلد games/
-    try:
-        import sys
-        import os
-        # إضافة مسار المجلد للـ path
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        games_dir = os.path.join(current_dir, 'games')
-        if games_dir not in sys.path:
-            sys.path.insert(0, games_dir)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    games_file = os.path.join(current_dir, 'games.py')
+    
+    if os.path.exists(games_file):
+        spec = importlib.util.spec_from_file_location("games_module", games_file)
+        games_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(games_module)
         
-        # محاولة الاستيراد من games/__init__.py
-        from games import start_game, check_game_answer, get_hint, show_answer
+        start_game = games_module.start_game
+        check_game_answer = games_module.check_game_answer
+        get_hint = games_module.get_hint
+        show_answer = games_module.show_answer
+        
         GAMES_LOADED = True
-        GAMES_SOURCE = "games/ (package)"
-        logger.info("تم تحميل games/ (package) بنجاح")
-    except (ImportError, AttributeError) as e2:
-        logger.error(f"فشل تحميل games/: {e2}")
+        GAMES_SOURCE = "games.py (direct)"
+        logger.info("تم تحميل games.py مباشرة")
+    else:
+        raise FileNotFoundError("games.py not found")
         
-        # المحاولة الثالثة: محاولة استيراد مباشر من ملفات المجلد
+except Exception as e:
+    logger.warning(f"فشل التحميل المباشر: {e}")
+    
+    # المحاولة الثانية: استيراد من games/games.py
+    try:
+        from games.games import start_game, check_game_answer, get_hint, show_answer
+        GAMES_LOADED = True
+        GAMES_SOURCE = "games/games.py"
+        logger.info("تم تحميل games/games.py")
+    except Exception as e2:
+        logger.warning(f"فشل تحميل games/games.py: {e2}")
+        
+        # المحاولة الثالثة: استيراد من games/__init__.py
         try:
-            from games.games import start_game, check_game_answer, get_hint, show_answer
+            from games import start_game, check_game_answer, get_hint, show_answer
             GAMES_LOADED = True
-            GAMES_SOURCE = "games/games.py"
-            logger.info("تم تحميل games/games.py بنجاح")
-        except (ImportError, AttributeError) as e3:
-            logger.error(f"فشل تحميل جميع مصادر الألعاب: {e3}")
+            GAMES_SOURCE = "games/__init__.py"
+            logger.info("تم تحميل games/__init__.py")
+        except Exception as e3:
+            logger.error(f"فشل جميع محاولات التحميل: {e3}")
             GAMES_LOADED = False
             GAMES_SOURCE = None
 
@@ -535,13 +539,21 @@ def handle_message(event):
     # أمر البداية/الترحيب
     if any(cmd in text_lower for cmd in CMDS['start'] + ['بوت', 'whale', 'مرحبا', 'السلام']):
         flex = FlexSendMessage(alt_text="بوت الحوت", contents=create_welcome_card())
-        line_bot_api.reply_message(event.reply_token, flex)
+        line_bot_api.reply_message(
+            event.reply_token,
+            flex,
+            quick_reply=create_quick_reply_buttons()
+        )
         return
     
     # أمر المساعدة
     if any(cmd in text_lower for cmd in CMDS['help']):
         flex = FlexSendMessage(alt_text="المساعدة", contents=create_help_card())
-        line_bot_api.reply_message(event.reply_token, flex)
+        line_bot_api.reply_message(
+            event.reply_token,
+            flex,
+            quick_reply=create_quick_reply_buttons()
+        )
         return
     
     # أمر الإحصائيات
@@ -549,9 +561,16 @@ def handle_message(event):
         stats = get_user_stats(user_id)
         if stats:
             flex = FlexSendMessage(alt_text="إحصائياتك", contents=create_stats_card(stats))
-            line_bot_api.reply_message(event.reply_token, flex)
+            line_bot_api.reply_message(
+                event.reply_token,
+                flex,
+                quick_reply=create_quick_reply_buttons()
+            )
         else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="لم يتم العثور على إحصائيات"))
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="لم يتم العثور على إحصائيات", quick_reply=create_quick_reply_buttons())
+            )
         return
     
     # أمر الصدارة
@@ -559,25 +578,41 @@ def handle_message(event):
         leaderboard = get_leaderboard()
         if leaderboard:
             flex = FlexSendMessage(alt_text="لوحة الصدارة", contents=create_leaderboard_card(leaderboard))
-            line_bot_api.reply_message(event.reply_token, flex)
+            line_bot_api.reply_message(
+                event.reply_token,
+                flex,
+                quick_reply=create_quick_reply_buttons()
+            )
         else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="لا توجد بيانات للصدارة"))
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="لا توجد بيانات للصدارة", quick_reply=create_quick_reply_buttons())
+            )
         return
     
     # أمر الانضمام
     if any(cmd in text_lower for cmd in CMDS['join']):
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['joined']))
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=MESSAGES['joined'], quick_reply=create_quick_reply_buttons())
+        )
         return
     
     # أمر الانسحاب
     if any(cmd in text_lower for cmd in CMDS['leave']):
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['left']))
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=MESSAGES['left'], quick_reply=create_quick_reply_buttons())
+        )
         return
     
     # أمر بدء لعبة عشوائية
     if text in ['ابدأ', 'start', 'بدء']:
         if group_id in active_games:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['already_playing']))
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=MESSAGES['already_playing'], quick_reply=create_quick_reply_buttons())
+            )
             return
         
         if GAMES_LOADED:
@@ -587,20 +622,36 @@ def handle_message(event):
             
             if result.get('flex'):
                 flex = FlexSendMessage(alt_text=result['message'], contents=result['flex'])
-                line_bot_api.reply_message(event.reply_token, flex)
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    flex,
+                    quick_reply=create_quick_reply_buttons()
+                )
             else:
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=result['message']))
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=result['message'], quick_reply=create_quick_reply_buttons())
+                )
         else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text="الألعاب غير متوفرة حالياً - يرجى التحقق من ملفات الألعاب"))
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="الألعاب غير متوفرة حالياً - يرجى التحقق من ملفات الألعاب", quick_reply=create_quick_reply_buttons())
+            )
         return
     
     # أمر إيقاف اللعبة
     if any(cmd in text_lower for cmd in CMDS['stop']):
         if group_id in active_games:
             del active_games[group_id]
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['game_stopped']))
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=MESSAGES['game_stopped'], quick_reply=create_quick_reply_buttons())
+            )
         else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['no_active_game']))
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=MESSAGES['no_active_game'], quick_reply=create_quick_reply_buttons())
+            )
         return
     
     # أمر التلميح
@@ -610,11 +661,20 @@ def handle_message(event):
             hint_text = get_hint(game)
             if hint_text:
                 update_points(user_id, POINTS['hint'])
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=hint_text))
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=hint_text, quick_reply=create_quick_reply_buttons())
+                )
             else:
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="التلميح غير متوفر لهذه اللعبة"))
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text="التلميح غير متوفر لهذه اللعبة", quick_reply=create_quick_reply_buttons())
+                )
         else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['no_active_game']))
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=MESSAGES['no_active_game'], quick_reply=create_quick_reply_buttons())
+            )
         return
     
     # أمر جاوب
@@ -625,11 +685,21 @@ def handle_message(event):
             
             if answer_result.get('flex'):
                 flex = FlexSendMessage(alt_text=answer_result['message'], contents=answer_result['flex'])
-                line_bot_api.reply_message(event.reply_token, flex)
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    flex,
+                    quick_reply=create_quick_reply_buttons()
+                )
             else:
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text=answer_result['message']))
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=answer_result['message'], quick_reply=create_quick_reply_buttons())
+                )
         else:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=MESSAGES['no_active_game']))
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=MESSAGES['no_active_game'], quick_reply=create_quick_reply_buttons())
+            )
         return
     
     # التحقق من الإجابة
@@ -642,9 +712,16 @@ def handle_message(event):
         
         if result.get('flex'):
             flex = FlexSendMessage(alt_text=result['message'], contents=result['flex'])
-            line_bot_api.reply_message(event.reply_token, flex)
+            line_bot_api.reply_message(
+                event.reply_token,
+                flex,
+                quick_reply=create_quick_reply_buttons()
+            )
         elif result.get('message'):
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=result['message']))
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=result['message'], quick_reply=create_quick_reply_buttons())
+            )
 
 # ============= الصفحة الرئيسية =============
 
