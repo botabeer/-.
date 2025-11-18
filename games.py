@@ -19,7 +19,7 @@ def game_header(title, subtitle):
     return [{"type":"box","layout":"vertical","contents":[{"type":"image","url":LOGO,"size":"60px","aspectMode":"cover"}],"width":"60px","height":"60px","cornerRadius":"30px","borderWidth":"2px","borderColor":C['cyan'],"margin":"none"},
         {"type":"text","text":title,"size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
         {"type":"text","text":subtitle,"size":"sm","color":C['text2'],"align":"center","margin":"xs"},
-        {"type":"separator","margin":"lg","color":C['border']}]
+        {"type":"separator","margin":"lg"}]
 
 def progress_bar(current, total):
     return {"type":"box","layout":"horizontal","contents":[
