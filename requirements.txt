@@ -8,3 +8,4 @@ redis
 pillow
 pandas
 matplotlib
+Werkzeug
