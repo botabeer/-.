@@ -1,12 +1,9 @@
-# games.py - ألعاب بوت الحوت المحسنة
-
 import random
 import re
 import time
 from config import C, GAME_SETTINGS, POINTS
 
-# ============= بيانات الألعاب =============
-
+# بيانات الألعاب
 FAST_WORDS = [
     {'q': 'سبحان الله وبحمده', 'a': 'سبحان الله العظيم'},
     {'q': 'لا إله إلا', 'a': 'الله'},
@@ -77,8 +74,7 @@ BUILD_DATA = [
     {'letters': 'س ي ا ر ة ت', 'words': ['سيارة', 'سير', 'رسا']}
 ]
 
-# ============= دوال مساعدة =============
-
+# دوال مساعدة
 def normalize_arabic(text):
     text = text.strip()
     text = re.sub('[أإآ]', 'ا', text)
@@ -180,8 +176,7 @@ def create_winner_card(winner_name, winner_points, game_name):
         }
     }
 
-# ============= الألعاب =============
-
+# الألعاب
 def start_game(group_id, game_type, user_id, user_name):
     game_data = {
         'type': game_type,
@@ -191,26 +186,18 @@ def start_game(group_id, game_type, user_id, user_name):
         'start_time': time.time()
     }
     
-    if game_type == 'fast':
-        return start_fast_game(game_data)
-    elif game_type == 'lbgame':
-        return start_lbgame(game_data)
-    elif game_type == 'chain':
-        return start_chain_game(game_data)
-    elif game_type == 'song':
-        return start_song_game(game_data)
-    elif game_type == 'opposite':
-        return start_opposite_game(game_data)
-    elif game_type == 'order':
-        return start_order_game(game_data)
-    elif game_type == 'build':
-        return start_build_game(game_data)
-    elif game_type == 'compat':
-        return start_compat_game(game_data)
+    games_map = {
+        'fast': start_fast_game,
+        'lbgame': start_lbgame,
+        'chain': start_chain_game,
+        'song': start_song_game,
+        'opposite': start_opposite_game,
+        'order': start_order_game,
+        'build': start_build_game,
+        'compat': start_compat_game
+    }
     
-    return {'message': 'لعبة غير معروفة', 'game_data': game_data}
-
-# ========== 1. لعبة أسرع ==========
+    return games_map.get(game_type, lambda x: {'message': 'لعبة غير معروفة', 'game_data': x})(game_data)
 
 def start_fast_game(game_data):
     item = random.choice(FAST_WORDS)
@@ -235,8 +222,6 @@ def check_fast_answer(game, text, user_id, user_name):
         return {'correct': True, 'points': points}
     
     return {'correct': False}
-
-# ========== 2. لعبة إنسان حيوان نبات بلد ==========
 
 def start_lbgame(game_data):
     item = random.choice(LBGAME_DATA)
@@ -263,8 +248,6 @@ def check_lbgame_answer(game, text, user_id, user_name):
         return {'correct': True}
     
     return {'correct': False}
-
-# ========== 3. سلسلة الكلمات ==========
 
 def start_chain_game(game_data):
     start_word = random.choice(CHAIN_START)
@@ -299,8 +282,6 @@ def check_chain_answer(game, text, user_id, user_name):
     
     return {'correct': False}
 
-# ========== 4. لعبة الأغنية ==========
-
 def start_song_game(game_data):
     song = random.choice(SONGS_DATA)
     game_data['current_lyrics'] = song['lyrics']
@@ -320,8 +301,6 @@ def check_song_answer(game, text, user_id, user_name):
     
     return {'correct': False}
 
-# ========== 5. لعبة الأضداد ==========
-
 def start_opposite_game(game_data):
     item = random.choice(OPPOSITE_DATA)
     game_data['current_word'] = item['word']
@@ -340,8 +319,6 @@ def check_opposite_answer(game, text, user_id, user_name):
         return {'correct': True}
     
     return {'correct': False}
-
-# ========== 6. لعبة الترتيب ==========
 
 def start_order_game(game_data):
     item = random.choice(ORDER_DATA)
@@ -371,8 +348,6 @@ def check_order_answer(game, text, user_id, user_name):
     
     return {'correct': False}
 
-# ========== 7. لعبة تكوين الكلمات ==========
-
 def start_build_game(game_data):
     item = random.choice(BUILD_DATA)
     game_data['current_letters'] = item['letters']
@@ -399,8 +374,6 @@ def check_build_answer(game, text, user_id, user_name):
     
     return {'correct': False}
 
-# ========== 8. لعبة التوافق ==========
-
 def start_compat_game(game_data):
     return {'message': '💕 لعبة التوافق\n\nاكتب اسمين لحساب نسبة التوافق\nمثال:\nأحمد\nفاطمة', 'game_data': game_data}
 
@@ -420,29 +393,22 @@ def check_compat_answer(game, text, user_id, user_name):
     
     return {'correct': True, 'message': message, 'end_game': True}
 
-# ============= دوال التحقق الرئيسية =============
-
+# دوال التحقق الرئيسية
 def check_game_answer(game, text, user_id, user_name, group_id, active_games):
     game_type = game['type']
     
-    result = {'correct': False, 'message': None}
+    check_map = {
+        'fast': check_fast_answer,
+        'lbgame': check_lbgame_answer,
+        'chain': check_chain_answer,
+        'song': check_song_answer,
+        'opposite': check_opposite_answer,
+        'order': check_order_answer,
+        'build': check_build_answer,
+        'compat': check_compat_answer
+    }
     
-    if game_type == 'fast':
-        result = check_fast_answer(game, text, user_id, user_name)
-    elif game_type == 'lbgame':
-        result = check_lbgame_answer(game, text, user_id, user_name)
-    elif game_type == 'chain':
-        result = check_chain_answer(game, text, user_id, user_name)
-    elif game_type == 'song':
-        result = check_song_answer(game, text, user_id, user_name)
-    elif game_type == 'opposite':
-        result = check_opposite_answer(game, text, user_id, user_name)
-    elif game_type == 'order':
-        result = check_order_answer(game, text, user_id, user_name)
-    elif game_type == 'build':
-        result = check_build_answer(game, text, user_id, user_name)
-    elif game_type == 'compat':
-        result = check_compat_answer(game, text, user_id, user_name)
+    result = check_map.get(game_type, lambda *args: {'correct': False})(game, text, user_id, user_name)
     
     if result['correct']:
         if result.get('end_game'):
@@ -471,47 +437,34 @@ def check_game_answer(game, text, user_id, user_name, group_id, active_games):
 def get_hint(game):
     game_type = game['type']
     
-    if game_type == 'fast':
-        return None
-    elif game_type == 'lbgame':
-        return f"💡 تلميح:\nالحرف: {game['current_letter']}\nمثال أول حرف:\nإنسان: {game['current_answers'][0][0]}_\nحيوان: {game['current_answers'][1][0]}_"
-    elif game_type == 'chain':
-        return f"💡 تلميح:\nابدأ بحرف: {game['last_letter']}\nعدد الحروف المقترح: 4-6"
-    elif game_type == 'song':
-        answer = game['current_artist']
-        return f"💡 تلميح:\nأول حرف: {answer[0]}\nعدد الحروف: {len(answer)}"
-    elif game_type == 'opposite':
-        answer = game['current_opposite']
-        return f"💡 تلميح:\nأول حرف: {answer[0]}\nعدد الحروف: {len(answer)}"
-    elif game_type == 'order':
-        return f"💡 تلميح:\nنوع الترتيب: {game['order_type']}\nالعنصر الأول: {game['correct_order'][0]}"
-    elif game_type == 'build':
-        return f"💡 تلميح:\nالحروف المتاحة: {game['current_letters']}\nمثال كلمة: {game['valid_words'][0][:2]}..."
-    elif game_type == 'compat':
-        return None
+    hints = {
+        'lbgame': lambda: f"💡 تلميح:\nالحرف: {game['current_letter']}\nمثال أول حرف:\nإنسان: {game['current_answers'][0][0]}_\nحيوان: {game['current_answers'][1][0]}_",
+        'chain': lambda: f"💡 تلميح:\nابدأ بحرف: {game['last_letter']}\nعدد الحروف المقترح: 4-6",
+        'song': lambda: f"💡 تلميح:\nأول حرف: {game['current_artist'][0]}\nعدد الحروف: {len(game['current_artist'])}",
+        'opposite': lambda: f"💡 تلميح:\nأول حرف: {game['current_opposite'][0]}\nعدد الحروف: {len(game['current_opposite'])}",
+        'order': lambda: f"💡 تلميح:\nنوع الترتيب: {game['order_type']}\nالعنصر الأول: {game['correct_order'][0]}",
+        'build': lambda: f"💡 تلميح:\nالحروف المتاحة: {game['current_letters']}\nمثال كلمة: {game['valid_words'][0][:2]}..."
+    }
     
-    return None
+    return hints.get(game_type, lambda: None)()
 
 def show_answer(game, group_id, active_games):
     game_type = game['type']
-    answer = ""
     
-    if game_type == 'fast':
-        answer = game['current_a']
-    elif game_type == 'lbgame':
-        answer = '\n'.join(game['current_answers'])
-    elif game_type == 'chain':
-        answer = f"أي كلمة تبدأ بـ {game['last_letter']}"
-    elif game_type == 'song':
-        answer = game['current_artist']
-    elif game_type == 'opposite':
-        answer = game['current_opposite']
-    elif game_type == 'order':
-        answer = '\n'.join(game['correct_order'])
-    elif game_type == 'build':
-        answer = '\n'.join(game['valid_words'])
-    elif game_type == 'compat':
+    answers = {
+        'fast': lambda: game['current_a'],
+        'lbgame': lambda: '\n'.join(game['current_answers']),
+        'chain': lambda: f"أي كلمة تبدأ بـ {game['last_letter']}",
+        'song': lambda: game['current_artist'],
+        'opposite': lambda: game['current_opposite'],
+        'order': lambda: '\n'.join(game['correct_order']),
+        'build': lambda: '\n'.join(game['valid_words'])
+    }
+    
+    if game_type == 'compat':
         return {'message': 'هذه اللعبة لا تدعم عرض الإجابة'}
+    
+    answer = answers.get(game_type, lambda: '')()
     
     game['round'] += 1
     
