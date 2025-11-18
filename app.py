@@ -11,9 +11,14 @@ from queue import Queue
 
 # إعداد Logging
 os.makedirs('logs', exist_ok=True)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s',
-                   handlers=[logging.StreamHandler(sys.stdout),
-                           logging.handlers.RotatingFileHandler('logs/bot.log', maxBytes=10*1024*1024, backupCount=5, encoding='utf-8')])
+logging.basicConfig(
+    level=logging.INFO, 
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.handlers.RotatingFileHandler('logs/bot.log', maxBytes=10*1024*1024, backupCount=5, encoding='utf-8')
+    ]
+)
 logger = logging.getLogger("whale-bot")
 
 print("\n" + "═"*60 + "\n♓ بوت الحوت v3.2 ♓\n" + "═"*60 + "\n")
@@ -30,9 +35,11 @@ handler = WebhookHandler(LINE_SECRET) if LINE_SECRET else None
 active_games, registered_players = {}, set()
 
 # ألوان موحدة (مطابقة للصورة - أزرق سماوي متوهج)
-C = {'bg':'#0A1628','card':'#0F2847','card2':'#1A3A5C','text':'#E0F2FF','text2':'#7FB3D5',
-     'sep':'#2C5F8D','cyan':'#00D9FF','cyan_glow':'#5EEBFF','purple':'#8B7FFF','success':'#00E5A0',
-     'border':'#00D9FF40'}
+C = {
+    'bg':'#0A1628','card':'#0F2847','card2':'#1A3A5C','text':'#E0F2FF','text2':'#7FB3D5',
+    'sep':'#2C5F8D','cyan':'#00D9FF','cyan_glow':'#5EEBFF','purple':'#8B7FFF','success':'#00E5A0',
+    'border':'#00D9FF40'
+}
 
 # شعار الحوت (Pisces) - نفس الشعار من الصورة
 PISCES_LOGO = "♓"
@@ -62,12 +69,19 @@ class Metrics:
         self.msgs = Counter()
         self.games = Counter()
         self.start = datetime.now()
-    def log_msg(self, uid): self.msgs[uid] += 1
-    def log_game(self, gtype): self.games[gtype] += 1
+    
+    def log_msg(self, uid): 
+        self.msgs[uid] += 1
+    
+    def log_game(self, gtype): 
+        self.games[gtype] += 1
+    
     def stats(self): 
-        return {'uptime': (datetime.now()-self.start).total_seconds(), 
-                'total_msgs': sum(self.msgs.values()), 
-                'total_games': sum(self.games.values())}
+        return {
+            'uptime': (datetime.now()-self.start).total_seconds(), 
+            'total_msgs': sum(self.msgs.values()), 
+            'total_games': sum(self.games.values())
+        }
 
 metrics = Metrics()
 
@@ -86,18 +100,939 @@ except Exception as e:
 class GeminiClient:
     def __init__(self, keys):
         self.keys, self.idx, self.lock = keys, 0, threading.Lock()
+    
     def ask(self, prompt):
-        if not USE_AI or not self.keys: return None
+        if not USE_AI or not self.keys: 
+            return None
         for _ in range(len(self.keys)):
             try:
-                r = start_game(gmap[txt],gid,active_games,line_bot_api,gemini.ask if gemini else None)
-                if r: 
+                r = model.generate_content(prompt)
+                if r and r.text: 
+                    return r.text.strip()[:1000]
+            except Exception as e:
+                logger.error(f"Gemini: {e}")
+                with self.lock:
+                    self.idx = (self.idx + 1) % len(self.keys)
+                    genai.configure(api_key=self.keys[self.idx])
+        return None
+
+gemini = GeminiClient(GEMINI_KEYS) if GEMINI_KEYS else None
+
+# قاعدة بيانات
+DB = 'whale_bot.db'
+
+class DBPool:
+    def __init__(self, db, size=5):
+        self.pool = Queue(maxsize=size)
+        for _ in range(size):
+            conn = sqlite3.connect(db, check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            self.pool.put(conn)
+    
+    def execute(self, query, params=()):
+        conn = self.pool.get()
+        try:
+            c = conn.cursor()
+            c.execute(query, params)
+            conn.commit()
+            return c
+        finally:
+            self.pool.put(conn)
+    
+    def fetchone(self, query, params=()):
+        c = self.execute(query, params)
+        result = c.fetchone()
+        return dict(result) if result else None
+    
+    def fetchall(self, query, params=()):
+        c = self.execute(query, params)
+        return [dict(r) for r in c.fetchall()]
+
+def init_db():
+    try:
+        conn = sqlite3.connect(DB)
+        c = conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS players (
+            user_id TEXT PRIMARY KEY, 
+            display_name TEXT NOT NULL,
+            total_points INTEGER DEFAULT 0, 
+            games_played INTEGER DEFAULT 0,
+            wins INTEGER DEFAULT 0, 
+            last_active TEXT DEFAULT CURRENT_TIMESTAMP
+        )''')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_points ON players(total_points DESC)')
+        conn.commit()
+        conn.close()
+        logger.info("قاعدة البيانات جاهزة")
+        return True
+    except Exception as e:
+        logger.error(f"DB: {e}")
+        return False
+
+init_db()
+db = DBPool(DB)
+
+# دوال مساعدة
+def safe_text(t, max_len=500):
+    return str(t or "").strip()[:max_len].replace('"','').replace("'",'')
+
+@lru_cache(maxsize=1000)
+def normalize_text(t):
+    if not t: return ""
+    t = t.strip().lower()
+    t = re.sub('[أإآ]','ا',t)
+    t = re.sub('[ؤ]','و',t)
+    t = re.sub('[ئ]','ي',t)
+    t = re.sub('[ءةى]','',t)
+    t = re.sub('[\u064B-\u065F]','',t)
+    return re.sub(r'\s+',' ',t).strip()
+
+def get_profile(uid):
+    if not line_bot_api: 
+        return f"مستخدم{uid[-4:]}"
+    try:
+        p = line_bot_api.get_profile(uid)
+        return safe_text(p.display_name,50) if p.display_name else f"مستخدم{uid[-4:]}"
+    except:
+        return f"مستخدم{uid[-4:]}"
+
+# إدارة المستخدمين
+def update_user(uid, name):
+    try:
+        db.execute(
+            'INSERT OR REPLACE INTO players (user_id,display_name,last_active) VALUES (?,?,?)',
+            (uid, safe_text(name,100), datetime.now().isoformat())
+        )
+    except Exception as e: 
+        logger.error(f"تحديث: {e}")
+
+def update_points(uid, name, pts, won=False):
+    try:
+        r = db.fetchone('SELECT total_points,games_played,wins FROM players WHERE user_id=?', (uid,))
+        if r:
+            db.execute(
+                'UPDATE players SET total_points=?,games_played=?,wins=?,last_active=?,display_name=? WHERE user_id=?',
+                (max(0,r['total_points']+pts), r['games_played']+1, r['wins']+(1 if won else 0),
+                 datetime.now().isoformat(), safe_text(name,100), uid)
+            )
+        else:
+            db.execute(
+                'INSERT INTO players VALUES (?,?,?,1,?,?)',
+                (uid, safe_text(name,100), max(0,pts), 1 if won else 0, datetime.now().isoformat())
+            )
+    except Exception as e: 
+        logger.error(f"نقاط: {e}")
+
+def get_stats(uid):
+    return db.fetchone('SELECT * FROM players WHERE user_id=?', (uid,))
+
+def get_leaderboard(limit=10):
+    return db.fetchall(
+        'SELECT display_name,total_points,games_played,wins FROM players WHERE total_points>0 ORDER BY total_points DESC,wins DESC LIMIT ?', 
+        (limit,)
+    )
+
+def cleanup_inactive():
+    try:
+        cutoff = (datetime.now()-timedelta(days=45)).isoformat()
+        c = db.execute('DELETE FROM players WHERE last_active<?', (cutoff,))
+        if c.rowcount: 
+            logger.info(f"حذف {c.rowcount} مستخدم")
+    except Exception as e: 
+        logger.error(f"تنظيف: {e}")
+
+threading.Thread(
+    target=lambda: [time.sleep(21600) or cleanup_inactive() for _ in iter(int,1)], 
+    daemon=True
+).start()
+
+# المحتوى
+def load_txt(name):
+    try:
+        with open(f'{name}.txt','r',encoding='utf-8') as f:
+            return [l.strip() for l in f if l.strip()]
+    except FileNotFoundError:
+        logger.warning(f"{name}.txt غير موجود")
+        return []
+
+QUESTIONS = load_txt('questions')
+CHALLENGES = load_txt('challenges')
+CONFESSIONS = load_txt('confessions')
+MENTIONS = load_txt('more_questions')
+
+q_idx = c_idx = cf_idx = m_idx = 0
+
+def next_content(items, idx_name):
+    global q_idx, c_idx, cf_idx, m_idx
+    idx = globals()[idx_name]
+    if not items: 
+        return "محتوى افتراضي"
+    r = items[idx % len(items)]
+    globals()[idx_name] += 1
+    return r
+
+# Quick Reply
+def get_qr():
+    btns = ["أغنية","لعبة","سلسلة","أسرع","ضد","تكوين","ترتيب","كلمة","لون","سؤال","تحدي","اعتراف","منشن"]
+    return QuickReply(items=[QuickReplyButton(action=MessageAction(label=f"▫️ {b}",text=b)) for b in btns])
+
+# مكونات Flex محسّنة
+def create_glass_box(contents, margin="md"):
+    """صندوق زجاجي ثري دي"""
+    return {
+        "type":"box",
+        "layout":"vertical",
+        "contents":contents,
+        "backgroundColor":C['card'],
+        "cornerRadius":"16px",
+        "paddingAll":"20px",
+        "margin":margin,
+        "borderWidth":"2px",
+        "borderColor":C['border']
+    }
+
+def create_glow_text(text, size="xl", glow=True):
+    """نص متوهج"""
+    return {
+        "type":"text",
+        "text":text,
+        "size":size,
+        "weight":"bold",
+        "color":C['cyan_glow'] if glow else C['text'],
+        "align":"center"
+    }
+
+def create_progress_bar(current, total):
+    """شريط تقدم"""
+    return {
+        "type":"box",
+        "layout":"horizontal",
+        "contents":[
+            {
+                "type":"box",
+                "layout":"vertical",
+                "contents":[],
+                "backgroundColor":C['cyan'],
+                "height":"6px",
+                "flex":current,
+                "cornerRadius":"3px"
+            },
+            {
+                "type":"box",
+                "layout":"vertical",
+                "contents":[],
+                "backgroundColor":C['card2'],
+                "height":"6px",
+                "flex":total-current,
+                "cornerRadius":"3px"
+            }
+        ],
+        "spacing":"xs",
+        "margin":"xl"
+    }
+
+# Flex Cards محسّنة
+def welcome_card():
+    return {
+        "type":"bubble",
+        "size":"kilo",
+        "body":{
+            "type":"box",
+            "layout":"vertical",
+            "contents":[
+                create_glass_box([
+                    {
+                        "type":"text",
+                        "text":PISCES_LOGO,
+                        "size":"4xl",
+                        "color":C['cyan_glow'],
+                        "align":"center",
+                        "weight":"bold"
+                    }
+                ],"none"),
+                {
+                    "type":"text",
+                    "text":"بوت الحوت",
+                    "size":"xxl",
+                    "weight":"bold",
+                    "color":C['cyan'],
+                    "align":"center",
+                    "margin":"md"
+                },
+                {
+                    "type":"text",
+                    "text":"نظام ألعاب تفاعلية",
+                    "size":"sm",
+                    "color":C['text2'],
+                    "align":"center",
+                    "margin":"sm"
+                },
+                {
+                    "type":"separator",
+                    "margin":"lg",
+                    "color":C['sep']
+                },
+                create_glass_box([
+                    {
+                        "type":"text",
+                        "text":"🎮 الألعاب",
+                        "size":"md",
+                        "weight":"bold",
+                        "color":C['text']
+                    },
+                    {
+                        "type":"text",
+                        "text":"أغنية | لعبة | سلسلة | أسرع\nضد | تكوين | ترتيب | كلمة | لون",
+                        "size":"xs",
+                        "color":C['text2'],
+                        "wrap":True,
+                        "margin":"sm"
+                    }
+                ]),
+                create_glass_box([
+                    {
+                        "type":"text",
+                        "text":"🎯 التسلية",
+                        "size":"md",
+                        "weight":"bold",
+                        "color":C['text']
+                    },
+                    {
+                        "type":"text",
+                        "text":"سؤال | تحدي | اعتراف | منشن | اختلاف | توافق",
+                        "size":"xs",
+                        "color":C['text2'],
+                        "wrap":True,
+                        "margin":"sm"
+                    }
+                ])
+            ],
+            "backgroundColor":C['bg'],
+            "paddingAll":"24px"
+        },
+        "footer":{
+            "type":"box",
+            "layout":"vertical",
+            "contents":[
+                {
+                    "type":"button",
+                    "action":{"type":"message","label":"🎮 ابدأ اللعب","text":"مساعدة"},
+                    "style":"primary",
+                    "color":C['cyan'],
+                    "height":"md"
+                },
+                {
+                    "type":"box",
+                    "layout":"horizontal",
+                    "contents":[
+                        {
+                            "type":"button",
+                            "action":{"type":"message","label":"📊 نقاطي","text":"نقاطي"},
+                            "style":"secondary",
+                            "height":"sm"
+                        },
+                        {
+                            "type":"button",
+                            "action":{"type":"message","label":"🏆 الصدارة","text":"الصدارة"},
+                            "style":"secondary",
+                            "height":"sm"
+                        }
+                    ],
+                    "spacing":"sm",
+                    "margin":"sm"
+                }
+            ],
+            "paddingAll":"16px",
+            "backgroundColor":C['bg']
+        }
+    }
+
+def help_card():
+    return {
+        "type":"bubble",
+        "size":"kilo",
+        "body":{
+            "type":"box",
+            "layout":"vertical",
+            "contents":[
+                {
+                    "type":"text",
+                    "text":"📖 المساعدة",
+                    "size":"xl",
+                    "weight":"bold",
+                    "color":C['cyan'],
+                    "align":"center"
+                },
+                {
+                    "type":"separator",
+                    "margin":"lg",
+                    "color":C['sep']
+                },
+                create_glass_box([
+                    {
+                        "type":"text",
+                        "text":"🎮 أوامر اللعب",
+                        "size":"md",
+                        "weight":"bold",
+                        "color":C['text']
+                    },
+                    {
+                        "type":"text",
+                        "text":"▫️ لمح: تلميح (-1 نقطة)\n▫️ جاوب: عرض الحل\n▫️ إيقاف: إنهاء اللعبة",
+                        "size":"xs",
+                        "color":C['text2'],
+                        "wrap":True,
+                        "margin":"sm"
+                    }
+                ]),
+                create_glass_box([
+                    {
+                        "type":"text",
+                        "text":"📊 الإحصائيات",
+                        "size":"md",
+                        "weight":"bold",
+                        "color":C['text']
+                    },
+                    {
+                        "type":"text",
+                        "text":"▫️ نقاطي: عرض نقاطك\n▫️ الصدارة: أفضل اللاعبين",
+                        "size":"xs",
+                        "color":C['text2'],
+                        "wrap":True,
+                        "margin":"sm"
+                    }
+                ])
+            ],
+            "backgroundColor":C['bg'],
+            "paddingAll":"24px"
+        },
+        "footer":{
+            "type":"box",
+            "layout":"vertical",
+            "contents":[
+                {
+                    "type":"button",
+                    "action":{"type":"message","label":"✅ انضم الآن","text":"انضم"},
+                    "style":"primary",
+                    "color":C['cyan'],
+                    "height":"md"
+                },
+                {
+                    "type":"button",
+                    "action":{"type":"message","label":"❌ انسحب","text":"انسحب"},
+                    "style":"secondary",
+                    "margin":"sm"
+                }
+            ],
+            "paddingAll":"16px",
+            "backgroundColor":C['bg']
+        }
+    }
+
+def stats_card(uid, name, is_reg):
+    stats = get_stats(uid)
+    
+    if not stats:
+        card = {
+            "type":"bubble",
+            "size":"kilo",
+            "body":{
+                "type":"box",
+                "layout":"vertical",
+                "contents":[
+                    {
+                        "type":"text",
+                        "text":"📊 إحصائياتك",
+                        "size":"xl",
+                        "weight":"bold",
+                        "color":C['cyan'],
+                        "align":"center"
+                    },
+                    {
+                        "type":"separator",
+                        "margin":"lg",
+                        "color":C['sep']
+                    },
+                    create_glass_box([
+                        {
+                            "type":"text",
+                            "text":name,
+                            "size":"lg",
+                            "color":C['text'],
+                            "align":"center"
+                        },
+                        {
+                            "type":"text",
+                            "text":"مسجل ✓" if is_reg else "غير مسجل",
+                            "size":"sm",
+                            "color":C['success'] if is_reg else C['text2'],
+                            "align":"center",
+                            "margin":"sm"
+                        },
+                        {
+                            "type":"text",
+                            "text":"لم تبدأ بعد" if is_reg else "سجل للبدء",
+                            "size":"md",
+                            "color":C['text2'],
+                            "align":"center",
+                            "margin":"md"
+                        }
+                    ])
+                ],
+                "backgroundColor":C['bg'],
+                "paddingAll":"24px"
+            }
+        }
+        
+        if not is_reg:
+            card["footer"] = {
+                "type":"box",
+                "layout":"vertical",
+                "contents":[
+                    {
+                        "type":"button",
+                        "action":{"type":"message","label":"✅ انضم","text":"انضم"},
+                        "style":"primary",
+                        "color":C['success']
+                    }
+                ],
+                "paddingAll":"16px",
+                "backgroundColor":C['bg']
+            }
+        
+        return card
+    
+    wr = (stats['wins']/stats['games_played']*100) if stats['games_played']>0 else 0
+    return {
+        "type":"bubble",
+        "size":"kilo",
+        "body":{
+            "type":"box",
+            "layout":"vertical",
+            "contents":[
+                {
+                    "type":"text",
+                    "text":"📊 إحصائياتك",
+                    "size":"xl",
+                    "weight":"bold",
+                    "color":C['cyan'],
+                    "align":"center"
+                },
+                {
+                    "type":"separator",
+                    "margin":"lg",
+                    "color":C['sep']
+                },
+                create_glass_box([
+                    {
+                        "type":"text",
+                        "text":name,
+                        "size":"lg",
+                        "color":C['text'],
+                        "align":"center"
+                    },
+                    {
+                        "type":"text",
+                        "text":"مسجل ✓",
+                        "size":"sm",
+                        "color":C['success'],
+                        "align":"center",
+                        "margin":"sm"
+                    }
+                ],"md"),
+                create_glass_box([
+                    {
+                        "type":"box",
+                        "layout":"horizontal",
+                        "contents":[
+                            {
+                                "type":"text",
+                                "text":"💎 النقاط",
+                                "size":"sm",
+                                "color":C['text2'],
+                                "flex":1
+                            },
+                            {
+                                "type":"text",
+                                "text":str(stats['total_points']),
+                                "size":"xxl",
+                                "weight":"bold",
+                                "color":C['cyan_glow'],
+                                "flex":1,
+                                "align":"end"
+                            }
+                        ]
+                    },
+                    {
+                        "type":"separator",
+                        "margin":"md",
+                        "color":C['sep']
+                    },
+                    {
+                        "type":"box",
+                        "layout":"horizontal",
+                        "contents":[
+                            {
+                                "type":"text",
+                                "text":"🎮 الألعاب",
+                                "size":"sm",
+                                "color":C['text2'],
+                                "flex":1
+                            },
+                            {
+                                "type":"text",
+                                "text":str(stats['games_played']),
+                                "size":"lg",
+                                "color":C['text'],
+                                "flex":1,
+                                "align":"end"
+                            }
+                        ],
+                        "margin":"md"
+                    },
+                    {
+                        "type":"box",
+                        "layout":"horizontal",
+                        "contents":[
+                            {
+                                "type":"text",
+                                "text":"🏆 الفوز",
+                                "size":"sm",
+                                "color":C['text2'],
+                                "flex":1
+                            },
+                            {
+                                "type":"text",
+                                "text":str(stats['wins']),
+                                "size":"lg",
+                                "color":C['text'],
+                                "flex":1,
+                                "align":"end"
+                            }
+                        ],
+                        "margin":"sm"
+                    },
+                    {
+                        "type":"box",
+                        "layout":"horizontal",
+                        "contents":[
+                            {
+                                "type":"text",
+                                "text":"📈 المعدل",
+                                "size":"sm",
+                                "color":C['text2'],
+                                "flex":1
+                            },
+                            {
+                                "type":"text",
+                                "text":f"{wr:.0f}%",
+                                "size":"lg",
+                                "color":C['text'],
+                                "flex":1,
+                                "align":"end"
+                            }
+                        ],
+                        "margin":"sm"
+                    }
+                ])
+            ],
+            "backgroundColor":C['bg'],
+            "paddingAll":"24px"
+        },
+        "footer":{
+            "type":"box",
+            "layout":"vertical",
+            "contents":[
+                {
+                    "type":"button",
+                    "action":{"type":"message","label":"🏆 الصدارة","text":"الصدارة"},
+                    "style":"secondary"
+                }
+            ],
+            "paddingAll":"16px",
+            "backgroundColor":C['bg']
+        }
+    }
+
+def leaderboard_card():
+    leaders = get_leaderboard()
+    if not leaders:
+        return {
+            "type":"bubble",
+            "size":"kilo",
+            "body":{
+                "type":"box",
+                "layout":"vertical",
+                "contents":[
+                    {
+                        "type":"text",
+                        "text":"🏆 لوحة الصدارة",
+                        "size":"xl",
+                        "weight":"bold",
+                        "color":C['cyan'],
+                        "align":"center"
+                    },
+                    {
+                        "type":"separator",
+                        "margin":"lg",
+                        "color":C['sep']
+                    },
+                    {
+                        "type":"text",
+                        "text":"لا توجد بيانات",
+                        "size":"md",
+                        "color":C['text2'],
+                        "align":"center",
+                        "margin":"lg"
+                    }
+                ],
+                "backgroundColor":C['bg'],
+                "paddingAll":"24px"
+            }
+        }
+    
+    items = []
+    for i,l in enumerate(leaders,1):
+        rank = ["🥇","🥈","🥉"][i-1] if i<=3 else f"#{i}"
+        items.append({
+            "type":"box",
+            "layout":"horizontal",
+            "contents":[
+                {
+                    "type":"text",
+                    "text":rank,
+                    "size":"md" if i<=3 else "sm",
+                    "weight":"bold",
+                    "flex":0,
+                    "color":C['cyan'] if i<=3 else C['text']
+                },
+                {
+                    "type":"text",
+                    "text":l['display_name'],
+                    "size":"sm",
+                    "flex":3,
+                    "margin":"md",
+                    "wrap":True,
+                    "color":C['cyan'] if i==1 else C['text']
+                },
+                {
+                    "type":"text",
+                    "text":str(l['total_points']),
+                    "size":"lg" if i==1 else "md",
+                    "weight":"bold",
+                    "flex":1,
+                    "align":"end",
+                    "color":C['cyan_glow'] if i==1 else C['text2']
+                }
+            ],
+            "backgroundColor":C['card'] if i<=3 else C['card2'],
+            "cornerRadius":"12px",
+            "paddingAll":"14px",
+            "margin":"sm" if i>1 else "md",
+            "borderWidth":"2px" if i==1 else "1px",
+            "borderColor":C['cyan'] if i==1 else C['border']
+        })
+    
+    return {
+        "type":"bubble",
+        "size":"kilo",
+        "body":{
+            "type":"box",
+            "layout":"vertical",
+            "contents":[
+                {
+                    "type":"text",
+                    "text":"🏆 لوحة الصدارة",
+                    "size":"xl",
+                    "weight":"bold",
+                    "color":C['cyan'],
+                    "align":"center"
+                },
+                {
+                    "type":"separator",
+                    "margin":"lg",
+                    "color":C['sep']
+                },
+                {
+                    "type":"text",
+                    "text":"أفضل اللاعبين",
+                    "size":"sm",
+                    "color":C['text2'],
+                    "align":"center",
+                    "margin":"md"
+                },
+                {
+                    "type":"box",
+                    "layout":"vertical",
+                    "contents":items,
+                    "margin":"md"
+                }
+            ],
+            "backgroundColor":C['bg'],
+            "paddingAll":"24px"
+        }
+    }
+
+# استيراد الألعاب
+try:
+    from games import start_game, check_game_answer
+    GAMES_LOADED = True
+except ImportError:
+    logger.warning("games.py غير موجود")
+    GAMES_LOADED = False
+
+# معالج الرسائل
+CMDS = [
+    'البداية','ابدأ','start','مساعدة','help','انضم','join','انسحب','خروج',
+    'نقاطي','إحصائياتي','الصدارة','المتصدرين','إيقاف','stop',
+    'أغنية','لعبة','سلسلة','أسرع','ضد','تكوين','ترتيب','كلمة','لون',
+    'سؤال','سوال','تحدي','اعتراف','منشن','اختلاف','توافق',
+    'لمح','تلميح','جاوب','الحل','الجواب'
+]
+
+@handler.add(MessageEvent, message=TextMessage)
+def handle_message(event):
+    try:
+        uid = event.source.user_id
+        txt = safe_text(event.message.text, 500)
+        
+        if not txt or not any(c.lower() in txt.lower() for c in CMDS):
+            return
+        
+        if not rate_limiter.is_allowed(uid):
+            return
+        
+        name = get_profile(uid)
+        update_user(uid, name)
+        metrics.log_msg(uid)
+        
+        if uid not in registered_players and get_stats(uid):
+            registered_players.add(uid)
+        
+        gid = getattr(event.source, 'group_id', uid)
+        
+        # أوامر أساسية
+        if txt in ['البداية','ابدأ','start']:
+            return line_bot_api.reply_message(
+                event.reply_token, 
+                FlexSendMessage(alt_text="بوت الحوت", contents=welcome_card(), quick_reply=get_qr())
+            )
+        
+        if txt in ['مساعدة','help']:
+            return line_bot_api.reply_message(
+                event.reply_token, 
+                FlexSendMessage(alt_text="المساعدة", contents=help_card(), quick_reply=get_qr())
+            )
+        
+        if txt in ['نقاطي','إحصائياتي','احصائياتي']:
+            return line_bot_api.reply_message(
+                event.reply_token, 
+                FlexSendMessage(
+                    alt_text="إحصائياتك", 
+                    contents=stats_card(uid, name, uid in registered_players), 
+                    quick_reply=get_qr()
+                )
+            )
+        
+        if txt in ['الصدارة','المتصدرين']:
+            return line_bot_api.reply_message(
+                event.reply_token, 
+                FlexSendMessage(alt_text="الصدارة", contents=leaderboard_card(), quick_reply=get_qr())
+            )
+        
+        if txt in ['إيقاف','stop','ايقاف']:
+            g = active_games.pop(gid, None)
+            return line_bot_api.reply_message(
+                event.reply_token, 
+                TextSendMessage(
+                    text=f"⏹️ تم إيقاف {g['type']}" if g else "لا توجد لعبة", 
+                    quick_reply=get_qr()
+                )
+            )
+        
+        if txt in ['انضم','تسجيل','join']:
+            if uid in registered_players:
+                return line_bot_api.reply_message(
+                    event.reply_token, 
+                    TextSendMessage(text=f"✓ أنت مسجل يا {name}", quick_reply=get_qr())
+                )
+            registered_players.add(uid)
+            logger.info(f"تسجيل: {name}")
+            return line_bot_api.reply_message(
+                event.reply_token, 
+                TextSendMessage(text=f"✅ تم تسجيلك يا {name}\nابدأ اللعب الآن!", quick_reply=get_qr())
+            )
+        
+        if txt in ['انسحب','خروج']:
+            if uid not in registered_players:
+                return line_bot_api.reply_message(
+                    event.reply_token, 
+                    TextSendMessage(text="غير مسجل", quick_reply=get_qr())
+                )
+            registered_players.remove(uid)
+            return line_bot_api.reply_message(
+                event.reply_token, 
+                TextSendMessage(text=f"👋 تم انسحابك", quick_reply=get_qr())
+            )
+        
+        # محتوى نصي
+        if txt in ['سؤال','سوال']:
+            return line_bot_api.reply_message(
+                event.reply_token, 
+                TextSendMessage(text=next_content(QUESTIONS,'q_idx'), quick_reply=get_qr())
+            )
+        
+        if txt in ['تحدي','challenge']:
+            return line_bot_api.reply_message(
+                event.reply_token, 
+                TextSendMessage(text=next_content(CHALLENGES,'c_idx'), quick_reply=get_qr())
+            )
+        
+        if txt in ['اعتراف','confession']:
+            return line_bot_api.reply_message(
+                event.reply_token, 
+                TextSendMessage(text=next_content(CONFESSIONS,'cf_idx'), quick_reply=get_qr())
+            )
+        
+        if txt in ['منشن','mention']:
+            return line_bot_api.reply_message(
+                event.reply_token, 
+                TextSendMessage(text=next_content(MENTIONS,'m_idx'), quick_reply=get_qr())
+            )
+        
+        # ألعاب
+        is_reg = uid in registered_players
+        if GAMES_LOADED:
+            gmap = {
+                'أغنية':'song',
+                'لعبة':'game',
+                'سلسلة':'chain',
+                'أسرع':'fast',
+                'ضد':'opposite',
+                'تكوين':'build',
+                'ترتيب':'order',
+                'كلمة':'word',
+                'لون':'color',
+                'اختلاف':'diff',
+                'توافق':'compat'
+            }
+            
+            if txt in gmap:
+                if not is_reg:
+                    return line_bot_api.reply_message(
+                        event.reply_token, 
+                        TextSendMessage(text="⚠️ سجل أولاً: انضم", quick_reply=get_qr())
+                    )
+                
+                r = start_game(gmap[txt], gid, active_games, line_bot_api, gemini.ask if gemini else None)
+                if r:
                     metrics.log_game(gmap[txt])
-                    return line_bot_api.reply_message(event.reply_token,r)
+                    return line_bot_api.reply_message(event.reply_token, r)
             
             if gid in active_games and is_reg:
-                r = check_game_answer(gid,txt,uid,name,active_games,line_bot_api,update_points)
-                if r: return line_bot_api.reply_message(event.reply_token,r)
+                r = check_game_answer(gid, txt, uid, name, active_games, line_bot_api, update_points)
+                if r:
+                    return line_bot_api.reply_message(event.reply_token, r)
     
     except Exception as e:
         logger.error(f"معالجة: {e}", exc_info=True)
@@ -134,7 +1069,6 @@ def home():
             overflow: hidden;
         }}
         
-        /* تأثير النجوم المتوهجة في الخلفية */
         body::before {{
             content: '';
             position: absolute;
@@ -159,7 +1093,6 @@ def home():
             }}
         }}
         
-        /* جزيئات متحركة */
         .particles {{
             position: absolute;
             width: 100%;
@@ -315,7 +1248,6 @@ def home():
             color: #5EEBFF;
         }}
         
-        /* استجابة للشاشات الصغيرة */
         @media (max-width: 600px) {{
             .container {{
                 padding: 30px 20px;
@@ -413,7 +1345,7 @@ def health():
 
 @app.route("/callback", methods=['POST'])
 def callback():
-    if not handler or not line_bot_api: 
+    if not handler or not line_bot_api:
         abort(500)
     
     sig = request.headers.get('X-Line-Signature', '')
@@ -430,11 +1362,11 @@ def callback():
     return 'OK'
 
 @app.errorhandler(404)
-def not_found(e): 
+def not_found(e):
     return {"error": "الصفحة غير موجودة", "status": 404}, 404
 
 @app.errorhandler(500)
-def internal_error(e): 
+def internal_error(e):
     logger.error(f"خطأ: {e}")
     return {"error": "خطأ داخلي في الخادم", "status": 500}, 500
 
@@ -462,418 +1394,4 @@ if __name__ == "__main__":
         cleanup_inactive()
     except Exception as e:
         logger.critical(f"فشل التشغيل: {e}")
-        sys.exit(1) model.generate_content(prompt)
-                if r and r.text: return r.text.strip()[:1000]
-            except Exception as e:
-                logger.error(f"Gemini: {e}")
-                with self.lock:
-                    self.idx = (self.idx + 1) % len(self.keys)
-                    genai.configure(api_key=self.keys[self.idx])
-        return None
-
-gemini = GeminiClient(GEMINI_KEYS) if GEMINI_KEYS else None
-
-# قاعدة بيانات
-DB = 'whale_bot.db'
-
-class DBPool:
-    def __init__(self, db, size=5):
-        self.pool = Queue(maxsize=size)
-        for _ in range(size):
-            conn = sqlite3.connect(db, check_same_thread=False)
-            conn.row_factory = sqlite3.Row
-            self.pool.put(conn)
-    def execute(self, query, params=()):
-        conn = self.pool.get()
-        try:
-            c = conn.cursor()
-            c.execute(query, params)
-            conn.commit()
-            return c
-        finally:
-            self.pool.put(conn)
-    def fetchone(self, query, params=()):
-        c = self.execute(query, params)
-        return dict(c.fetchone()) if c.rowcount else None
-    def fetchall(self, query, params=()):
-        c = self.execute(query, params)
-        return [dict(r) for r in c.fetchall()]
-
-def init_db():
-    try:
-        conn = sqlite3.connect(DB)
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS players (
-            user_id TEXT PRIMARY KEY, display_name TEXT NOT NULL,
-            total_points INTEGER DEFAULT 0, games_played INTEGER DEFAULT 0,
-            wins INTEGER DEFAULT 0, last_active TEXT DEFAULT CURRENT_TIMESTAMP)''')
-        c.execute('CREATE INDEX IF NOT EXISTS idx_points ON players(total_points DESC)')
-        conn.commit()
-        conn.close()
-        logger.info("قاعدة البيانات جاهزة")
-        return True
-    except Exception as e:
-        logger.error(f"DB: {e}")
-        return False
-
-init_db()
-db = DBPool(DB)
-
-# دوال مساعدة
-def safe_text(t, max_len=500):
-    return str(t or "").strip()[:max_len].replace('"','').replace("'",'')
-
-@lru_cache(maxsize=1000)
-def normalize_text(t):
-    if not t: return ""
-    t = t.strip().lower()
-    t = re.sub('[أإآ]','ا',t); t = re.sub('[ؤ]','و',t); t = re.sub('[ئ]','ي',t)
-    t = re.sub('[ءةى]','',t); t = re.sub('[\u064B-\u065F]','',t)
-    return re.sub(r'\s+',' ',t).strip()
-
-def get_profile(uid):
-    if not line_bot_api: return f"مستخدم{uid[-4:]}"
-    try:
-        p = line_bot_api.get_profile(uid)
-        return safe_text(p.display_name,50) if p.display_name else f"مستخدم{uid[-4:]}"
-    except: return f"مستخدم{uid[-4:]}"
-
-# إدارة المستخدمين
-def update_user(uid, name):
-    try:
-        db.execute('INSERT OR REPLACE INTO players (user_id,display_name,last_active) VALUES (?,?,?)',
-                  (uid, safe_text(name,100), datetime.now().isoformat()))
-    except Exception as e: logger.error(f"تحديث: {e}")
-
-def update_points(uid, name, pts, won=False):
-    try:
-        r = db.fetchone('SELECT total_points,games_played,wins FROM players WHERE user_id=?', (uid,))
-        if r:
-            db.execute('UPDATE players SET total_points=?,games_played=?,wins=?,last_active=?,display_name=? WHERE user_id=?',
-                      (max(0,r['total_points']+pts), r['games_played']+1, r['wins']+(1 if won else 0),
-                       datetime.now().isoformat(), safe_text(name,100), uid))
-        else:
-            db.execute('INSERT INTO players VALUES (?,?,?,1,?,?)',
-                      (uid, safe_text(name,100), max(0,pts), 1 if won else 0, datetime.now().isoformat()))
-    except Exception as e: logger.error(f"نقاط: {e}")
-
-def get_stats(uid):
-    return db.fetchone('SELECT * FROM players WHERE user_id=?', (uid,))
-
-def get_leaderboard(limit=10):
-    return db.fetchall('SELECT display_name,total_points,games_played,wins FROM players WHERE total_points>0 ORDER BY total_points DESC,wins DESC LIMIT ?', (limit,))
-
-def cleanup_inactive():
-    try:
-        cutoff = (datetime.now()-timedelta(days=45)).isoformat()
-        c = db.execute('DELETE FROM players WHERE last_active<?', (cutoff,))
-        if c.rowcount: logger.info(f"حذف {c.rowcount} مستخدم")
-    except Exception as e: logger.error(f"تنظيف: {e}")
-
-threading.Thread(target=lambda: [time.sleep(21600) or cleanup_inactive() for _ in iter(int,1)], daemon=True).start()
-
-# المحتوى
-def load_txt(name):
-    try:
-        with open(f'{name}.txt','r',encoding='utf-8') as f:
-            return [l.strip() for l in f if l.strip()]
-    except FileNotFoundError:
-        logger.warning(f"{name}.txt غير موجود")
-        return []
-
-QUESTIONS, CHALLENGES, CONFESSIONS, MENTIONS = [load_txt(x) for x in ['questions','challenges','confessions','more_questions']]
-q_idx = c_idx = cf_idx = m_idx = 0
-
-def next_content(items, idx_name):
-    global q_idx, c_idx, cf_idx, m_idx
-    idx = globals()[idx_name]
-    if not items: return "محتوى افتراضي"
-    r = items[idx % len(items)]
-    globals()[idx_name] += 1
-    return r
-
-# Quick Reply
-def get_qr():
-    btns = ["أغنية","لعبة","سلسلة","أسرع","ضد","تكوين","ترتيب","كلمة","لون","سؤال","تحدي","اعتراف","منشن"]
-    return QuickReply(items=[QuickReplyButton(action=MessageAction(label=f"▫️ {b}",text=b)) for b in btns])
-
-# مكونات Flex محسّنة
-def create_glass_box(contents, margin="md"):
-    """صندوق زجاجي ثري دي"""
-    return {
-        "type":"box","layout":"vertical","contents":contents,
-        "backgroundColor":C['card'],"cornerRadius":"16px","paddingAll":"20px","margin":margin,
-        "borderWidth":"2px","borderColor":C['border']
-    }
-
-def create_glow_text(text, size="xl", glow=True):
-    """نص متوهج"""
-    return {
-        "type":"text","text":text,"size":size,"weight":"bold",
-        "color":C['cyan_glow'] if glow else C['text'],"align":"center"
-    }
-
-def create_progress_bar(current, total):
-    """شريط تقدم"""
-    return {
-        "type":"box","layout":"horizontal","contents":[
-            {"type":"box","layout":"vertical","contents":[],
-             "backgroundColor":C['cyan'],"height":"6px","flex":current,"cornerRadius":"3px"},
-            {"type":"box","layout":"vertical","contents":[],
-             "backgroundColor":C['card2'],"height":"6px","flex":total-current,"cornerRadius":"3px"}
-        ],"spacing":"xs","margin":"xl"
-    }
-
-# Flex Cards محسّنة
-def welcome_card():
-    return {
-        "type":"bubble","size":"kilo",
-        "body":{
-            "type":"box","layout":"vertical","contents":[
-                # الشعار المتوهج - شعار الحوت (Pisces)
-                create_glass_box([
-                    {"type":"text","text":PISCES_LOGO,"size":"4xl","color":C['cyan_glow'],"align":"center","weight":"bold"}
-                ],"none"),
-                {"type":"text","text":"بوت الحوت","size":"xxl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
-                {"type":"text","text":"نظام ألعاب تفاعلية","size":"sm","color":C['text2'],"align":"center","margin":"sm"},
-                {"type":"separator","margin":"lg","color":C['sep']},
-                
-                # الألعاب
-                create_glass_box([
-                    {"type":"text","text":"🎮 الألعاب","size":"md","weight":"bold","color":C['text']},
-                    {"type":"text","text":"أغنية | لعبة | سلسلة | أسرع\nضد | تكوين | ترتيب | كلمة | لون",
-                     "size":"xs","color":C['text2'],"wrap":True,"margin":"sm"}
-                ]),
-                
-                # التسلية
-                create_glass_box([
-                    {"type":"text","text":"🎯 التسلية","size":"md","weight":"bold","color":C['text']},
-                    {"type":"text","text":"سؤال | تحدي | اعتراف | منشن | اختلاف | توافق",
-                     "size":"xs","color":C['text2'],"wrap":True,"margin":"sm"}
-                ])
-            ],
-            "backgroundColor":C['bg'],"paddingAll":"24px"
-        },
-        "footer":{
-            "type":"box","layout":"vertical","contents":[
-                {"type":"button","action":{"type":"message","label":"🎮 ابدأ اللعب","text":"مساعدة"},
-                 "style":"primary","color":C['cyan'],"height":"md"},
-                {"type":"box","layout":"horizontal","contents":[
-                    {"type":"button","action":{"type":"message","label":"📊 نقاطي","text":"نقاطي"},
-                     "style":"secondary","height":"sm"},
-                    {"type":"button","action":{"type":"message","label":"🏆 الصدارة","text":"الصدارة"},
-                     "style":"secondary","height":"sm"}
-                ],"spacing":"sm","margin":"sm"}
-            ],"paddingAll":"16px","backgroundColor":C['bg']}
-    }
-
-def help_card():
-    return {
-        "type":"bubble","size":"kilo",
-        "body":{
-            "type":"box","layout":"vertical","contents":[
-                {"type":"text","text":"📖 المساعدة","size":"xl","weight":"bold","color":C['cyan'],"align":"center"},
-                {"type":"separator","margin":"lg","color":C['sep']},
-                
-                create_glass_box([
-                    {"type":"text","text":"🎮 أوامر اللعب","size":"md","weight":"bold","color":C['text']},
-                    {"type":"text","text":"▫️ لمح: تلميح (-1 نقطة)\n▫️ جاوب: عرض الحل\n▫️ إيقاف: إنهاء اللعبة",
-                     "size":"xs","color":C['text2'],"wrap":True,"margin":"sm"}
-                ]),
-                
-                create_glass_box([
-                    {"type":"text","text":"📊 الإحصائيات","size":"md","weight":"bold","color":C['text']},
-                    {"type":"text","text":"▫️ نقاطي: عرض نقاطك\n▫️ الصدارة: أفضل اللاعبين",
-                     "size":"xs","color":C['text2'],"wrap":True,"margin":"sm"}
-                ])
-            ],
-            "backgroundColor":C['bg'],"paddingAll":"24px"
-        },
-        "footer":{
-            "type":"box","layout":"vertical","contents":[
-                {"type":"button","action":{"type":"message","label":"✅ انضم الآن","text":"انضم"},
-                 "style":"primary","color":C['cyan'],"height":"md"},
-                {"type":"button","action":{"type":"message","label":"❌ انسحب","text":"انسحب"},
-                 "style":"secondary","margin":"sm"}
-            ],"paddingAll":"16px","backgroundColor":C['bg']}
-    }
-
-def stats_card(uid, name, is_reg):
-    stats = get_stats(uid)
-    
-    if not stats:
-        card = {
-            "type":"bubble","size":"kilo",
-            "body":{
-                "type":"box","layout":"vertical","contents":[
-                    {"type":"text","text":"📊 إحصائياتك","size":"xl","weight":"bold","color":C['cyan'],"align":"center"},
-                    {"type":"separator","margin":"lg","color":C['sep']},
-                    create_glass_box([
-                        {"type":"text","text":name,"size":"lg","color":C['text'],"align":"center"},
-                        {"type":"text","text":"مسجل ✓" if is_reg else "غير مسجل","size":"sm",
-                         "color":C['success'] if is_reg else C['text2'],"align":"center","margin":"sm"},
-                        {"type":"text","text":"لم تبدأ بعد" if is_reg else "سجل للبدء","size":"md",
-                         "color":C['text2'],"align":"center","margin":"md"}
-                    ])
-                ],"backgroundColor":C['bg'],"paddingAll":"24px"}
-        }
-        
-        if not is_reg:
-            card["footer"] = {
-                "type":"box","layout":"vertical","contents":[
-                    {"type":"button","action":{"type":"message","label":"✅ انضم","text":"انضم"},
-                     "style":"primary","color":C['success']}
-                ],"paddingAll":"16px","backgroundColor":C['bg']
-            }
-        
-        return card
-    
-    wr = (stats['wins']/stats['games_played']*100) if stats['games_played']>0 else 0
-    return {
-        "type":"bubble","size":"kilo",
-        "body":{
-            "type":"box","layout":"vertical","contents":[
-                {"type":"text","text":"📊 إحصائياتك","size":"xl","weight":"bold","color":C['cyan'],"align":"center"},
-                {"type":"separator","margin":"lg","color":C['sep']},
-                create_glass_box([
-                    {"type":"text","text":name,"size":"lg","color":C['text'],"align":"center"},
-                    {"type":"text","text":"مسجل ✓","size":"sm","color":C['success'],"align":"center","margin":"sm"}
-                ],"md"),
-                create_glass_box([
-                    {"type":"box","layout":"horizontal","contents":[
-                        {"type":"text","text":"💎 النقاط","size":"sm","color":C['text2'],"flex":1},
-                        {"type":"text","text":str(stats['total_points']),"size":"xxl","weight":"bold",
-                         "color":C['cyan_glow'],"flex":1,"align":"end"}
-                    ]},
-                    {"type":"separator","margin":"md","color":C['sep']},
-                    {"type":"box","layout":"horizontal","contents":[
-                        {"type":"text","text":"🎮 الألعاب","size":"sm","color":C['text2'],"flex":1},
-                        {"type":"text","text":str(stats['games_played']),"size":"lg","color":C['text'],"flex":1,"align":"end"}
-                    ],"margin":"md"},
-                    {"type":"box","layout":"horizontal","contents":[
-                        {"type":"text","text":"🏆 الفوز","size":"sm","color":C['text2'],"flex":1},
-                        {"type":"text","text":str(stats['wins']),"size":"lg","color":C['text'],"flex":1,"align":"end"}
-                    ],"margin":"sm"},
-                    {"type":"box","layout":"horizontal","contents":[
-                        {"type":"text","text":"📈 المعدل","size":"sm","color":C['text2'],"flex":1},
-                        {"type":"text","text":f"{wr:.0f}%","size":"lg","color":C['text'],"flex":1,"align":"end"}
-                    ],"margin":"sm"}
-                ])
-            ],"backgroundColor":C['bg'],"paddingAll":"24px"},
-        "footer":{"type":"box","layout":"vertical","contents":[
-            {"type":"button","action":{"type":"message","label":"🏆 الصدارة","text":"الصدارة"},
-             "style":"secondary"}
-        ],"paddingAll":"16px","backgroundColor":C['bg']}
-    }
-
-def leaderboard_card():
-    leaders = get_leaderboard()
-    if not leaders:
-        return {
-            "type":"bubble","size":"kilo",
-            "body":{"type":"box","layout":"vertical","contents":[
-                {"type":"text","text":"🏆 لوحة الصدارة","size":"xl","weight":"bold","color":C['cyan'],"align":"center"},
-                {"type":"separator","margin":"lg","color":C['sep']},
-                {"type":"text","text":"لا توجد بيانات","size":"md","color":C['text2'],"align":"center","margin":"lg"}
-            ],"backgroundColor":C['bg'],"paddingAll":"24px"}
-        }
-    
-    items = []
-    for i,l in enumerate(leaders,1):
-        rank = ["🥇","🥈","🥉"][i-1] if i<=3 else f"#{i}"
-        items.append({
-            "type":"box","layout":"horizontal","contents":[
-                {"type":"text","text":rank,"size":"md" if i<=3 else "sm","weight":"bold","flex":0,"color":C['cyan'] if i<=3 else C['text']},
-                {"type":"text","text":l['display_name'],"size":"sm","flex":3,"margin":"md","wrap":True,
-                 "color":C['cyan'] if i==1 else C['text']},
-                {"type":"text","text":str(l['total_points']),"size":"lg" if i==1 else "md","weight":"bold",
-                 "flex":1,"align":"end","color":C['cyan_glow'] if i==1 else C['text2']}
-            ],"backgroundColor":C['card'] if i<=3 else C['card2'],"cornerRadius":"12px","paddingAll":"14px",
-            "margin":"sm" if i>1 else "md","borderWidth":"2px" if i==1 else "1px",
-            "borderColor":C['cyan'] if i==1 else C['border']
-        })
-    
-    return {
-        "type":"bubble","size":"kilo",
-        "body":{"type":"box","layout":"vertical","contents":[
-            {"type":"text","text":"🏆 لوحة الصدارة","size":"xl","weight":"bold","color":C['cyan'],"align":"center"},
-            {"type":"separator","margin":"lg","color":C['sep']},
-            {"type":"text","text":"أفضل اللاعبين","size":"sm","color":C['text2'],"align":"center","margin":"md"},
-            {"type":"box","layout":"vertical","contents":items,"margin":"md"}
-        ],"backgroundColor":C['bg'],"paddingAll":"24px"}
-    }
-
-# استيراد الألعاب
-try:
-    from games import start_game, check_game_answer
-    GAMES_LOADED = True
-except ImportError:
-    logger.warning("games.py غير موجود")
-    GAMES_LOADED = False
-
-# معالج الرسائل
-CMDS = ['البداية','ابدأ','start','مساعدة','help','انضم','join','انسحب','خروج',
-        'نقاطي','إحصائياتي','الصدارة','المتصدرين','إيقاف','stop',
-        'أغنية','لعبة','سلسلة','أسرع','ضد','تكوين','ترتيب','كلمة','لون',
-        'سؤال','سوال','تحدي','اعتراف','منشن','اختلاف','توافق',
-        'لمح','تلميح','جاوب','الحل','الجواب']
-
-@handler.add(MessageEvent, message=TextMessage)
-def handle_message(event):
-    try:
-        uid, txt = event.source.user_id, safe_text(event.message.text,500)
-        if not txt or not any(c.lower() in txt.lower() for c in CMDS): return
-        if not rate_limiter.is_allowed(uid): return
-        
-        name = get_profile(uid)
-        update_user(uid, name)
-        metrics.log_msg(uid)
-        
-        if uid not in registered_players and get_stats(uid):
-            registered_players.add(uid)
-        
-        gid = getattr(event.source,'group_id',uid)
-        
-        # أوامر أساسية
-        if txt in ['البداية','ابدأ','start']:
-            return line_bot_api.reply_message(event.reply_token, FlexSendMessage(alt_text="بوت الحوت",contents=welcome_card(),quick_reply=get_qr()))
-        if txt in ['مساعدة','help']:
-            return line_bot_api.reply_message(event.reply_token, FlexSendMessage(alt_text="المساعدة",contents=help_card(),quick_reply=get_qr()))
-        if txt in ['نقاطي','إحصائياتي','احصائياتي']:
-            return line_bot_api.reply_message(event.reply_token, FlexSendMessage(alt_text="إحصائياتك",contents=stats_card(uid,name,uid in registered_players),quick_reply=get_qr()))
-        if txt in ['الصدارة','المتصدرين']:
-            return line_bot_api.reply_message(event.reply_token, FlexSendMessage(alt_text="الصدارة",contents=leaderboard_card(),quick_reply=get_qr()))
-        if txt in ['إيقاف','stop','ايقاف']:
-            g = active_games.pop(gid,None)
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"⏹️ تم إيقاف {g['type']}" if g else "لا توجد لعبة",quick_reply=get_qr()))
-        if txt in ['انضم','تسجيل','join']:
-            if uid in registered_players:
-                return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"✓ أنت مسجل يا {name}",quick_reply=get_qr()))
-            registered_players.add(uid)
-            logger.info(f"تسجيل: {name}")
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"✅ تم تسجيلك يا {name}\nابدأ اللعب الآن!",quick_reply=get_qr()))
-        if txt in ['انسحب','خروج']:
-            if uid not in registered_players:
-                return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="غير مسجل",quick_reply=get_qr()))
-            registered_players.remove(uid)
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"👋 تم انسحابك",quick_reply=get_qr()))
-        
-        # محتوى نصي
-        if txt in ['سؤال','سوال']:
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=next_content(QUESTIONS,'q_idx'),quick_reply=get_qr()))
-        if txt in ['تحدي','challenge']:
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=next_content(CHALLENGES,'c_idx'),quick_reply=get_qr()))
-        if txt in ['اعتراف','confession']:
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=next_content(CONFESSIONS,'cf_idx'),quick_reply=get_qr()))
-        if txt in ['منشن','mention']:
-            return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=next_content(MENTIONS,'m_idx'),quick_reply=get_qr()))
-        
-        # ألعاب
-        is_reg = uid in registered_players
-        if GAMES_LOADED:
-            gmap = {'أغنية':'song','لعبة':'game','سلسلة':'chain','أسرع':'fast','ضد':'opposite',
-                   'تكوين':'build','ترتيب':'order','كلمة':'word','لون':'color','اختلاف':'diff','توافق':'compat'}
-            if txt in gmap:
-                if not is_reg:
-                    return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ سجل أولاً: انضم",quick_reply=get_qr()))
-                r =
+        sys.exit(1)
