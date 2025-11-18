@@ -47,8 +47,13 @@ def init_db():
         conn.commit()
         conn.close()
         logger.info("✓ قاعدة البيانات جاهزة")
+        return True
     except Exception as e:
         logger.error(f"✗ خطأ قاعدة البيانات: {e}")
+        return False
+
+# تهيئة قاعدة البيانات عند تشغيل التطبيق
+init_db()
 
 def db_execute(query, params=(), fetch=False):
     try:
@@ -59,6 +64,13 @@ def db_execute(query, params=(), fetch=False):
         conn.commit()
         conn.close()
         return result
+    except sqlite3.OperationalError as e:
+        if "no such table" in str(e):
+            logger.warning("⚠ إعادة تهيئة قاعدة البيانات...")
+            if init_db():
+                return db_execute(query, params, fetch)
+        logger.error(f"DB Error: {e}")
+        return None
     except Exception as e:
         logger.error(f"DB Error: {e}")
         return None
@@ -434,6 +446,15 @@ def index():
     status = "✓ متوفرة" if GAMES_LOADED else "✗ غير متوفرة"
     color = "#00FF88" if GAMES_LOADED else "#FF4444"
     
+    # التحقق من قاعدة البيانات
+    db_status = "✓ متصلة"
+    try:
+        result = db_execute('SELECT COUNT(*) FROM players', fetch=True)
+        player_count = result[0][0] if result else 0
+        db_status = f"✓ متصلة ({player_count} لاعب)"
+    except:
+        db_status = "✗ غير متصلة"
+    
     return f"""
     <!DOCTYPE html>
     <html dir="rtl">
@@ -468,7 +489,7 @@ def index():
                     <div class="stat"><span class="stat-value">8</span><span class="stat-label">ألعاب متوفرة</span></div>
                     <div class="stat"><span class="stat-value"><span class="indicator"></span></span><span class="stat-label">{status}</span></div>
                     <div class="stat"><span class="stat-value">24/7</span><span class="stat-label">متاح دائماً</span></div>
-                    <div class="stat"><span class="stat-value">✓</span><span class="stat-label">جاهز للعمل</span></div>
+                    <div class="stat"><span class="stat-value">✓</span><span class="stat-label">{db_status}</span></div>
                 </div>
                 <div class="footer"><p>© بوت الحوت 2025 - جميع الحقوق محفوظة</p></div>
             </div>
@@ -476,6 +497,23 @@ def index():
     </body>
     </html>
     """
+
+@app.route("/health")
+def health():
+    """نقطة فحص صحة التطبيق"""
+    try:
+        # فحص قاعدة البيانات
+        result = db_execute('SELECT COUNT(*) FROM players', fetch=True)
+        db_ok = result is not None
+        
+        return {
+            "status": "ok" if db_ok and GAMES_LOADED else "degraded",
+            "database": "connected" if db_ok else "disconnected",
+            "games": "loaded" if GAMES_LOADED else "not loaded",
+            "active_games": len(active_games)
+        }, 200
+    except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
 
 # تشغيل التطبيق
 if __name__ == "__main__":
@@ -485,7 +523,6 @@ if __name__ == "__main__":
     print(f"{'✓' if GAMES_LOADED else '✗'} تحميل الألعاب: {'نجح' if GAMES_LOADED else 'فشل'}")
     print("="*50)
     
-    init_db()
     port = int(os.getenv("PORT", 5000))
     print(f"🚀 تشغيل البوت على المنفذ {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
