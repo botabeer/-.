@@ -203,7 +203,11 @@ def create_header(icon, title, subtitle):
     ]
 
 def welcome_card():
-    return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":create_header("","بوت الحوت","نظام ألعاب تفاعلية") + [
+    return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
+        {"type":"box","layout":"vertical","contents":[{"type":"image","url":LOGO_URL,"size":"80px","aspectMode":"cover"}],"width":"80px","height":"80px","cornerRadius":"40px","borderWidth":"2px","borderColor":C['cyan'],"margin":"none","alignItems":"center","justifyContent":"center"},
+        {"type":"text","text":"بوت الحوت","size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
+        {"type":"text","text":"نظام ألعاب تفاعلية","size":"sm","color":C['text2'],"align":"center","margin":"xs"},
+        {"type":"separator","margin":"lg","color":C['border']},
         glass_box([{"type":"text","text":"🎮 الألعاب","size":"md","weight":"bold","color":C['text']},
             {"type":"text","text":"أغنية | لعبة | سلسلة | أسرع | ضد | تكوين | ترتيب | كلمة | لون","size":"xs","color":C['text2'],"wrap":True,"margin":"sm"}]),
         glass_box([{"type":"text","text":"🎯 التسلية","size":"md","weight":"bold","color":C['text']},
