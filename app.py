@@ -1,4 +1,4 @@
-"""بوت الحوت v3.2 - نسخة مضغوطة ومحسّنة"""
+"""بوت الحوت v3.2 - نسخة محسّنة نهائية"""
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
@@ -17,17 +17,15 @@ logger = logging.getLogger("whale-bot")
 # الإعدادات
 LINE_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_SECRET = os.getenv('LINE_CHANNEL_SECRET')
-GEMINI_KEYS = [k for k in [os.getenv(f'GEMINI_API_KEY_{i}', '') for i in range(1,4)] if k]
 
-# CRITICAL: تعريف app لحل مشكلة Gunicorn
+# تعريف app لحل مشكلة Gunicorn
 app = Flask(__name__)
 line_bot_api = LineBotApi(LINE_TOKEN) if LINE_TOKEN else None
 handler = WebhookHandler(LINE_SECRET) if LINE_SECRET else None
 active_games, registered_players = {}, set()
 
-# ألوان من الصورة فقط (أزرق سماوي ودرجات الداكن)
+# ألوان من الصورة فقط
 C = {'bg':'#0A0E27','card':'#0F2440','text':'#E0F2FF','text2':'#7FB3D5','cyan':'#00D9FF','glow':'#5EEBFF','sep':'#2C5F8D','border':'#00D9FF40'}
-LOGO = "https://i.imgur.com/qcWILGi.jpeg"
 
 # Rate Limiter
 class RateLimiter:
@@ -140,7 +138,7 @@ def next_content(items, idx_name):
     globals()[idx_name] += 1
     return r
 
-# Quick Reply - ألعاب + المزيد
+# Quick Reply
 def get_qr():
     btns = ["أغنية","لعبة","سلسلة","أسرع","ضد","تكوين","ترتيب","كلمة","لون","المزيد"]
     return QuickReply(items=[QuickReplyButton(action=MessageAction(label=b,text=b)) for b in btns])
@@ -157,62 +155,60 @@ def progress_bar(current, total):
     ],"spacing":"xs","margin":"lg"}
 
 def game_header(title, subtitle):
-    return [{"type":"box","layout":"vertical","contents":[{"type":"image","url":LOGO,"size":"60px","aspectMode":"cover"}],
-        "width":"60px","height":"60px","cornerRadius":"30px","borderWidth":"2px","borderColor":C['cyan'],"margin":"none"},
+    return [{"type":"text","text":"♓","size":"6xl","color":C['glow'],"align":"center","margin":"none"},
         {"type":"text","text":title,"size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
         {"type":"text","text":subtitle,"size":"sm","color":C['text2'],"align":"center","margin":"xs"},
         {"type":"separator","margin":"lg","color":C['sep']}]
 
-def create_button(label, text): return {"type":"button","action":{"type":"message","label":label,"text":text},"style":"secondary","height":"md"}
-
 # Flex Cards
 def welcome_card():
     return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
-        {"type":"box","layout":"vertical","contents":[{"type":"image","url":LOGO,"size":"100px","aspectMode":"cover"}],
-            "width":"100px","height":"100px","cornerRadius":"50px","borderWidth":"2px","borderColor":C['cyan'],"margin":"none"},
+        {"type":"text","text":"♓","size":"6xl","color":C['glow'],"align":"center","weight":"bold"},
         {"type":"text","text":"بوت الحوت","size":"xxl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
         {"type":"text","text":"نظام ألعاب تفاعلية","size":"sm","color":C['text2'],"align":"center","margin":"sm"},
         {"type":"separator","margin":"lg","color":C['sep']},
-        glass_box([{"type":"text","text":"الألعاب المتوفرة","size":"md","weight":"bold","color":C['text']},
-            {"type":"text","text":"أغنية | لعبة | سلسلة | أسرع | ضد\nتكوين | ترتيب | كلمة | لون","size":"xs","color":C['text2'],"wrap":True,"margin":"sm"}]),
+        glass_box([{"type":"text","text":"الألعاب التنافسية","size":"md","weight":"bold","color":C['text']},
+            {"type":"text","text":"أغنية | ضد | سلسلة | تكوين\nترتيب | كلمة | لون | لعبة | أسرع","size":"xs","color":C['text2'],"wrap":True,"margin":"sm"},
+            {"type":"text","text":"تدعم: لمح | جاوب | نقاط","size":"xxs","color":C['cyan'],"align":"center","margin":"sm"}]),
+        glass_box([{"type":"text","text":"محتوى ترفيهي","size":"md","weight":"bold","color":C['text']},
+            {"type":"text","text":"سؤال | تحدي | اعتراف | منشن","size":"xs","color":C['text2'],"wrap":True,"margin":"sm"},
+            {"type":"text","text":"بدون نقاط - للتسلية فقط","size":"xxs","color":C['text2'],"align":"center","margin":"sm"}]),
         {"type":"text","text":"بوت الحوت © 2025","size":"xxs","color":C['text2'],"align":"center","margin":"lg"}
     ],"backgroundColor":C['bg'],"paddingAll":"24px"},"footer":{"type":"box","layout":"vertical","contents":[
         {"type":"button","action":{"type":"message","label":"ابدأ اللعب","text":"مساعدة"},"style":"primary","color":C['cyan'],"height":"md"},
         {"type":"box","layout":"horizontal","contents":[
-            {"type":"button","action":{"type":"message","label":"المزيد","text":"المزيد"},"style":"secondary","height":"sm"},
+            {"type":"button","action":{"type":"message","label":"الصدارة","text":"الصدارة"},"style":"secondary","height":"sm"},
             {"type":"button","action":{"type":"message","label":"نقاطي","text":"نقاطي"},"style":"secondary","height":"sm"}
         ],"spacing":"sm","margin":"sm"}
     ],"paddingAll":"16px","backgroundColor":C['bg']}}
 
 def help_card():
     return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
-        {"type":"box","layout":"vertical","contents":[{"type":"image","url":LOGO,"size":"80px","aspectMode":"cover"}],
-            "width":"80px","height":"80px","cornerRadius":"40px","borderWidth":"2px","borderColor":C['cyan'],"margin":"none"},
+        {"type":"text","text":"♓","size":"6xl","color":C['glow'],"align":"center","weight":"bold"},
         {"type":"text","text":"المساعدة","size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
         {"type":"separator","margin":"lg","color":C['sep']},
         glass_box([{"type":"text","text":"أوامر اللعب","size":"md","weight":"bold","color":C['text']},
             {"type":"text","text":"لمح: تلميح (نصف النقاط)\nجاوب: عرض الحل\nإيقاف: إنهاء اللعبة","size":"xs","color":C['text2'],"wrap":True,"margin":"sm"}]),
         glass_box([{"type":"text","text":"إدارة الحساب","size":"md","weight":"bold","color":C['text']},
-            {"type":"text","text":"انضم: التسجيل\nانسحب: حذف الحساب\nنقاطي: الإحصائيات","size":"xs","color":C['text2'],"wrap":True,"margin":"sm"}]),
-        glass_box([{"type":"text","text":"نظام اللعب","size":"md","weight":"bold","color":C['text']},
+            {"type":"text","text":"انضم: التسجيل\nنقاطي: الإحصائيات\nالصدارة: أفضل اللاعبين","size":"xs","color":C['text2'],"wrap":True,"margin":"sm"}]),
+        glass_box([{"type":"text","text":"نظام النقاط","size":"md","weight":"bold","color":C['text']},
             {"type":"text","text":"5 جولات | +2 نقطة | +1 مع تلميح","size":"xs","color":C['text2'],"wrap":True,"margin":"sm"}]),
         {"type":"text","text":"بوت الحوت © 2025","size":"xxs","color":C['text2'],"align":"center","margin":"lg"}
     ],"backgroundColor":C['bg'],"paddingAll":"24px"},"footer":{"type":"box","layout":"vertical","contents":[
         {"type":"box","layout":"horizontal","contents":[
             {"type":"button","action":{"type":"message","label":"انضم","text":"انضم"},"style":"primary","color":C['cyan'],"height":"md","flex":1},
-            {"type":"button","action":{"type":"message","label":"إيقاف","text":"إيقاف"},"style":"secondary","height":"md","flex":1}
-        ],"spacing":"sm"},
-        {"type":"button","action":{"type":"message","label":"انسحب","text":"انسحب"},"style":"secondary","margin":"sm","height":"md"}
+            {"type":"button","action":{"type":"message","label":"مساعدة","text":"مساعدة"},"style":"secondary","height":"md","flex":1}
+        ],"spacing":"sm"}
     ],"paddingAll":"16px","backgroundColor":C['bg']}}
 
 def more_card():
     return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
-        {"type":"box","layout":"vertical","contents":[{"type":"image","url":LOGO,"size":"80px","aspectMode":"cover"}],
-            "width":"80px","height":"80px","cornerRadius":"40px","borderWidth":"2px","borderColor":C['cyan'],"margin":"none"},
+        {"type":"text","text":"♓","size":"6xl","color":C['glow'],"align":"center","weight":"bold"},
         {"type":"text","text":"المزيد","size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
         {"type":"separator","margin":"lg","color":C['sep']},
         glass_box([{"type":"text","text":"محتوى ترفيهي","size":"md","weight":"bold","color":C['text']},
-            {"type":"text","text":"سؤال | تحدي | اعتراف | منشن","size":"xs","color":C['text2'],"wrap":True,"margin":"sm"}]),
+            {"type":"text","text":"سؤال | تحدي | اعتراف | منشن","size":"xs","color":C['text2'],"wrap":True,"margin":"sm"},
+            {"type":"text","text":"بدون نقاط - للتسلية فقط","size":"xxs","color":C['cyan'],"align":"center","margin":"md"}]),
         {"type":"text","text":"بوت الحوت © 2025","size":"xxs","color":C['text2'],"align":"center","margin":"lg"}
     ],"backgroundColor":C['bg'],"paddingAll":"24px"},"footer":{"type":"box","layout":"vertical","contents":[
         {"type":"box","layout":"horizontal","contents":[
@@ -229,8 +225,7 @@ def stats_card(uid, name, is_reg):
     stats = get_stats(uid)
     if not stats:
         return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
-            {"type":"box","layout":"vertical","contents":[{"type":"image","url":LOGO,"size":"80px","aspectMode":"cover"}],
-                "width":"80px","height":"80px","cornerRadius":"40px","borderWidth":"2px","borderColor":C['cyan'],"margin":"none"},
+            {"type":"text","text":"♓","size":"6xl","color":C['glow'],"align":"center","weight":"bold"},
             {"type":"text","text":"إحصائياتك","size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
             {"type":"separator","margin":"lg","color":C['sep']},
             glass_box([{"type":"text","text":name,"size":"lg","color":C['text'],"align":"center"},
@@ -242,8 +237,7 @@ def stats_card(uid, name, is_reg):
     
     wr = (stats['wins']/stats['games_played']*100) if stats['games_played']>0 else 0
     return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
-        {"type":"box","layout":"vertical","contents":[{"type":"image","url":LOGO,"size":"80px","aspectMode":"cover"}],
-            "width":"80px","height":"80px","cornerRadius":"40px","borderWidth":"2px","borderColor":C['cyan'],"margin":"none"},
+        {"type":"text","text":"♓","size":"6xl","color":C['glow'],"align":"center","weight":"bold"},
         {"type":"text","text":"إحصائياتك","size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
         {"type":"separator","margin":"lg","color":C['sep']},
         glass_box([{"type":"text","text":name,"size":"lg","color":C['text'],"align":"center"}],"md"),
@@ -273,8 +267,7 @@ def leaderboard_card():
     leaders = get_leaderboard()
     if not leaders:
         return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
-            {"type":"box","layout":"vertical","contents":[{"type":"image","url":LOGO,"size":"80px","aspectMode":"cover"}],
-                "width":"80px","height":"80px","cornerRadius":"40px","borderWidth":"2px","borderColor":C['cyan'],"margin":"none"},
+            {"type":"text","text":"♓","size":"6xl","color":C['glow'],"align":"center","weight":"bold"},
             {"type":"text","text":"لوحة الصدارة","size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
             {"type":"separator","margin":"lg","color":C['sep']},
             {"type":"text","text":"لا توجد بيانات","size":"md","color":C['text2'],"align":"center","margin":"lg"},
@@ -292,8 +285,7 @@ def leaderboard_card():
             "borderWidth":"2px" if i==1 else "1px","borderColor":C['cyan'] if i==1 else C['border']})
     
     return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
-        {"type":"box","layout":"vertical","contents":[{"type":"image","url":LOGO,"size":"80px","aspectMode":"cover"}],
-            "width":"80px","height":"80px","cornerRadius":"40px","borderWidth":"2px","borderColor":C['cyan'],"margin":"none"},
+        {"type":"text","text":"♓","size":"6xl","color":C['glow'],"align":"center","weight":"bold"},
         {"type":"text","text":"لوحة الصدارة","size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
         {"type":"separator","margin":"lg","color":C['sep']},
         {"type":"box","layout":"vertical","contents":items,"margin":"md"},
@@ -307,7 +299,7 @@ try:
 except: logger.warning("games.py غير موجود"); GAMES_LOADED = False
 
 # معالج الرسائل
-CMDS = ['البداية','ابدأ','start','مساعدة','help','انضم','join','انسحب','خروج','نقاطي','إحصائياتي','الصدارة','المتصدرين',
+CMDS = ['البداية','ابدأ','start','مساعدة','help','انضم','join','نقاطي','إحصائياتي','الصدارة','المتصدرين',
     'إيقاف','stop','أغنية','لعبة','سلسلة','أسرع','ضد','تكوين','ترتيب','كلمة','لون','سؤال','سوال','تحدي','اعتراف','منشن',
     'لمح','تلميح','جاوب','الحل','الجواب','المزيد']
 
@@ -335,9 +327,6 @@ def handle_message(event):
             if uid in registered_players: return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"أنت مسجل يا {name}", quick_reply=get_qr()))
             registered_players.add(uid); logger.info(f"تسجيل: {name}")
             return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"تم تسجيلك يا {name}\nابدأ اللعب الآن", quick_reply=get_qr()))
-        if txt in ['انسحب','خروج']:
-            if uid not in registered_players: return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="غير مسجل", quick_reply=get_qr()))
-            registered_players.remove(uid); return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"تم انسحابك", quick_reply=get_qr()))
         if txt in ['سؤال','سوال']: return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=next_content(QUESTIONS,'q_idx'), quick_reply=get_qr()))
         if txt in ['تحدي','challenge']: return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=next_content(CHALLENGES,'c_idx'), quick_reply=get_qr()))
         if txt in ['اعتراف','confession']: return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=next_content(CONFESSIONS,'cf_idx'), quick_reply=get_qr()))
@@ -463,9 +452,9 @@ def home():
 @app.route("/health", methods=['GET'])
 def health():
     m = metrics.stats()
-    return {"status":"healthy","version":"3.2.0","timestamp":datetime.now().isoformat(),"active_games":len(active_games),
-        "registered_players":len(registered_players),"games_loaded":GAMES_LOADED,"metrics":{"uptime_seconds":m['uptime'],
-        "total_messages":m['total_msgs'],"total_games":m['total_games']}}
+    return {{"status":"healthy","version":"3.2.0","timestamp":datetime.now().isoformat(),"active_games":len(active_games),
+        "registered_players":len(registered_players),"games_loaded":GAMES_LOADED,"metrics":{{"uptime_seconds":m['uptime'],
+        "total_messages":m['total_msgs'],"total_games":m['total_games']}}}}
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -478,38 +467,38 @@ def callback():
         logger.error("توقيع غير صالح")
         abort(400)
     except Exception as e:
-        logger.error(f"webhook: {e}")
+        logger.error(f"webhook: {{e}}")
     return 'OK'
 
 @app.errorhandler(404)
-def not_found(e): return {"error":"الصفحة غير موجودة","status":404}, 404
+def not_found(e): return {{"error":"الصفحة غير موجودة","status":404}}, 404
 
 @app.errorhandler(500)
 def internal_error(e):
-    logger.error(f"خطأ: {e}")
-    return {"error":"خطأ داخلي","status":500}, 500
+    logger.error(f"خطأ: {{e}}")
+    return {{"error":"خطأ داخلي","status":500}}, 500
 
 @app.errorhandler(Exception)
 def handle_exception(e):
-    logger.error(f"خطأ غير متوقع: {e}", exc_info=True)
+    logger.error(f"خطأ غير متوقع: {{e}}", exc_info=True)
     return 'OK', 200
 
 # التشغيل
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
-    print(f"\n{'='*60}")
+    print(f"\n{{'='*60}}")
     print(f"♓ بوت الحوت v3.2 ♓")
-    print(f"{'='*60}")
-    print(f"المنفذ: {port}")
-    print(f"الألعاب: {'متوفرة' if GAMES_LOADED else 'غير متوفرة'}")
-    print(f"{'='*60}\n")
+    print(f"{{'='*60}}")
+    print(f"المنفذ: {{port}}")
+    print(f"الألعاب: {{'متوفرة' if GAMES_LOADED else 'غير متوفرة'}}")
+    print(f"{{'='*60}}\n")
     
     try:
-        logger.info(f"بدء الخادم على المنفذ {port}")
+        logger.info(f"بدء الخادم على المنفذ {{port}}")
         app.run(host='0.0.0.0', port=port, debug=False, threaded=True, use_reloader=False)
     except KeyboardInterrupt:
         logger.info("تم إيقاف الخادم")
         cleanup_inactive()
     except Exception as e:
-        logger.critical(f"فشل التشغيل: {e}")
+        logger.critical(f"فشل التشغيل: {{e}}")
         sys.exit(1)
