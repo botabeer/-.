@@ -1,9 +1,8 @@
-# games.py - ألعاب بوت الحوت
+# games.py - ألعاب بوت الحوت المحسّنة
 
 import random
 import re
 import time
-from datetime import datetime
 from config import C, GAME_SETTINGS, POINTS, MESSAGES
 
 # ============= بيانات الألعاب =============
@@ -37,7 +36,7 @@ LBGAME_DATA = [
 ]
 
 # لعبة سلسلة الكلمات
-CHAIN_START = ['سيارة', 'قلم', 'كتاب', 'رياضة', 'مدرسة', 'طائرة', 'شمس', 'قمر']
+CHAIN_START = ['سيارة', 'قلم', 'كتاب', 'رياضة', 'مدرسة', 'طائرة', 'شمس', 'قمر', 'باب', 'نور']
 
 # لعبة الأغنية
 SONGS_DATA = [
@@ -95,15 +94,33 @@ def normalize_arabic(text):
     text = re.sub('ة', 'ه', text)
     return text.lower()
 
-def create_game_card(title, question, current, total, show_buttons=True):
-    """إنشاء بطاقة اللعبة"""
+def create_game_card(title, question, current, total, emoji="🎮", show_buttons=True):
+    """إنشاء بطاقة اللعبة الموحدة"""
+    
+    # شريط التقدم
+    progress_percent = (current / total) * 100
+    
     contents = [
         {
             "type": "box",
             "layout": "vertical",
             "contents": [
-                {"type": "text", "text": title, "weight": "bold", "size": "xl", "color": C['cyan']},
-                {"type": "text", "text": f"السؤال {current}/{total}", "size": "sm", "color": C['text2']}
+                {
+                    "type": "text",
+                    "text": f"{emoji} {title}",
+                    "weight": "bold",
+                    "size": "xl",
+                    "color": C['cyan'],
+                    "align": "center"
+                },
+                {
+                    "type": "text",
+                    "text": f"السؤال {current}/{total}",
+                    "size": "sm",
+                    "color": C['text2'],
+                    "align": "center",
+                    "margin": "xs"
+                }
             ]
         },
         {
@@ -112,16 +129,36 @@ def create_game_card(title, question, current, total, show_buttons=True):
             "backgroundColor": C['card'],
             "cornerRadius": "12px",
             "paddingAll": "16px",
+            "margin": "md",
             "contents": [
-                {"type": "text", "text": question, "wrap": True, "color": C['text'], "size": "md"}
+                {
+                    "type": "text",
+                    "text": question,
+                    "wrap": True,
+                    "color": C['text'],
+                    "size": "md",
+                    "align": "center"
+                }
             ]
         },
         {
             "type": "box",
             "layout": "vertical",
-            "height": "3px",
-            "cornerRadius": "2px",
-            "backgroundColor": C['cyan']
+            "height": "6px",
+            "backgroundColor": C['sep'],
+            "cornerRadius": "3px",
+            "margin": "md",
+            "contents": [
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "width": f"{progress_percent}%",
+                    "height": "6px",
+                    "backgroundColor": C['cyan'],
+                    "cornerRadius": "3px",
+                    "contents": []
+                }
+            ]
         }
     ]
     
@@ -132,8 +169,28 @@ def create_game_card(title, question, current, total, show_buttons=True):
             "spacing": "md",
             "margin": "lg",
             "contents": [
-                {"type": "button", "action": {"type": "message", "label": "لمح", "text": "لمح"}, "style": "secondary", "color": "#FFFFFF", "height": "sm"},
-                {"type": "button", "action": {"type": "message", "label": "جاوب", "text": "جاوب"}, "style": "primary", "color": "#FFFFFF", "height": "sm"}
+                {
+                    "type": "button",
+                    "action": {
+                        "type": "message",
+                        "label": "💡 لمح",
+                        "text": "لمح"
+                    },
+                    "style": "secondary",
+                    "color": "#F1F1F1",
+                    "height": "sm"
+                },
+                {
+                    "type": "button",
+                    "action": {
+                        "type": "message",
+                        "label": "📝 جاوب",
+                        "text": "جاوب"
+                    },
+                    "style": "primary",
+                    "color": C['cyan'],
+                    "height": "sm"
+                }
             ]
         })
     
@@ -162,8 +219,19 @@ def create_winner_card(winner_name, winner_points, game_name):
             "backgroundColor": C['bg'],
             "paddingAll": "20px",
             "contents": [
-                {"type": "text", "text": "🏆 انتهت اللعبة!", "weight": "bold", "size": "xxl", "color": C['cyan'], "align": "center"},
-                {"type": "separator", "color": C['sep'], "margin": "15px"},
+                {
+                    "type": "text",
+                    "text": "🏆 انتهت اللعبة!",
+                    "weight": "bold",
+                    "size": "xxl",
+                    "color": C['cyan'],
+                    "align": "center"
+                },
+                {
+                    "type": "separator",
+                    "color": C['sep'],
+                    "margin": "15px"
+                },
                 {
                     "type": "box",
                     "layout": "vertical",
@@ -172,15 +240,33 @@ def create_winner_card(winner_name, winner_points, game_name):
                     "paddingAll": "20px",
                     "margin": "md",
                     "contents": [
-                        {"type": "text", "text": f"🥇 الفائز: {winner_name}", "size": "lg", "color": C['text'], "wrap": True, "align": "center"},
-                        {"type": "text", "text": f"⭐ النقاط: {winner_points}", "size": "md", "color": C['text2'], "margin": "md", "align": "center"}
+                        {
+                            "type": "text",
+                            "text": f"🥇 الفائز: {winner_name}",
+                            "size": "lg",
+                            "color": C['text'],
+                            "wrap": True,
+                            "align": "center"
+                        },
+                        {
+                            "type": "text",
+                            "text": f"⭐ النقاط: {winner_points}",
+                            "size": "md",
+                            "color": C['text2'],
+                            "margin": "md",
+                            "align": "center"
+                        }
                     ]
                 },
                 {
                     "type": "button",
                     "style": "primary",
                     "color": C['cyan'],
-                    "action": {"type": "message", "label": "لعب مرة أخرى", "text": game_name},
+                    "action": {
+                        "type": "message",
+                        "label": "🎮 لعب مرة أخرى",
+                        "text": game_name
+                    },
                     "margin": "xl"
                 }
             ]
@@ -228,15 +314,16 @@ def start_fast_game(game_data):
     game_data['question_time'] = time.time()
     
     card = create_game_card(
-        "⏱️ لعبة أسرع",
-        f"أكمل الجملة:\n{item['q']}",
+        "أسرع",
+        f"أكمل الجملة:\n\n{item['q']}",
         game_data['round'],
         GAME_SETTINGS['rounds'],
-        show_buttons=False
+        emoji="⏱️",
+        show_buttons=False  # لا تدعم لمح/جاوب
     )
     
     return {
-        'message': 'بدأت لعبة أسرع!',
+        'message': '⏱️ بدأت لعبة أسرع!',
         'flex': card,
         'game_data': game_data
     }
@@ -272,17 +359,17 @@ def start_lbgame(game_data):
     item = random.choice(LBGAME_DATA)
     game_data['current_letter'] = item['letter']
     game_data['current_answers'] = item['answers']
-    game_data['answered_parts'] = []
     
     card = create_game_card(
-        "🎮 لعبة",
-        f"أعط أسماء تبدأ بحرف: {item['letter']}\n\nإنسان → حيوان → نبات → بلد",
+        "لعبة",
+        f"أعط أسماء تبدأ بحرف: {item['letter']}\n\nإنسان\nحيوان\nنبات\nبلد",
         game_data['round'],
-        GAME_SETTINGS['rounds']
+        GAME_SETTINGS['rounds'],
+        emoji="🎮"
     )
     
     return {
-        'message': 'بدأت لعبة إنسان حيوان نبات بلد!',
+        'message': '🎮 بدأت لعبة إنسان حيوان نبات بلد!',
         'flex': card,
         'game_data': game_data
     }
@@ -294,10 +381,9 @@ def check_lbgame_answer(game, text, user_id, user_name):
     if len(lines) != 4:
         return {'correct': False, 'message': 'يجب كتابة 4 إجابات (إنسان، حيوان، نبات، بلد)'}
     
-    correct_answers = game['current_answers']
     correct_count = 0
     
-    for i, answer in enumerate(lines):
+    for answer in lines:
         normalized = normalize_arabic(answer)
         if normalized.startswith(normalize_arabic(game['current_letter'])):
             correct_count += 1
@@ -321,14 +407,15 @@ def start_chain_game(game_data):
     game_data['used_words'] = [start_word]
     
     card = create_game_card(
-        "🔗 سلسلة الكلمات",
+        "سلسلة الكلمات",
         f"الكلمة الحالية: {start_word}\n\nاكتب كلمة تبدأ بحرف: {start_word[-1]}",
         game_data['round'],
-        GAME_SETTINGS['rounds']
+        GAME_SETTINGS['rounds'],
+        emoji="🔗"
     )
     
     return {
-        'message': 'بدأت لعبة سلسلة الكلمات!',
+        'message': '🔗 بدأت لعبة سلسلة الكلمات!',
         'flex': card,
         'game_data': game_data
     }
@@ -366,14 +453,15 @@ def start_song_game(game_data):
     game_data['current_artist'] = song['artist']
     
     card = create_game_card(
-        "🎵 لعبة الأغنية",
+        "الأغنية",
         f"{song['lyrics']}\n\nمن المغني؟",
         game_data['round'],
-        GAME_SETTINGS['rounds']
+        GAME_SETTINGS['rounds'],
+        emoji="🎵"
     )
     
     return {
-        'message': 'بدأت لعبة الأغنية!',
+        'message': '🎵 بدأت لعبة الأغنية!',
         'flex': card,
         'game_data': game_data
     }
@@ -398,14 +486,15 @@ def start_opposite_game(game_data):
     game_data['current_opposite'] = item['opposite']
     
     card = create_game_card(
-        "⚖️ لعبة ضد",
-        f"ما هو عكس كلمة:\n{item['word']}",
+        "ضد",
+        f"ما هو عكس كلمة:\n\n{item['word']}",
         game_data['round'],
-        GAME_SETTINGS['rounds']
+        GAME_SETTINGS['rounds'],
+        emoji="⚖️"
     )
     
     return {
-        'message': 'بدأت لعبة الأضداد!',
+        'message': '⚖️ بدأت لعبة الأضداد!',
         'flex': card,
         'game_data': game_data
     }
@@ -431,14 +520,15 @@ def start_order_game(game_data):
     game_data['order_type'] = item['type']
     
     card = create_game_card(
-        "📋 لعبة ترتيب",
-        f"رتب {item['type']}:\n" + '\n'.join(item['items']),
+        "ترتيب",
+        f"رتب {item['type']}:\n\n" + '\n'.join(item['items']),
         game_data['round'],
-        GAME_SETTINGS['rounds']
+        GAME_SETTINGS['rounds'],
+        emoji="📋"
     )
     
     return {
-        'message': 'بدأت لعبة الترتيب!',
+        'message': '📋 بدأت لعبة الترتيب!',
         'flex': card,
         'game_data': game_data
     }
@@ -471,14 +561,15 @@ def start_build_game(game_data):
     game_data['valid_words'] = item['words']
     
     card = create_game_card(
-        "🔤 تكوين كلمات",
-        f"كون 3 كلمات من الحروف:\n{item['letters']}\n\nاكتب الكلمات كل واحدة في سطر",
+        "تكوين كلمات",
+        f"كون 3 كلمات من الحروف:\n\n{item['letters']}\n\nاكتب الكلمات كل واحدة في سطر",
         game_data['round'],
-        GAME_SETTINGS['rounds']
+        GAME_SETTINGS['rounds'],
+        emoji="🔤"
     )
     
     return {
-        'message': 'بدأت لعبة تكوين الكلمات!',
+        'message': '🔤 بدأت لعبة تكوين الكلمات!',
         'flex': card,
         'game_data': game_data
     }
@@ -509,10 +600,8 @@ def check_build_answer(game, text, user_id, user_name):
 
 def start_compat_game(game_data):
     """لعبة التوافق"""
-    game_data['compat_names'] = []
-    
     return {
-        'message': '💕 لعبة التوافق\n\nاكتب اسمين لحساب نسبة التوافق بينهما\nمثال:\nأحمد\nفاطمة',
+        'message': '💕 لعبة التوافق\n\nاكتب اسمين لحساب نسبة التوافق بينهما\n\nمثال:\nأحمد\nفاطمة',
         'game_data': game_data
     }
 
@@ -529,7 +618,13 @@ def check_compat_answer(game, text, user_id, user_name):
     random.seed(seed)
     compat = random.randint(1, 100)
     
-    message = f"💕 نسبة التوافق بين {lines[0]} و {lines[1]}:\n\n{'❤️' * (compat // 10)} {compat}%"
+    # رموز القلوب حسب النسبة
+    hearts = '❤️' * (compat // 10)
+    
+    message = f"💕 نسبة التوافق بين {lines[0]} و {lines[1]}:\n\n{hearts} {compat}%"
+    
+    if user_id not in game['players']:
+        game['players'][user_id] = {'name': user_name, 'points': 0}
     
     return {'correct': True, 'message': message, 'end_game': True}
 
@@ -629,7 +724,6 @@ def show_answer(game, group_id, active_games):
     elif game_type == 'lbgame':
         answer = '\n'.join(game['current_answers'])
     elif game_type == 'chain':
-        # اختيار كلمة عشوائية تبدأ بالحرف المطلوب
         answer = f"أي كلمة تبدأ بـ {game['last_letter']}"
     elif game_type == 'song':
         answer = game['current_artist']
