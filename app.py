@@ -1,4 +1,4 @@
-# app.py - بوت الحوت الرئيسي
+# app.py - بوت الحوت المحسّن
 
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
@@ -12,68 +12,28 @@ import sqlite3
 import logging
 from datetime import datetime, timedelta
 import random
-import re
 import time
 from collections import defaultdict
-import json
 
-# إعداد Logging المبكر
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# إعداد Logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
 # استيراد الإعدادات
 from config import *
 
-# استيراد الألعاب مع نظام بديل محسّن ومبسط
+# استيراد الألعاب - نظام محسّن
 GAMES_LOADED = False
-GAMES_SOURCE = None
-
-# المحاولة الأولى: استيراد مباشر من games.py في المجلد الحالي
 try:
-    import importlib.util
-    import os
-    
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    games_file = os.path.join(current_dir, 'games.py')
-    
-    if os.path.exists(games_file):
-        spec = importlib.util.spec_from_file_location("games_module", games_file)
-        games_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(games_module)
-        
-        start_game = games_module.start_game
-        check_game_answer = games_module.check_game_answer
-        get_hint = games_module.get_hint
-        show_answer = games_module.show_answer
-        
-        GAMES_LOADED = True
-        GAMES_SOURCE = "games.py (direct)"
-        logger.info("تم تحميل games.py مباشرة")
-    else:
-        raise FileNotFoundError("games.py not found")
-        
-except Exception as e:
-    logger.warning(f"فشل التحميل المباشر: {e}")
-    
-    # المحاولة الثانية: استيراد من games/games.py
-    try:
-        from games.games import start_game, check_game_answer, get_hint, show_answer
-        GAMES_LOADED = True
-        GAMES_SOURCE = "games/games.py"
-        logger.info("تم تحميل games/games.py")
-    except Exception as e2:
-        logger.warning(f"فشل تحميل games/games.py: {e2}")
-        
-        # المحاولة الثالثة: استيراد من games/__init__.py
-        try:
-            from games import start_game, check_game_answer, get_hint, show_answer
-            GAMES_LOADED = True
-            GAMES_SOURCE = "games/__init__.py"
-            logger.info("تم تحميل games/__init__.py")
-        except Exception as e3:
-            logger.error(f"فشل جميع محاولات التحميل: {e3}")
-            GAMES_LOADED = False
-            GAMES_SOURCE = None
+    from games import start_game, check_game_answer, get_hint, show_answer
+    GAMES_LOADED = True
+    logger.info("✅ تم تحميل ملف الألعاب بنجاح")
+except ImportError as e:
+    logger.error(f"❌ فشل تحميل games.py: {e}")
+    GAMES_LOADED = False
 
 # إعداد Flask
 app = Flask(__name__)
@@ -82,7 +42,7 @@ app = Flask(__name__)
 line_bot_api = LineBotApi(os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
 handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
 
-# الألعاب النشطة {group_id: {game_type, players, current_q, ...}}
+# الألعاب النشطة {group_id: game_data}
 active_games = {}
 
 # Rate Limiter
@@ -98,9 +58,9 @@ def init_db():
         cursor.executescript(DB_SCHEMA)
         conn.commit()
         conn.close()
-        logger.info("تم تهيئة قاعدة البيانات")
+        logger.info("✅ تم تهيئة قاعدة البيانات")
     except Exception as e:
-        logger.error(f"خطأ في تهيئة قاعدة البيانات: {e}")
+        logger.error(f"❌ خطأ في تهيئة قاعدة البيانات: {e}")
 
 def register_user(user_id, name):
     """تسجيل مستخدم جديد"""
@@ -200,24 +160,6 @@ def get_leaderboard(limit=10):
         logger.error(f"خطأ في جلب الصدارة: {e}")
         return []
 
-def cleanup_inactive_users():
-    """حذف المستخدمين غير النشطين"""
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
-        cutoff = datetime.now() - timedelta(days=GAME_SETTINGS['inactive_days'])
-        cursor.execute('''
-            DELETE FROM players 
-            WHERE last_active < ?
-        ''', (cutoff,))
-        deleted = cursor.rowcount
-        conn.commit()
-        conn.close()
-        if deleted > 0:
-            logger.info(f"تم حذف {deleted} مستخدم غير نشط")
-    except Exception as e:
-        logger.error(f"خطأ في تنظيف المستخدمين: {e}")
-
 # ============= Rate Limiter =============
 
 def check_rate_limit(user_id):
@@ -238,27 +180,23 @@ def check_rate_limit(user_id):
 # ============= Quick Reply Buttons =============
 
 def create_quick_reply_buttons():
-    """إنشاء أزرار سريعة ثابتة"""
+    """إنشاء أزرار سريعة محسّنة"""
     return QuickReply(items=[
-        QuickReplyButton(action=MessageAction(label="أسرع", text="أسرع")),
-        QuickReplyButton(action=MessageAction(label="لعبة", text="لعبة")),
-        QuickReplyButton(action=MessageAction(label="سلسلة", text="سلسلة")),
-        QuickReplyButton(action=MessageAction(label="أغنية", text="أغنية")),
-        QuickReplyButton(action=MessageAction(label="ضد", text="ضد")),
-        QuickReplyButton(action=MessageAction(label="ترتيب", text="ترتيب")),
-        QuickReplyButton(action=MessageAction(label="تكوين", text="تكوين")),
-        QuickReplyButton(action=MessageAction(label="توافق", text="توافق")),
-        QuickReplyButton(action=MessageAction(label="Ai", text="Ai")),
-        QuickReplyButton(action=MessageAction(label="سؤال", text="سؤال")),
-        QuickReplyButton(action=MessageAction(label="منشن", text="منشن")),
-        QuickReplyButton(action=MessageAction(label="اعتراف", text="اعتراف")),
-        QuickReplyButton(action=MessageAction(label="تحدي", text="تحدي"))
+        QuickReplyButton(action=MessageAction(label="⏱️ أسرع", text="أسرع")),
+        QuickReplyButton(action=MessageAction(label="🎮 لعبة", text="لعبة")),
+        QuickReplyButton(action=MessageAction(label="🔗 سلسلة", text="سلسلة")),
+        QuickReplyButton(action=MessageAction(label="🎵 أغنية", text="أغنية")),
+        QuickReplyButton(action=MessageAction(label="⚖️ ضد", text="ضد")),
+        QuickReplyButton(action=MessageAction(label="📋 ترتيب", text="ترتيب")),
+        QuickReplyButton(action=MessageAction(label="🔤 تكوين", text="تكوين")),
+        QuickReplyButton(action=MessageAction(label="💕 توافق", text="توافق")),
+        QuickReplyButton(action=MessageAction(label="🤖 Ai", text="Ai"))
     ])
 
 # ============= Flex Messages =============
 
 def create_welcome_card():
-    """إنشاء بطاقة الترحيب"""
+    """إنشاء بطاقة الترحيب - محسّنة"""
     return {
         "type": "bubble",
         "size": "mega",
@@ -319,35 +257,27 @@ def create_welcome_card():
                                     "backgroundColor": C['card'],
                                     "paddingAll": "20px",
                                     "contents": [
-                                        {"type": "text", "text": "1. أسرع\n- أول من يكتب الكلمة أو الدعاء الصحيح يفوز", "size": "15px", "color": C['text'], "wrap": True},
-                                        {"type": "text", "text": "2. لعبة\n- إنسان، حيوان، نبات، بلد\n- الإجابات بالترتيب:\nإنسان → حيوان → نبات → بلد", "size": "15px", "color": C['text'], "wrap": True, "margin": "10px"},
-                                        {"type": "text", "text": "3. سلسلة الكلمات\n- كلمة تبدأ بالحرف الأخير من السابقة", "size": "15px", "color": C['text'], "wrap": True, "margin": "10px"},
-                                        {"type": "text", "text": "4. أغنية\n- تخمين المغني من كلمات الأغنية", "size": "15px", "color": C['text'], "wrap": True, "margin": "10px"},
-                                        {"type": "text", "text": "5. ضد\n- اعكس الكلمة المعطاة", "size": "15px", "color": C['text'], "wrap": True, "margin": "10px"},
-                                        {"type": "text", "text": "6. ترتيب\n- ترتيب العناصر حسب المطلوب", "size": "15px", "color": C['text'], "wrap": True, "margin": "10px"},
-                                        {"type": "text", "text": "7. تكوين كلمات\n- تكوين 3 كلمات من 6 حروف\n- طريقة الإجابة:\nجواب1\nجواب2\nجواب3", "size": "15px", "color": C['text'], "wrap": True, "margin": "10px"},
-                                        {"type": "text", "text": "8. توافق\n- حساب نسبة التوافق بين اسمين", "size": "15px", "color": C['text'], "wrap": True, "margin": "10px"},
-                                        {"type": "text", "text": "9. Ai (AiChat)\n- محادثة ذكية قصيرة", "size": "15px", "color": C['text'], "wrap": True, "margin": "10px"}
+                                        {"type": "text", "text": "⏱️ أسرع - أول من يجيب يفوز", "size": "15px", "color": C['text'], "wrap": True},
+                                        {"type": "text", "text": "🎮 لعبة - إنسان، حيوان، نبات، بلد", "size": "15px", "color": C['text'], "wrap": True, "margin": "8px"},
+                                        {"type": "text", "text": "🔗 سلسلة - كلمات متصلة", "size": "15px", "color": C['text'], "wrap": True, "margin": "8px"},
+                                        {"type": "text", "text": "🎵 أغنية - خمّن المغني", "size": "15px", "color": C['text'], "wrap": True, "margin": "8px"},
+                                        {"type": "text", "text": "⚖️ ضد - عكس الكلمة", "size": "15px", "color": C['text'], "wrap": True, "margin": "8px"},
+                                        {"type": "text", "text": "📋 ترتيب - رتب العناصر", "size": "15px", "color": C['text'], "wrap": True, "margin": "8px"},
+                                        {"type": "text", "text": "🔤 تكوين - كوّن 3 كلمات", "size": "15px", "color": C['text'], "wrap": True, "margin": "8px"},
+                                        {"type": "text", "text": "💕 توافق - نسبة التوافق", "size": "15px", "color": C['text'], "wrap": True, "margin": "8px"},
+                                        {"type": "text", "text": "🤖 Ai - محادثة ذكية", "size": "15px", "color": C['text'], "wrap": True, "margin": "8px"}
                                     ]
-                                },
-                                {
-                                    "type": "text",
-                                    "text": "محتوى ترفيهي\nسؤال • منشن • اعتراف • تحدي",
-                                    "align": "center",
-                                    "size": "16px",
-                                    "color": C['text2'],
-                                    "margin": "25px",
-                                    "wrap": True
                                 },
                                 {
                                     "type": "box",
                                     "layout": "vertical",
                                     "spacing": "12px",
+                                    "margin": "20px",
                                     "contents": [
-                                        {"type": "button", "style": "primary", "height": "md", "color": C['cyan'], "action": {"type": "message", "label": "ابدأ", "text": "ابدأ"}},
-                                        {"type": "button", "style": "secondary", "color": "#F1F1F1", "action": {"type": "message", "label": "انضم", "text": "انضم"}},
-                                        {"type": "button", "style": "secondary", "color": "#F1F1F1", "action": {"type": "message", "label": "انسحب", "text": "انسحب"}},
-                                        {"type": "button", "style": "secondary", "color": "#F1F1F1", "action": {"type": "message", "label": "إيقاف", "text": "إيقاف"}}
+                                        {"type": "button", "style": "primary", "height": "md", "color": C['cyan'], "action": {"type": "message", "label": "🎲 ابدأ لعبة عشوائية", "text": "ابدأ"}},
+                                        {"type": "button", "style": "secondary", "color": "#F1F1F1", "action": {"type": "message", "label": "✅ انضم", "text": "انضم"}},
+                                        {"type": "button", "style": "secondary", "color": "#F1F1F1", "action": {"type": "message", "label": "❌ انسحب", "text": "انسحب"}},
+                                        {"type": "button", "style": "secondary", "color": "#F1F1F1", "action": {"type": "message", "label": "⏹️ إيقاف", "text": "إيقاف"}}
                                     ]
                                 }
                             ]
@@ -394,14 +324,14 @@ def create_help_card():
                                     "backgroundColor": C['card'],
                                     "paddingAll": "18px",
                                     "contents": [
-                                        {"type": "text", "text": "• لمح → تلميح ذكي للسؤال", "size": "15px", "color": C['text'], "wrap": True},
-                                        {"type": "text", "text": "• جاوب → يعرض الإجابة الصحيحة ثم ينتقل للسؤال التالي", "size": "15px", "color": C['text'], "wrap": True, "margin": "5px"},
-                                        {"type": "text", "text": "• إعادة → يعيد تشغيل اللعبة الحالية", "size": "15px", "color": C['text'], "wrap": True, "margin": "5px"},
-                                        {"type": "text", "text": "• إيقاف → ينهي اللعبة الجارية فورًا", "size": "15px", "color": C['text'], "wrap": True, "margin": "5px"},
-                                        {"type": "text", "text": "• انضم → يسجل اللاعب في الجولة", "size": "15px", "color": C['text'], "wrap": True, "margin": "5px"},
-                                        {"type": "text", "text": "• انسحب → يلغي تسجيل اللاعب", "size": "15px", "color": C['text'], "wrap": True, "margin": "5px"},
-                                        {"type": "text", "text": "• نقاطي → عرض نقاطك الحالية", "size": "15px", "color": C['text'], "wrap": True, "margin": "5px"},
-                                        {"type": "text", "text": "• الصدارة → عرض أفضل اللاعبين", "size": "15px", "color": C['text'], "wrap": True, "margin": "5px"}
+                                        {"type": "text", "text": "💡 لمح → تلميح ذكي (-1 نقطة)", "size": "15px", "color": C['text'], "wrap": True},
+                                        {"type": "text", "text": "📝 جاوب → الإجابة الصحيحة ثم السؤال التالي", "size": "15px", "color": C['text'], "wrap": True, "margin": "5px"},
+                                        {"type": "text", "text": "🔄 إعادة → إعادة اللعبة الحالية", "size": "15px", "color": C['text'], "wrap": True, "margin": "5px"},
+                                        {"type": "text", "text": "⏹️ إيقاف → إنهاء اللعبة فوراً", "size": "15px", "color": C['text'], "wrap": True, "margin": "5px"},
+                                        {"type": "text", "text": "✅ انضم → تسجيل في اللعبة", "size": "15px", "color": C['text'], "wrap": True, "margin": "5px"},
+                                        {"type": "text", "text": "❌ انسحب → إلغاء التسجيل", "size": "15px", "color": C['text'], "wrap": True, "margin": "5px"},
+                                        {"type": "text", "text": "⭐ نقاطي → عرض نقاطك", "size": "15px", "color": C['text'], "wrap": True, "margin": "5px"},
+                                        {"type": "text", "text": "🏆 الصدارة → أفضل اللاعبين", "size": "15px", "color": C['text'], "wrap": True, "margin": "5px"}
                                     ]
                                 },
                                 {
@@ -410,8 +340,8 @@ def create_help_card():
                                     "spacing": "10px",
                                     "margin": "20px",
                                     "contents": [
-                                        {"type": "button", "style": "secondary", "height": "sm", "color": "#F1F1F1", "action": {"type": "message", "label": "نقاطي", "text": "نقاطي"}},
-                                        {"type": "button", "style": "secondary", "height": "sm", "color": "#F1F1F1", "action": {"type": "message", "label": "الصدارة", "text": "الصدارة"}}
+                                        {"type": "button", "style": "secondary", "height": "sm", "color": "#F1F1F1", "action": {"type": "message", "label": "⭐ نقاطي", "text": "نقاطي"}},
+                                        {"type": "button", "style": "secondary", "height": "sm", "color": "#F1F1F1", "action": {"type": "message", "label": "🏆 الصدارة", "text": "الصدارة"}}
                                     ]
                                 },
                                 {"type": "text", "text": "© بوت الحوت 2025", "align": "center", "size": "13px", "color": C['text2'], "margin": "10px"}
@@ -434,7 +364,7 @@ def create_stats_card(stats):
             "backgroundColor": C['bg'],
             "paddingAll": "20px",
             "contents": [
-                {"type": "text", "text": "إحصائياتك", "weight": "bold", "size": "xl", "color": C['cyan'], "align": "center"},
+                {"type": "text", "text": "⭐ إحصائياتك", "weight": "bold", "size": "xl", "color": C['cyan'], "align": "center"},
                 {"type": "separator", "color": C['sep'], "margin": "15px"},
                 {
                     "type": "box",
@@ -444,10 +374,10 @@ def create_stats_card(stats):
                     "paddingAll": "20px",
                     "margin": "md",
                     "contents": [
-                        {"type": "text", "text": f"الاسم: {stats['name']}", "size": "lg", "color": C['text'], "wrap": True},
-                        {"type": "text", "text": f"النقاط: {stats['points']}", "size": "md", "color": C['text'], "margin": "md"},
-                        {"type": "text", "text": f"الألعاب: {stats['games_played']}", "size": "md", "color": C['text'], "margin": "sm"},
-                        {"type": "text", "text": f"الانتصارات: {stats['games_won']}", "size": "md", "color": C['text'], "margin": "sm"}
+                        {"type": "text", "text": f"👤 الاسم: {stats['name']}", "size": "lg", "color": C['text'], "wrap": True},
+                        {"type": "text", "text": f"⭐ النقاط: {stats['points']}", "size": "md", "color": C['text'], "margin": "md"},
+                        {"type": "text", "text": f"🎮 الألعاب: {stats['games_played']}", "size": "md", "color": C['text'], "margin": "sm"},
+                        {"type": "text", "text": f"🏆 الانتصارات: {stats['games_won']}", "size": "md", "color": C['text'], "margin": "sm"}
                     ]
                 }
             ]
@@ -457,7 +387,7 @@ def create_stats_card(stats):
 def create_leaderboard_card(leaderboard):
     """إنشاء بطاقة الصدارة"""
     contents = [
-        {"type": "text", "text": "لوحة الصدارة", "weight": "bold", "size": "xl", "color": C['cyan'], "align": "center"},
+        {"type": "text", "text": "🏆 لوحة الصدارة", "weight": "bold", "size": "xl", "color": C['cyan'], "align": "center"},
         {"type": "separator", "color": C['sep'], "margin": "15px"}
     ]
     
@@ -616,81 +546,12 @@ def handle_message(event):
             return
         
         if GAMES_LOADED:
-            game_type = random.choice(GAMES_LIST[:7])  # اختيار لعبة عشوائية (بدون ai)
+            game_type = random.choice(GAMES_LIST[:8])  # اختيار لعبة عشوائية (بدون ai)
             result = start_game(group_id, game_type, user_id, user_name)
             active_games[group_id] = result['game_data']
             
             if result.get('flex'):
                 flex = FlexSendMessage(alt_text=result['message'], contents=result['flex'])
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    flex,
-                    quick_reply=create_quick_reply_buttons()
-                )
-            else:
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text=result['message'], quick_reply=create_quick_reply_buttons())
-                )
-        else:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="الألعاب غير متوفرة حالياً - يرجى التحقق من ملفات الألعاب", quick_reply=create_quick_reply_buttons())
-            )
-        return
-    
-    # أمر إيقاف اللعبة
-    if any(cmd in text_lower for cmd in CMDS['stop']):
-        if group_id in active_games:
-            del active_games[group_id]
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=MESSAGES['game_stopped'], quick_reply=create_quick_reply_buttons())
-            )
-        else:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=MESSAGES['no_active_game'], quick_reply=create_quick_reply_buttons())
-            )
-        return
-    
-    # أمر التلميح
-    if any(cmd in text_lower for cmd in CMDS['hint']):
-        if group_id in active_games and GAMES_LOADED:
-            game = active_games[group_id]
-            hint_text = get_hint(game)
-            if hint_text:
-                update_points(user_id, POINTS['hint'])
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text=hint_text, quick_reply=create_quick_reply_buttons())
-                )
-            else:
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="التلميح غير متوفر لهذه اللعبة", quick_reply=create_quick_reply_buttons())
-                )
-        else:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=MESSAGES['no_active_game'], quick_reply=create_quick_reply_buttons())
-            )
-        return
-    
-    # أمر جاوب
-    if any(cmd in text_lower for cmd in CMDS['answer']):
-        if group_id in active_games and GAMES_LOADED:
-            game = active_games[group_id]
-            answer_result = show_answer(game, group_id, active_games)
-            
-            if answer_result.get('flex'):
-                flex = FlexSendMessage(alt_text=answer_result['message'], contents=answer_result['flex'])
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    flex,
-                    quick_reply=create_quick_reply_buttons()
-                )
-            else:
                 line_bot_api.reply_message(
                     event.reply_token,
                     TextSendMessage(text=answer_result['message'], quick_reply=create_quick_reply_buttons())
@@ -728,9 +589,8 @@ def handle_message(event):
 @app.route("/")
 def index():
     """الصفحة الرئيسية"""
-    games_status = "متوفرة" if GAMES_LOADED else "غير متوفرة"
+    games_status = "متوفرة ✅" if GAMES_LOADED else "غير متوفرة ❌"
     games_color = "#00FF00" if GAMES_LOADED else "#FF0000"
-    status_symbol = "[OK]" if GAMES_LOADED else "[X]"
     
     return f"""
     <!DOCTYPE html>
@@ -840,7 +700,7 @@ def index():
     <body>
         <div class="container">
             <div class="glass-card">
-                <img src="https://i.imgur.com/qcWILGi.jpeg" alt="بوت الحوت" class="logo">
+                <img src="{LOGO_URL}" alt="بوت الحوت" class="logo">
                 <h1>بوت الحوت</h1>
                 <p class="subtitle">
                     <span class="online-indicator"></span>
@@ -848,22 +708,22 @@ def index():
                 </p>
                 <div class="status-grid">
                     <div class="stat-box">
-                        <span class="stat-value">9</span>
+                        <span class="stat-value">8</span>
                         <span class="stat-label">ألعاب متوفرة</span>
                     </div>
                     <div class="stat-box">
                         <span class="stat-value">
                             <span class="games-indicator"></span>
                         </span>
-                        <span class="stat-label">الألعاب: {games_status}<br><small>{GAMES_SOURCE if GAMES_SOURCE else 'غير محمل'}</small></span>
+                        <span class="stat-label">{games_status}</span>
                     </div>
                     <div class="stat-box">
                         <span class="stat-value">24/7</span>
                         <span class="stat-label">متاح دائماً</span>
                     </div>
                     <div class="stat-box">
-                        <span class="stat-value">{status_symbol}</span>
-                        <span class="stat-label">جاهز للعمل</span>
+                        <span class="stat-value">⚡</span>
+                        <span class="stat-label">سريع وآمن</span>
                     </div>
                 </div>
                 <div class="footer">
@@ -878,28 +738,92 @@ def index():
 # ============= تشغيل التطبيق =============
 
 if __name__ == "__main__":
-    # طباعة حالة الألعاب
     print("=" * 50)
-    print("بوت الحوت - حالة البدء")
+    print("🐋 بوت الحوت - حالة البدء")
     print("=" * 50)
+    
     if GAMES_LOADED:
-        print(f"[OK] تم تحميل ملفات الألعاب بنجاح من: {GAMES_SOURCE}")
+        print("✅ تم تحميل ملفات الألعاب بنجاح")
     else:
-        print("[X] تحذير: لم يتم تحميل ملفات الألعاب")
-        print("تأكد من وجود أحد الملفات التالية:")
-        print("   1. games.py (ملف واحد)")
-        print("   2. games/__init__.py (مجلد package)")
-        print("   3. games/games.py (ملف داخل مجلد)")
+        print("❌ تحذير: لم يتم تحميل ملفات الألعاب")
+        print("تأكد من وجود ملف games.py في نفس المجلد")
+    
     print("=" * 50)
     
     # تهيئة قاعدة البيانات
     init_db()
     
-    # تنظيف المستخدمين غير النشطين
-    cleanup_inactive_users()
-    
     # تشغيل Flask
     port = int(os.getenv("PORT", 5000))
-    print(f"تشغيل البوت على المنفذ {port}")
+    print(f"🚀 تشغيل البوت على المنفذ {port}")
     print("=" * 50)
     app.run(host='0.0.0.0', port=port, debug=False)
+                    event.reply_token,
+                    flex,
+                    quick_reply=create_quick_reply_buttons()
+                )
+            else:
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=result['message'], quick_reply=create_quick_reply_buttons())
+                )
+        else:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text="❌ الألعاب غير متوفرة حالياً", quick_reply=create_quick_reply_buttons())
+            )
+        return
+    
+    # أمر إيقاف اللعبة
+    if any(cmd in text_lower for cmd in CMDS['stop']):
+        if group_id in active_games:
+            del active_games[group_id]
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=MESSAGES['game_stopped'], quick_reply=create_quick_reply_buttons())
+            )
+        else:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=MESSAGES['no_active_game'], quick_reply=create_quick_reply_buttons())
+            )
+        return
+    
+    # أمر التلميح
+    if any(cmd in text_lower for cmd in CMDS['hint']):
+        if group_id in active_games and GAMES_LOADED:
+            game = active_games[group_id]
+            hint_text = get_hint(game)
+            if hint_text:
+                update_points(user_id, POINTS['hint'])
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text=hint_text, quick_reply=create_quick_reply_buttons())
+                )
+            else:
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text="التلميح غير متوفر لهذه اللعبة", quick_reply=create_quick_reply_buttons())
+                )
+        else:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=MESSAGES['no_active_game'], quick_reply=create_quick_reply_buttons())
+            )
+        return
+    
+    # أمر جاوب
+    if any(cmd in text_lower for cmd in CMDS['answer']):
+        if group_id in active_games and GAMES_LOADED:
+            game = active_games[group_id]
+            answer_result = show_answer(game, group_id, active_games)
+            
+            if answer_result.get('flex'):
+                flex = FlexSendMessage(alt_text=answer_result['message'], contents=answer_result['flex'])
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    flex,
+                    quick_reply=create_quick_reply_buttons()
+                )
+            else:
+                line_bot_api.reply_message(
