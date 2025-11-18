@@ -1,10 +1,11 @@
-"""ملف الألعاب المحسّن - ستايل ثري دي زجاجي موحد"""
-from linebot.models import TextSendMessage, FlexSendMessage
-import random, re
+"""ملف الألعاب الكامل - نسخة محسّنة مع جميع الألعاب"""
+from linebot.models import TextSendMessage, FlexSendMessage, ImageSendMessage
+import random, re, hashlib
 
-# ألوان موحدة (نفس صورة الحوت)
-C = {'bg':'#0F172A','card':'#1E293B','card2':'#334155','text':'#F1F5F9','text2':'#94A3B8',
-     'sep':'#475569','cyan':'#06B6D4','cyan_glow':'#22D3EE','purple':'#8B5CF6','success':'#10B981'}
+# ألوان موحدة (مطابقة للصورة)
+C = {'bg':'#0A1628','card':'#0F2847','card2':'#1A3A5C','text':'#E0F2FF','text2':'#7FB3D5',
+     'sep':'#2C5F8D','cyan':'#00D9FF','cyan_glow':'#5EEBFF','purple':'#8B7FFF','success':'#00E5A0',
+     'border':'#00D9FF40'}
 
 def normalize_text(text):
     if not text: return ""
@@ -18,7 +19,7 @@ def glass_box(contents, padding="20px", margin="md"):
     return {
         "type":"box","layout":"vertical","contents":contents,
         "backgroundColor":C['card'],"cornerRadius":"16px","paddingAll":padding,"margin":margin,
-        "borderWidth":"2px","borderColor":"#ffffff10"
+        "borderWidth":"2px","borderColor":C['border']
     }
 
 def progress_bar(current, total):
@@ -26,8 +27,7 @@ def progress_bar(current, total):
     return {
         "type":"box","layout":"horizontal","contents":[
             {"type":"box","layout":"vertical","contents":[],
-             "backgroundColor":C['cyan'],"height":"8px","flex":current,"cornerRadius":"4px",
-             "action":None},
+             "backgroundColor":C['cyan'],"height":"8px","flex":current,"cornerRadius":"4px"},
             {"type":"box","layout":"vertical","contents":[],
              "backgroundColor":C['card2'],"height":"8px","flex":total-current,"cornerRadius":"4px"}
         ],"spacing":"xs","margin":"xl"
@@ -46,14 +46,16 @@ def game_header(icon, title, subtitle):
 
 def create_button(label, text, is_primary=False):
     """زر موحد"""
-    return {
+    btn = {
         "type":"button","action":{"type":"message","label":label,"text":text},
-        "style":"primary" if is_primary else "secondary",
-        "color":C['cyan'] if is_primary else C['card2'],"height":"md"
+        "style":"primary" if is_primary else "secondary","height":"md"
     }
+    if is_primary:
+        btn["color"] = C['cyan']
+    return btn
 
 # ===============================================
-# لعبة الأغنية
+# 1. لعبة الأغنية
 # ===============================================
 class SongGame:
     def __init__(self):
@@ -62,7 +64,9 @@ class SongGame:
             {"lyrics":"يا بعدهم كلهم .. يا سراجي بينهم","singer":"عبدالمجيد عبدالله"},
             {"lyrics":"قولي أحبك كي تزيد وسامتي","singer":"كاظم الساهر"},
             {"lyrics":"كيف أبيّن لك شعوري دون ما أحكي","singer":"عايض"},
-            {"lyrics":"أريد الله يسامحني لان أذيت نفسي","singer":"رحمة رياض"}
+            {"lyrics":"أريد الله يسامحني لان أذيت نفسي","singer":"رحمة رياض"},
+            {"lyrics":"مشتاق ولهان ودموعي سايلة","singer":"راشد الماجد"},
+            {"lyrics":"حبيبي يا نور العين يا ساكن خيالي","singer":"عمرو دياب"}
         ]
         self.current_song, self.current_q, self.max_q = None, 0, 5
         self.scores, self.hints_used = {}, 0
@@ -170,7 +174,7 @@ class SongGame:
         return None
 
 # ===============================================
-# لعبة ضد (العكس)
+# 2. لعبة ضد (العكس)
 # ===============================================
 class OppositeGame:
     def __init__(self):
@@ -179,7 +183,10 @@ class OppositeGame:
             {"word":"طويل","opposite":"قصير"},
             {"word":"سريع","opposite":"بطيء"},
             {"word":"ساخن","opposite":"بارد"},
-            {"word":"قوي","opposite":"ضعيف"}
+            {"word":"قوي","opposite":"ضعيف"},
+            {"word":"غني","opposite":"فقير"},
+            {"word":"نظيف","opposite":"وسخ"},
+            {"word":"جميل","opposite":"قبيح"}
         ]
         self.current_word, self.current_q, self.max_q = None, 0, 5
         self.scores = {}
@@ -239,7 +246,7 @@ class OppositeGame:
         return None
 
 # ===============================================
-# لعبة السلسلة
+# 3. لعبة السلسلة
 # ===============================================
 class ChainGame:
     def __init__(self):
@@ -322,14 +329,15 @@ class ChainGame:
             return {'response':TextSendMessage(text=f"⚠️ يجب أن تبدأ بحرف: {last}"),'correct':False}
 
 # ===============================================
-# لعبة تكوين الكلمات
+# 4. لعبة تكوين الكلمات
 # ===============================================
 class BuildGame:
     def __init__(self):
         self.letter_sets = [
             {"letters":"ق م ر ي ل ن","words":["قمر","ليل","مرق","ريم","نيل","قرن","ملي","مير","قيل","ليم","نمر","مرن"]},
             {"letters":"ن ج م س و ر","words":["نجم","نجوم","سور","نور","سمر","رسم","جور","نمر","جرس","سجن","مرج","رسوم"]},
-            {"letters":"ب ح ر ي ن ل","words":["بحر","بحرين","بحري","حرب","نحل","نيل","لبن","حبل","نبيل","نبل","ربح","بين"]}
+            {"letters":"ب ح ر ي ن ل","words":["بحر","بحرين","بحري","حرب","نحل","نيل","لبن","حبل","نبيل","نبل","ربح","بين"]},
+            {"letters":"ش م س ع ر و","words":["شمس","عرس","عرش","شعر","سمع","رسم","عمر","شرع","سور","عمرو","مرش","سمعر"]}
         ]
         self.current_letters, self.valid_words, self.used = [], set(), set()
         self.current_q, self.max_q, self.words_needed = 1, 5, 3
@@ -348,7 +356,6 @@ class BuildGame:
         random.shuffle(self.current_letters)
         self.used, self.hints_used = set(), 0
         
-        # مربعات الحروف
         letter_boxes = []
         for letter in self.current_letters:
             letter_boxes.append({
@@ -356,7 +363,7 @@ class BuildGame:
                     {"type":"text","text":letter,"size":"xl","weight":"bold",
                      "color":C['cyan_glow'],"align":"center"}
                 ],"backgroundColor":C['card2'],"cornerRadius":"12px","width":"50px","height":"55px",
-                "justifyContent":"center","borderWidth":"2px","borderColor":"#ffffff10"
+                "justifyContent":"center","borderWidth":"2px","borderColor":C['border']
             })
         
         row1 = letter_boxes[:3]
@@ -436,7 +443,6 @@ class BuildGame:
         if word in self.used:
             return {'response':TextSendMessage(text=f"⚠️ الكلمة '{text}' مستخدمة"),'correct':False}
         
-        # فحص إمكانية التكوين
         letters_copy = self.current_letters.copy()
         can_form = True
         for c in word:
@@ -456,7 +462,6 @@ class BuildGame:
         if word not in normalized_valid:
             return {'response':TextSendMessage(text=f"⚠️ '{text}' ليست كلمة صحيحة"),'correct':False}
         
-        # صحيحة
         self.used.add(word)
         points = 2 if not self.hints_used else 1
         
@@ -465,7 +470,6 @@ class BuildGame:
         self.scores[user_id]['score'] += points
         self.scores[user_id]['words'] += 1
         
-        # فاز بالجولة؟
         if self.scores[user_id]['words'] >= self.words_needed:
             card = {
                 "type":"bubble","size":"mega",
@@ -487,11 +491,11 @@ class BuildGame:
         return {'response':TextSendMessage(text=f"✅ '{text}' صحيحة! +{points} نقطة"),'correct':True}
 
 # ===============================================
-# لعبة ترتيب الحروف
+# 5. لعبة ترتيب الحروف
 # ===============================================
 class OrderGame:
     def __init__(self):
-        self.words = ["مدرسة","حديقة","كتاب","طائرة","مستشفى","جامعة","سيارة","منزل","مطعم","فندق"]
+        self.words = ["مدرسة","حديقة","كتاب","طائرة","مستشفى","جامعة","سيارة","منزل","مطعم","فندق","مكتبة","صيدلية"]
         self.current_word, self.shuffled = None, None
         self.current_q, self.max_q = 0, 5
         self.scores = {}
@@ -554,7 +558,7 @@ class OrderGame:
         return None
 
 # ===============================================
-# لعبة أطول كلمة
+# 6. لعبة أطول كلمة
 # ===============================================
 class WordGame:
     def __init__(self):
@@ -602,7 +606,6 @@ class WordGame:
         if len(word) >= 3:
             self.answers[user_id] = {'name':name,'word':word,'length':len(word)}
             
-            # إذا 3 لاعبين أجابوا، حدد الفائز
             if len(self.answers) >= 3:
                 winner = max(self.answers.items(), key=lambda x: x[1]['length'])
                 points = 3
@@ -635,7 +638,7 @@ class WordGame:
         return None
 
 # ===============================================
-# لعبة تخمين اللون
+# 7. لعبة تخمين اللون
 # ===============================================
 class ColorGame:
     def __init__(self):
@@ -738,7 +741,7 @@ class ColorGame:
         return None
 
 # ===============================================
-# لعبة إنسان حيوان نبات
+# 8. لعبة إنسان حيوان نبات
 # ===============================================
 class HumanAnimalGame:
     def __init__(self):
@@ -804,7 +807,7 @@ class HumanAnimalGame:
         return None
 
 # ===============================================
-# لعبة أسرع إجابة
+# 9. لعبة أسرع إجابة
 # ===============================================
 class FastGame:
     def __init__(self):
@@ -813,7 +816,9 @@ class FastGame:
             {"q":"كم عدد أيام الأسبوع؟","a":"سبعة"},
             {"q":"ما أكبر كوكب؟","a":"المشتري"},
             {"q":"كم ساعة في اليوم؟","a":"أربعة وعشرون"},
-            {"q":"ما لون السماء؟","a":"أزرق"}
+            {"q":"ما لون السماء؟","a":"أزرق"},
+            {"q":"كم عدد أشهر السنة؟","a":"اثني عشر"},
+            {"q":"ما أصغر قارة؟","a":"أستراليا"}
         ]
         self.current_question = None
         self.answered = False
@@ -870,13 +875,13 @@ class FastGame:
         return None
 
 # ===============================================
-# لعبة الاختلافات
+# 10. لعبة الاختلافات
 # ===============================================
 class DifferencesGame:
     def __init__(self):
         self.image_pairs = [
-            {"original":"https://via.placeholder.com/400x300/0F172A/06B6D4?text=Find+5+Differences",
-             "solution":"https://via.placeholder.com/400x300/0F172A/22D3EE?text=Solution",
+            {"original":"https://via.placeholder.com/400x300/0A1628/00D9FF?text=Find+5+Differences",
+             "solution":"https://via.placeholder.com/400x300/0A1628/5EEBFF?text=Solution",
              "differences":5}
         ]
         self.current_pair = None
@@ -886,7 +891,6 @@ class DifferencesGame:
         self.current_pair = random.choice(self.image_pairs)
         self.showed_solution = False
         
-        from linebot.models import ImageSendMessage
         return [
             FlexSendMessage(alt_text="لعبة الاختلافات",contents={
                 "type":"bubble","size":"mega",
@@ -910,7 +914,6 @@ class DifferencesGame:
         ans = text.strip().lower()
         
         if ans in ['جاوب','الحل','solution']:
-            from linebot.models import ImageSendMessage
             self.showed_solution = True
             return {
                 'response':[
@@ -925,10 +928,8 @@ class DifferencesGame:
         return None
 
 # ===============================================
-# لعبة التوافق
+# 11. لعبة التوافق
 # ===============================================
-import hashlib
-
 class CompatibilityGame:
     def __init__(self):
         self.waiting = True
