@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>♓ بوت الحوت</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:#000;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;position:relative;overflow:hidden}
+body::before{content:'';position:absolute;width:600px;height:600px;background:radial-gradient(circle,rgba(0,217,255,0.15),transparent 70%);border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%);animation:pulse 4s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:0.3}50%{transform:translate(-50%,-50%) scale(1.1);opacity:0.6}}
+.particles{position:absolute;width:100%;height:100%;overflow:hidden;pointer-events:none}
+.particle{position:absolute;width:3px;height:3px;background:#00D9FF;border-radius:50%;animation:float 8s infinite;box-shadow:0 0 10px #00D9FF}
+@keyframes float{0%,100%{transform:translateY(0) translateX(0);opacity:0}10%{opacity:1}90%{opacity:1}100%{transform:translateY(-100vh) translateX(100px);opacity:0}}
+.container{background:linear-gradient(135deg,rgba(15,40,71,0.4) 0%,rgba(10,22,40,0.3) 100%);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-radius:24px;box-shadow:0 0 60px rgba(0,217,255,0.3),0 20px 60px rgba(0,0,0,0.6);padding:40px;max-width:500px;width:100%;border:2px solid rgba(0,217,255,0.3);position:relative;z-index:1}
+.logo-wrapper{width:140px;height:140px;margin:0 auto 20px;position:relative}
+.logo-circle{width:100%;height:100%;border-radius:50%;overflow:hidden;border:3px solid rgba(0,217,255,0.5);box-shadow:0 0 40px rgba(0,217,255,0.6),0 0 80px rgba(94,235,255,0.4);animation:glow 3s ease-in-out infinite;position:relative;background:#000}
+.logo-circle img{width:100%;height:100%;object-fit:cover}
+@keyframes glow{0%,100%{box-shadow:0 0 40px rgba(0,217,255,0.6),0 0 80px rgba(94,235,255,0.4)}50%{box-shadow:0 0 50px rgba(0,217,255,0.8),0 0 100px rgba(94,235,255,0.6)}}
+h1{color:#00D9FF;font-size:2.2em;margin-bottom:8px;text-align:center;font-weight:700;text-shadow:0 0 30px rgba(0,217,255,0.6),0 0 50px rgba(94,235,255,0.4)}
+.subtitle{color:#7FB3D5;font-size:0.95em;text-align:center;margin-bottom:25px;text-shadow:0 2px 10px rgba(0,0,0,0.5)}
+.status{background:rgba(15,40,71,0.4);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-radius:16px;padding:20px;border:1px solid rgba(0,217,255,0.2)}
+.item{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(44,95,141,0.2)}
+.item:last-child{border:none}
+.label{color:#7FB3D5;font-size:0.9em}
+.value{color:#E0F2FF;font-weight:700;font-size:1em}
+.badge{padding:4px 12px;border-radius:20px;font-size:0.8em;font-weight:600}
+.success{background:rgba(0,229,160,0.2);color:#00E5A0;box-shadow:0 0 15px rgba(0,229,160,0.3);border:1px solid rgba(0,229,160,0.3)}
+.warning{background:rgba(139,127,255,0.2);color:#8B7FFF;box-shadow:0 0 15px rgba(139,127,255,0.3);border:1px solid rgba(139,127,255,0.3)}
+.footer{text-align:center;margin-top:25px;color:#2C5F8D;font-size:0.8em}
+.footer a{color:#00D9FF;text-decoration:none;transition:color 0.3s}
+.footer a:hover{color:#5EEBFF}
+@media (max-width:600px){.container{padding:30px 20px}.logo-wrapper{width:120px;height:120px}h1{font-size:1.8em}.subtitle{font-size:0.85em}}
+</style>
+</head>
+<body>
+<div class="particles">
+<div class="particle" style="left:10%;animation-delay:0s"></div>
+<div class="particle" style="left:20%;animation-delay:1s"></div>
+<div class="particle" style="left:30%;animation-delay:2s"></div>
+<div class="particle" style="left:40%;animation-delay:3s"></div>
+<div class="particle" style="left:50%;animation-delay:4s"></div>
+<div class="particle" style="left:60%;animation-delay:5s"></div>
+<div class="particle" style="left:70%;animation-delay:6s"></div>
+<div class="particle" style="left:80%;animation-delay:7s"></div>
+<div class="particle" style="left:90%;animation-delay:8s"></div>
+</div>
+<div class="container">
+<div class="logo-wrapper">
+<div class="logo-circle">
+<img src="https://i.imgur.com/qcWILGi.jpeg" alt="بوت الحوت">
+</div>
+</div>
+<h1>بوت الحوت</h1>
+<div class="subtitle">نظام ألعاب تفاعلية محسّن v3.2</div>
+<div class="status">
+<div class="item">
+<span class="label">⚡ حالة الخادم</span>
+<span class="badge success">يعمل</span>
+</div>
+<div class="item">
+<span class="label">🤖 الذكاء الاصطناعي</span>
+<span class="badge success">مفعّل</span>
+</div>
+<div class="item">
+<span class="label">👥 اللاعبون</span>
+<span class="value">24</span>
+</div>
+<div class="item">
+<span class="label">🎮 الألعاب النشطة</span>
+<span class="value">8</span>
+</div>
+<div class="item">
+<span class="label">💬 الرسائل</span>
+<span class="value">1,247</span>
+</div>
+<div class="item">
+<span class="label">⏱ وقت التشغيل</span>
+<span class="value">12س 34د</span>
+</div>
+</div>
+<div class="footer">
+بوت الحوت v3.2 © 2025<br>
+<a href="/health">Health Check</a>
+</div>
+</div>
+</body>
+</html>
