@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(me
                            logging.handlers.RotatingFileHandler('logs/bot.log', maxBytes=10*1024*1024, backupCount=5, encoding='utf-8')])
 logger = logging.getLogger("whale-bot")
 
-print("\n" + "═"*60 + "\nبوت الحوت v3.2\n" + "═"*60 + "\n")
+print("\n" + "═"*60 + "\n♓ بوت الحوت v3.2 ♓\n" + "═"*60 + "\n")
 
 # الإعدادات
 LINE_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
@@ -29,9 +29,13 @@ handler = WebhookHandler(LINE_SECRET) if LINE_SECRET else None
 
 active_games, registered_players = {}, set()
 
-# ألوان موحدة (نفس صورة الحوت)
-C = {'bg':'#0F172A','card':'#1E293B','card2':'#334155','text':'#F1F5F9','text2':'#94A3B8',
-     'sep':'#475569','cyan':'#06B6D4','cyan_glow':'#22D3EE','purple':'#8B5CF6','success':'#10B981'}
+# ألوان موحدة (مطابقة للصورة - أزرق سماوي متوهج)
+C = {'bg':'#0A1628','card':'#0F2847','card2':'#1A3A5C','text':'#E0F2FF','text2':'#7FB3D5',
+     'sep':'#2C5F8D','cyan':'#00D9FF','cyan_glow':'#5EEBFF','purple':'#8B7FFF','success':'#00E5A0',
+     'border':'#00D9FF40'}
+
+# شعار الحوت (Pisces) - نفس الشعار من الصورة
+PISCES_LOGO = "♓"
 
 # Rate Limiter
 class RateLimiter:
@@ -86,7 +90,379 @@ class GeminiClient:
         if not USE_AI or not self.keys: return None
         for _ in range(len(self.keys)):
             try:
-                r = model.generate_content(prompt)
+                r = start_game(gmap[txt],gid,active_games,line_bot_api,gemini.ask if gemini else None)
+                if r: 
+                    metrics.log_game(gmap[txt])
+                    return line_bot_api.reply_message(event.reply_token,r)
+            
+            if gid in active_games and is_reg:
+                r = check_game_answer(gid,txt,uid,name,active_games,line_bot_api,update_points)
+                if r: return line_bot_api.reply_message(event.reply_token,r)
+    
+    except Exception as e:
+        logger.error(f"معالجة: {e}", exc_info=True)
+
+# Routes
+@app.route("/", methods=['GET'])
+def home():
+    m = metrics.stats()
+    uptime_hours = int(m['uptime']/3600)
+    uptime_mins = int((m['uptime']%3600)/60)
+    
+    return f"""<!DOCTYPE html>
+<html dir="rtl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>♓ بوت الحوت</title>
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        
+        body {{
+            font-family: -apple-system, 'Segoe UI', Tahoma, sans-serif;
+            background: #0A1628;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }}
+        
+        /* تأثير النجوم المتوهجة في الخلفية */
+        body::before {{
+            content: '';
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(0,217,255,0.15), transparent 70%);
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            animation: pulse 4s ease-in-out infinite;
+        }}
+        
+        @keyframes pulse {{
+            0%, 100% {{
+                transform: translate(-50%, -50%) scale(1);
+                opacity: 0.3;
+            }}
+            50% {{
+                transform: translate(-50%, -50%) scale(1.1);
+                opacity: 0.6;
+            }}
+        }}
+        
+        /* جزيئات متحركة */
+        .particles {{
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            pointer-events: none;
+        }}
+        
+        .particle {{
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #00D9FF;
+            border-radius: 50%;
+            animation: float 8s infinite;
+            box-shadow: 0 0 10px #00D9FF;
+        }}
+        
+        @keyframes float {{
+            0%, 100% {{
+                transform: translateY(0) translateX(0);
+                opacity: 0;
+            }}
+            10% {{
+                opacity: 1;
+            }}
+            90% {{
+                opacity: 1;
+            }}
+            100% {{
+                transform: translateY(-100vh) translateX(100px);
+                opacity: 0;
+            }}
+        }}
+        
+        .container {{
+            background: linear-gradient(135deg, #0F2847 0%, #0A1628 100%);
+            border-radius: 24px;
+            box-shadow: 0 0 60px rgba(0,217,255,0.4), 0 20px 60px rgba(0,0,0,0.6);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            border: 2px solid rgba(0,217,255,0.3);
+            position: relative;
+            z-index: 1;
+            backdrop-filter: blur(20px);
+        }}
+        
+        .logo {{
+            font-size: 6em;
+            text-align: center;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 0 40px rgba(0,217,255,0.9)) 
+                    drop-shadow(0 0 60px rgba(94,235,255,0.6));
+            animation: glow 3s ease-in-out infinite;
+        }}
+        
+        @keyframes glow {{
+            0%, 100% {{
+                filter: drop-shadow(0 0 40px rgba(0,217,255,0.9)) 
+                        drop-shadow(0 0 60px rgba(94,235,255,0.6));
+            }}
+            50% {{
+                filter: drop-shadow(0 0 50px rgba(0,217,255,1)) 
+                        drop-shadow(0 0 80px rgba(94,235,255,0.8));
+            }}
+        }}
+        
+        h1 {{
+            color: #00D9FF;
+            font-size: 2.5em;
+            margin-bottom: 8px;
+            text-align: center;
+            font-weight: 700;
+            text-shadow: 0 0 30px rgba(0,217,255,0.6), 
+                         0 0 50px rgba(94,235,255,0.4);
+        }}
+        
+        .subtitle {{
+            color: #7FB3D5;
+            font-size: 1em;
+            text-align: center;
+            margin-bottom: 30px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }}
+        
+        .status {{
+            background: rgba(15,40,71,0.5);
+            border-radius: 16px;
+            padding: 24px;
+            margin: 20px 0;
+            border: 1px solid rgba(0,217,255,0.2);
+            backdrop-filter: blur(10px);
+        }}
+        
+        .item {{
+            display: flex;
+            justify-content: space-between;
+            padding: 16px 0;
+            border-bottom: 1px solid rgba(44,95,141,0.3);
+        }}
+        
+        .item:last-child {{
+            border: none;
+        }}
+        
+        .label {{
+            color: #7FB3D5;
+            font-size: 0.95em;
+        }}
+        
+        .value {{
+            color: #E0F2FF;
+            font-weight: 700;
+            font-size: 1.1em;
+        }}
+        
+        .badge {{
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }}
+        
+        .success {{
+            background: rgba(0,229,160,0.2);
+            color: #00E5A0;
+            box-shadow: 0 0 20px rgba(0,229,160,0.4);
+            border: 1px solid rgba(0,229,160,0.3);
+        }}
+        
+        .warning {{
+            background: rgba(139,127,255,0.2);
+            color: #8B7FFF;
+            box-shadow: 0 0 20px rgba(139,127,255,0.4);
+            border: 1px solid rgba(139,127,255,0.3);
+        }}
+        
+        .footer {{
+            text-align: center;
+            margin-top: 30px;
+            color: #2C5F8D;
+            font-size: 0.85em;
+        }}
+        
+        .footer a {{
+            color: #00D9FF;
+            text-decoration: none;
+            transition: color 0.3s;
+        }}
+        
+        .footer a:hover {{
+            color: #5EEBFF;
+        }}
+        
+        /* استجابة للشاشات الصغيرة */
+        @media (max-width: 600px) {{
+            .container {{
+                padding: 30px 20px;
+            }}
+            
+            .logo {{
+                font-size: 4em;
+            }}
+            
+            h1 {{
+                font-size: 2em;
+            }}
+            
+            .subtitle {{
+                font-size: 0.9em;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="particles">
+        <div class="particle" style="left: 10%; animation-delay: 0s;"></div>
+        <div class="particle" style="left: 20%; animation-delay: 1s;"></div>
+        <div class="particle" style="left: 30%; animation-delay: 2s;"></div>
+        <div class="particle" style="left: 40%; animation-delay: 3s;"></div>
+        <div class="particle" style="left: 50%; animation-delay: 4s;"></div>
+        <div class="particle" style="left: 60%; animation-delay: 5s;"></div>
+        <div class="particle" style="left: 70%; animation-delay: 6s;"></div>
+        <div class="particle" style="left: 80%; animation-delay: 7s;"></div>
+        <div class="particle" style="left: 90%; animation-delay: 8s;"></div>
+    </div>
+    
+    <div class="container">
+        <div class="logo">{PISCES_LOGO}</div>
+        <h1>بوت الحوت</h1>
+        <div class="subtitle">نظام ألعاب تفاعلية محسّن v3.2</div>
+        
+        <div class="status">
+            <div class="item">
+                <span class="label">⚡ حالة الخادم</span>
+                <span class="badge success">يعمل</span>
+            </div>
+            <div class="item">
+                <span class="label">🤖 الذكاء الاصطناعي</span>
+                <span class="badge {'success' if USE_AI else 'warning'}">{'مفعّل' if USE_AI else 'معطّل'}</span>
+            </div>
+            <div class="item">
+                <span class="label">👥 اللاعبون المسجلون</span>
+                <span class="value">{len(registered_players)}</span>
+            </div>
+            <div class="item">
+                <span class="label">🎮 الألعاب النشطة</span>
+                <span class="value">{len(active_games)}</span>
+            </div>
+            <div class="item">
+                <span class="label">💬 إجمالي الرسائل</span>
+                <span class="value">{m['total_msgs']}</span>
+            </div>
+            <div class="item">
+                <span class="label">📊 إجمالي الألعاب</span>
+                <span class="value">{m['total_games']}</span>
+            </div>
+            <div class="item">
+                <span class="label">⏱ وقت التشغيل</span>
+                <span class="value">{uptime_hours}س {uptime_mins}د</span>
+            </div>
+        </div>
+        
+        <div class="footer">
+            بوت الحوت v3.2 © 2025<br>
+            <a href="/health" target="_blank">Health Check</a>
+        </div>
+    </div>
+</body>
+</html>"""
+
+@app.route("/health", methods=['GET'])
+def health():
+    m = metrics.stats()
+    return {
+        "status": "healthy",
+        "version": "3.2.0",
+        "timestamp": datetime.now().isoformat(),
+        "active_games": len(active_games),
+        "registered_players": len(registered_players),
+        "ai_enabled": USE_AI,
+        "metrics": {
+            "uptime_seconds": m['uptime'],
+            "total_messages": m['total_msgs'],
+            "total_games": m['total_games']
+        },
+        "colors": C,
+        "logo": PISCES_LOGO
+    }
+
+@app.route("/callback", methods=['POST'])
+def callback():
+    if not handler or not line_bot_api: 
+        abort(500)
+    
+    sig = request.headers.get('X-Line-Signature', '')
+    body = request.get_data(as_text=True)
+    
+    try:
+        handler.handle(body, sig)
+    except InvalidSignatureError:
+        logger.error("توقيع غير صالح")
+        abort(400)
+    except Exception as e:
+        logger.error(f"webhook: {e}")
+    
+    return 'OK'
+
+@app.errorhandler(404)
+def not_found(e): 
+    return {"error": "الصفحة غير موجودة", "status": 404}, 404
+
+@app.errorhandler(500)
+def internal_error(e): 
+    logger.error(f"خطأ: {e}")
+    return {"error": "خطأ داخلي في الخادم", "status": 500}, 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    logger.error(f"خطأ غير متوقع: {e}", exc_info=True)
+    return 'OK', 200
+
+# التشغيل
+if __name__ == "__main__":
+    port = int(os.environ.get('PORT', 5000))
+    print(f"\n{'='*60}")
+    print(f"{PISCES_LOGO} بوت الحوت جاهز {PISCES_LOGO}")
+    print(f"{'='*60}")
+    print(f"المنفذ: {port}")
+    print(f"الذكاء الاصطناعي: {'مفعّل ✓' if USE_AI else 'معطّل ✗'}")
+    print(f"الألعاب: {'متوفرة ✓' if GAMES_LOADED else 'غير متوفرة ✗'}")
+    print(f"{'='*60}\n")
+    
+    try:
+        logger.info(f"بدء الخادم على المنفذ {port}")
+        app.run(host='0.0.0.0', port=port, debug=False, threaded=True, use_reloader=False)
+    except KeyboardInterrupt:
+        logger.info("تم إيقاف الخادم بواسطة المستخدم")
+        cleanup_inactive()
+    except Exception as e:
+        logger.critical(f"فشل التشغيل: {e}")
+        sys.exit(1) model.generate_content(prompt)
                 if r and r.text: return r.text.strip()[:1000]
             except Exception as e:
                 logger.error(f"Gemini: {e}")
@@ -227,8 +603,7 @@ def create_glass_box(contents, margin="md"):
     return {
         "type":"box","layout":"vertical","contents":contents,
         "backgroundColor":C['card'],"cornerRadius":"16px","paddingAll":"20px","margin":margin,
-        "borderWidth":"2px","borderColor":"#ffffff10",
-        "action":None
+        "borderWidth":"2px","borderColor":C['border']
     }
 
 def create_glow_text(text, size="xl", glow=True):
@@ -255,10 +630,9 @@ def welcome_card():
         "type":"bubble","size":"kilo",
         "body":{
             "type":"box","layout":"vertical","contents":[
-                # الشعار المتوهج
+                # الشعار المتوهج - شعار الحوت (Pisces)
                 create_glass_box([
-                    {"type":"text","text":"♓","size":"4xl","color":C['cyan_glow'],"align":"center","weight":"bold",
-                     "action":None}
+                    {"type":"text","text":PISCES_LOGO,"size":"4xl","color":C['cyan_glow'],"align":"center","weight":"bold"}
                 ],"none"),
                 {"type":"text","text":"بوت الحوت","size":"xxl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
                 {"type":"text","text":"نظام ألعاب تفاعلية","size":"sm","color":C['text2'],"align":"center","margin":"sm"},
@@ -286,9 +660,9 @@ def welcome_card():
                  "style":"primary","color":C['cyan'],"height":"md"},
                 {"type":"box","layout":"horizontal","contents":[
                     {"type":"button","action":{"type":"message","label":"📊 نقاطي","text":"نقاطي"},
-                     "style":"secondary","flex":1},
+                     "style":"secondary","height":"sm"},
                     {"type":"button","action":{"type":"message","label":"🏆 الصدارة","text":"الصدارة"},
-                     "style":"secondary","flex":1}
+                     "style":"secondary","height":"sm"}
                 ],"spacing":"sm","margin":"sm"}
             ],"paddingAll":"16px","backgroundColor":C['bg']}
     }
@@ -326,8 +700,9 @@ def help_card():
 
 def stats_card(uid, name, is_reg):
     stats = get_stats(uid)
+    
     if not stats:
-        return {
+        card = {
             "type":"bubble","size":"kilo",
             "body":{
                 "type":"box","layout":"vertical","contents":[
@@ -340,12 +715,18 @@ def stats_card(uid, name, is_reg):
                         {"type":"text","text":"لم تبدأ بعد" if is_reg else "سجل للبدء","size":"md",
                          "color":C['text2'],"align":"center","margin":"md"}
                     ])
-                ],"backgroundColor":C['bg'],"paddingAll":"24px"},
-            "footer":{"type":"box","layout":"vertical","contents":[
-                {"type":"button","action":{"type":"message","label":"✅ انضم","text":"انضم"},
-                 "style":"primary","color":C['success']}
-            ],"paddingAll":"16px","backgroundColor":C['bg']} if not is_reg else None
+                ],"backgroundColor":C['bg'],"paddingAll":"24px"}
         }
+        
+        if not is_reg:
+            card["footer"] = {
+                "type":"box","layout":"vertical","contents":[
+                    {"type":"button","action":{"type":"message","label":"✅ انضم","text":"انضم"},
+                     "style":"primary","color":C['success']}
+                ],"paddingAll":"16px","backgroundColor":C['bg']
+            }
+        
+        return card
     
     wr = (stats['wins']/stats['games_played']*100) if stats['games_played']>0 else 0
     return {
@@ -409,7 +790,7 @@ def leaderboard_card():
                  "flex":1,"align":"end","color":C['cyan_glow'] if i==1 else C['text2']}
             ],"backgroundColor":C['card'] if i<=3 else C['card2'],"cornerRadius":"12px","paddingAll":"14px",
             "margin":"sm" if i>1 else "md","borderWidth":"2px" if i==1 else "1px",
-            "borderColor":C['cyan'] if i==1 else "#ffffff05"
+            "borderColor":C['cyan'] if i==1 else C['border']
         })
     
     return {
@@ -495,92 +876,4 @@ def handle_message(event):
             if txt in gmap:
                 if not is_reg:
                     return line_bot_api.reply_message(event.reply_token, TextSendMessage(text="⚠️ سجل أولاً: انضم",quick_reply=get_qr()))
-                r = start_game(gmap[txt],gid,active_games,line_bot_api,gemini.ask if gemini else None)
-                if r: 
-                    metrics.log_game(gmap[txt])
-                    return line_bot_api.reply_message(event.reply_token,r)
-            
-            if gid in active_games and is_reg:
-                r = check_game_answer(gid,txt,uid,name,active_games,line_bot_api,update_points)
-                if r: return line_bot_api.reply_message(event.reply_token,r)
-    
-    except Exception as e:
-        logger.error(f"معالجة: {e}", exc_info=True)
-
-# Routes
-@app.route("/", methods=['GET'])
-def home():
-    m = metrics.stats()
-    return f"""<!DOCTYPE html>
-<html dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>بوت الحوت</title><style>*{{margin:0;padding:0;box-sizing:border-box}}
-body{{font-family:-apple-system,sans-serif;background:#0F172A;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;position:relative;overflow:hidden}}
-body::before{{content:'';position:absolute;width:500px;height:500px;background:radial-gradient(circle,rgba(6,182,212,0.15),transparent 70%);border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%);animation:pulse 4s ease-in-out infinite}}
-@keyframes pulse{{0%,100%{{transform:translate(-50%,-50%) scale(1);opacity:0.3}}50%{{transform:translate(-50%,-50%) scale(1.1);opacity:0.6}}}}
-.container{{background:linear-gradient(135deg,#1E293B 0%,#0F172A 100%);border-radius:24px;box-shadow:0 0 60px rgba(6,182,212,0.4),0 20px 60px rgba(0,0,0,0.6);padding:40px;max-width:600px;width:100%;border:2px solid rgba(6,182,212,0.3);position:relative;z-index:1;backdrop-filter:blur(20px)}}
-.logo{{font-size:5em;text-align:center;margin-bottom:10px;filter:drop-shadow(0 0 30px rgba(6,182,212,0.9)) drop-shadow(0 0 50px rgba(6,182,212,0.6));animation:glow 3s ease-in-out infinite}}
-@keyframes glow{{0%,100%{{filter:drop-shadow(0 0 30px rgba(6,182,212,0.9)) drop-shadow(0 0 50px rgba(6,182,212,0.6))}}50%{{filter:drop-shadow(0 0 40px rgba(6,182,212,1)) drop-shadow(0 0 70px rgba(6,182,212,0.8))}}}}
-h1{{color:#06B6D4;font-size:2.5em;margin-bottom:8px;text-align:center;font-weight:700;text-shadow:0 0 30px rgba(6,182,212,0.6),0 0 50px rgba(6,182,212,0.4)}}
-.subtitle{{color:#94A3B8;font-size:1em;text-align:center;margin-bottom:30px;text-shadow:0 2px 10px rgba(0,0,0,0.5)}}
-.status{{background:rgba(30,41,59,0.5);border-radius:16px;padding:24px;margin:20px 0;border:1px solid rgba(6,182,212,0.2);backdrop-filter:blur(10px)}}
-.item{{display:flex;justify-content:space-between;padding:16px 0;border-bottom:1px solid rgba(71,85,105,0.3)}}
-.item:last-child{{border:none}}.label{{color:#94A3B8;font-size:0.95em}}.value{{color:#F1F5F9;font-weight:700;font-size:1.1em}}
-.badge{{padding:6px 14px;border-radius:20px;font-size:0.85em;font-weight:600}}
-.success{{background:rgba(6,182,212,0.2);color:#06B6D4;box-shadow:0 0 20px rgba(6,182,212,0.4);border:1px solid rgba(6,182,212,0.3)}}
-.footer{{text-align:center;margin-top:30px;color:#64748B;font-size:0.85em}}
-</style></head><body><div class="container"><div class="logo">♓</div>
-<h1>بوت الحوت</h1><div class="subtitle">نظام ألعاب تفاعلية محسّن</div>
-<div class="status"><div class="item"><span class="label">حالة الخادم</span><span class="badge success">يعمل</span></div>
-<div class="item"><span class="label">الذكاء الاصطناعي</span><span class="badge success">{'مفعّل' if USE_AI else 'معطّل'}</span></div>
-<div class="item"><span class="label">اللاعبون</span><span class="value">{len(registered_players)}</span></div>
-<div class="item"><span class="label">الألعاب النشطة</span><span class="value">{len(active_games)}</span></div>
-<div class="item"><span class="label">إجمالي الرسائل</span><span class="value">{m['total_msgs']}</span></div>
-<div class="item"><span class="label">وقت التشغيل</span><span class="value">{int(m['uptime']/3600)}ساعة</span></div>
-</div><div class="footer">بوت الحوت v3.2 © 2025</div></div></body></html>"""
-
-@app.route("/health", methods=['GET'])
-def health():
-    m = metrics.stats()
-    return {"status":"healthy","version":"3.2.0","timestamp":datetime.now().isoformat(),
-            "active_games":len(active_games),"registered_players":len(registered_players),
-            "ai_enabled":USE_AI,"metrics":m}
-
-@app.route("/callback", methods=['POST'])
-def callback():
-    if not handler or not line_bot_api: abort(500)
-    sig, body = request.headers.get('X-Line-Signature',''), request.get_data(as_text=True)
-    try:
-        handler.handle(body, sig)
-    except InvalidSignatureError:
-        logger.error("توقيع غير صالح")
-        abort(400)
-    except Exception as e:
-        logger.error(f"webhook: {e}")
-    return 'OK'
-
-@app.errorhandler(404)
-def not_found(e): return {"error":"غير موجود"}, 404
-
-@app.errorhandler(500)
-def internal_error(e): 
-    logger.error(f"خطأ: {e}")
-    return {"error":"خطأ داخلي"}, 500
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    logger.error(f"خطأ غير متوقع: {e}", exc_info=True)
-    return 'OK', 200
-
-# التشغيل
-if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 5000))
-    print(f"\n{'='*60}\nبوت الحوت جاهز\nالمنفذ: {port}\nالذكاء الاصطناعي: {'مفعّل' if USE_AI else 'معطّل'}\n{'='*60}\n")
-    try:
-        logger.info(f"بدء الخادم على المنفذ {port}")
-        app.run(host='0.0.0.0', port=port, debug=False, threaded=True, use_reloader=False)
-    except KeyboardInterrupt:
-        logger.info("تم إيقاف الخادم")
-        cleanup_inactive()
-    except Exception as e:
-        logger.critical(f"فشل التشغيل: {e}")
-        sys.exit(1)
+                r =
