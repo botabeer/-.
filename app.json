@@ -1,0 +1,31 @@
+{
+‏  "name": "بوت الحوت - Whale Bot",
+‏  "description": "LINE Bot للألعاب التفاعلية والمحتوى الترفيهي",
+‏  "repository": "https://github.com/yourusername/whale-bot",
+‏  "keywords": ["line", "bot", "games", "python", "flask"],
+‏  "env": {
+‏    "LINE_CHANNEL_ACCESS_TOKEN": {
+‏      "description": "LINE Channel Access Token",
+‏      "required": true
+    },
+‏    "LINE_CHANNEL_SECRET": {
+‏      "description": "LINE Channel Secret",
+‏      "required": true
+    },
+‏    "GEMINI_API_KEY_1": {
+‏      "description": "Gemini AI API Key (اختياري)",
+‏      "required": false
+    }
+  },
+‏  "formation": {
+‏    "web": {
+‏      "quantity": 1,
+‏      "size": "free"
+    }
+  },
+‏  "buildpacks": [
+    {
+‏      "url": "heroku/python"
+    }
+  ]
+}
