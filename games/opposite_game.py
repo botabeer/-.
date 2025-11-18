@@ -1,57 +1,117 @@
 from linebot.models import TextSendMessage, FlexSendMessage
-import random
-import re
+import random, re
 
-def normalize_text(text):
-    if not text:
-        return ""
-    text = text.strip().lower()
-    text = text.replace('أ','ا').replace('إ','ا').replace('آ','ا')
-    text = text.replace('ؤ','و').replace('ئ','ي').replace('ء','')
-    text = text.replace('ة','ه').replace('ى','ي')
-    text = re.sub(r'[\u064B-\u065F]','',text)
-    text = re.sub(r'\s+','',text)
-    return text
+# ألوان موحدة
+C = {'bg':'#0A0E27','card':'#0F2440','text':'#E0F2FF','text2':'#7FB3D5','cyan':'#00D9FF','glow':'#5EEBFF','sep':'#2C5F8D','border':'#00D9FF40'}
 
+def normalize_text(t):
+    if not t: return ""
+    t = t.strip().lower()
+    t = re.sub('[أإآ]','ا',t); t = re.sub('[ؤ]','و',t); t = re.sub('[ئ]','ي',t); t = re.sub('[ءةى]','',t); t = re.sub('[\u064B-\u065F]','',t)
+    return re.sub(r'\s+',' ',t).strip()
+
+def glass_box(contents, padding="20px"):
+    return {"type":"box","layout":"vertical","contents":contents,"backgroundColor":C['card'],"cornerRadius":"16px",
+        "paddingAll":padding,"borderWidth":"1px","borderColor":C['border'],"margin":"md"}
+
+def progress_bar(current, total):
+    return {"type":"box","layout":"horizontal","contents":[
+        {"type":"box","layout":"vertical","contents":[],"backgroundColor":C['cyan'],"height":"6px","flex":current,"cornerRadius":"3px"},
+        {"type":"box","layout":"vertical","contents":[],"backgroundColor":C['card'],"height":"6px","flex":max(1,total-current),"cornerRadius":"3px"}
+    ],"spacing":"xs","margin":"lg"}
+
+def game_header(title, subtitle):
+    return [{"type":"text","text":"♓","size":"6xl","color":C['glow'],"align":"center","margin":"none"},
+        {"type":"text","text":title,"size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
+        {"type":"text","text":subtitle,"size":"sm","color":C['text2'],"align":"center","margin":"xs"},
+        {"type":"separator","margin":"lg","color":C['sep']}]
+
+def create_game_card(header, body_contents, footer_buttons=None):
+    card = {"type":"bubble","size":"mega","body":{"type":"box","layout":"vertical",
+        "contents":header + body_contents,"backgroundColor":C['bg'],"paddingAll":"24px"}}
+    if footer_buttons:
+        card["footer"] = {"type":"box","layout":"horizontal","contents":footer_buttons,
+            "spacing":"sm","backgroundColor":C['bg'],"paddingAll":"16px"}
+    return card
+
+def btn(label, text): return {"type":"button","action":{"type":"message","label":label,"text":text},"style":"secondary","height":"md"}
+
+# --- لعبة الأضداد ---
 class OppositeGame:
-    def __init__(self,line_bot_api):
-        self.line_bot_api = line_bot_api
-        self.C={'bg':'#0a0e1a','card':'#111827','card2':'#1f2937','text':'#F1F5F9',
-                'text2':'#94A3B8','sep':'#374151','cyan':'#00D9FF','cyan_glow':'#00E5FF',
-                'purple':'#8B5CF6'}
-        self.all_words=[{"word":"كبير","opposite":"صغير"},{"word":"طويل","opposite":"قصير"},{"word":"سريع","opposite":"بطيء"}]
-        self.questions=[]
-        self.current_word=None
-        self.hints_used=0
-        self.question_number=0
-        self.total_questions=3
-        self.player_scores={}
-
-    def create_3d_box(self,contents,bg_color=None,padding="20px",margin="none"):
-        return {"type":"box","layout":"vertical","contents":contents,"backgroundColor":bg_color or self.C['card2'],
-                "cornerRadius":"16px","paddingAll":padding,"margin":margin,"borderWidth":"1px","borderColor":self.C['sep']}
+    def __init__(self):
+        self.words = [
+            {"word":"كبير","opposite":"صغير"},
+            {"word":"طويل","opposite":"قصير"},
+            {"word":"سريع","opposite":"بطيء"},
+            {"word":"ساخن","opposite":"بارد"},
+            {"word":"قوي","opposite":"ضعيف"}
+        ]
+        self.current_word, self.current_q, self.max_q, self.scores, self.hints_used = None, 0, 5, {}, 0
 
     def start_game(self):
-        self.questions=random.sample(self.all_words,self.total_questions)
-        self.question_number=0
-        self.player_scores={}
+        self.current_q, self.scores = 1, {}
         return self.next_question()
 
     def next_question(self):
-        if self.question_number>=self.total_questions:
-            return None
-        self.current_word=self.questions[self.question_number]
-        self.question_number+=1
-        card={"type":"bubble","size":"mega","body":self.create_3d_box([
-            {"type":"text","text":f"ما هو عكس {self.current_word['word']}","size":"xl","color":self.C['cyan_glow'],"align":"center"}
-        ],self.C['card'])}
-        return FlexSendMessage(alt_text=f"السؤال {self.question_number}",contents=card)
+        if self.current_q > self.max_q: return None
+        self.current_word = random.choice(self.words)
+        self.hints_used = 0
+        return FlexSendMessage(
+            alt_text=f"السؤال {self.current_q}",
+            contents=create_game_card(
+                game_header("لعبة الأضداد",f"السؤال {self.current_q}/{self.max_q}"),
+                [
+                    glass_box([
+                        {"type":"text","text":"ما هو عكس","size":"sm","color":C['text2'],"align":"center"},
+                        {"type":"text","text":self.current_word['word'],"size":"5xl","weight":"bold","color":C['glow'],"align":"center","margin":"md"}
+                    ],"32px"),
+                    progress_bar(self.current_q, self.max_q)
+                ],
+                [btn("لمح","لمح"), btn("جاوب","جاوب")]
+            )
+        )
 
-    def check_answer(self,answer,user_id,display_name):
-        if normalize_text(answer)==normalize_text(self.current_word['opposite']):
-            points=2
-            if user_id not in self.player_scores:
-                self.player_scores[user_id]={'name':display_name,'score':0}
-            self.player_scores[user_id]['score']+=points
-            return {'response':TextSendMessage(text=f"✅ صحيح! +{points} نقطة"),'points':points,'correct':True}
+    def check_answer(self, text, user_id, name):
+        ans = text.strip().lower()
+        if ans in ['لمح','تلميح']:
+            if self.hints_used > 0:
+                return {'response':TextSendMessage(text="تم استخدام التلميح"),'correct':False}
+            self.hints_used = 1
+            opposite = self.current_word['opposite']
+            hint = opposite[0] + " " + "_ " * (len(opposite) - 1)
+            return {'response':FlexSendMessage(
+                alt_text="تلميح",
+                contents=create_game_card(
+                    game_header("تلميح","الحرف الأول + عدد الحروف"),
+                    [glass_box([{"type":"text","text":hint,"size":"3xl","weight":"bold","color":C['glow'],"align":"center","letterSpacing":"4px"}],"32px")]
+                )
+            ),'correct':False}
+
+        if ans in ['جاوب','الجواب','الحل']:
+            self.current_q += 1
+            return {'response':FlexSendMessage(
+                alt_text="الحل",
+                contents=create_game_card(
+                    game_header("الحل","الإجابة الصحيحة"),
+                    [glass_box([{"type":"text","text":f"{self.current_word['word']} ↔ {self.current_word['opposite']}",
+                                "size":"xl","color":C['glow'],"weight":"bold","align":"center","wrap":True}],"28px")]
+                )
+            ),'correct':False,'next_question':self.current_q<=self.max_q}
+
+        if normalize_text(text) == normalize_text(self.current_word['opposite']):
+            points = 2 if self.hints_used == 0 else 1
+            if user_id not in self.scores: self.scores[user_id] = {'name':name,'score':0}
+            self.scores[user_id]['score'] += points
+            self.current_q += 1
+            return {'response':FlexSendMessage(
+                alt_text="صحيح",
+                contents=create_game_card(
+                    game_header("صحيح","إجابة ممتازة"),
+                    [glass_box([
+                        {"type":"text","text":name,"size":"xl","weight":"bold","color":C['text'],"align":"center"},
+                        {"type":"text","text":f"+{points} نقطة","size":"xxl","color":C['glow'],"align":"center","margin":"md","weight":"bold"}
+                    ],"28px")]
+                )
+            ),'correct':True,'points':points,'next_question':self.current_q<=self.max_q}
+
         return None
