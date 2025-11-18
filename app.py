@@ -24,23 +24,52 @@ logger = logging.getLogger(__name__)
 # استيراد الإعدادات
 from config import *
 
-# استيراد الألعاب مع نظام بديل
+# استيراد الألعاب مع نظام بديل محسّن
 GAMES_LOADED = False
+GAMES_SOURCE = None
+
+# المحاولة الأولى: استيراد من games.py مباشرة
 try:
-    # محاولة الاستيراد من games.py
-    from games import start_game, check_game_answer, get_hint, show_answer
-    GAMES_LOADED = True
-    logger.info("تم تحميل games.py بنجاح")
-except ImportError as e:
-    logger.warning(f"فشل تحميل games.py: {e}")
-    try:
-        # محاولة الاستيراد من مجلد games (package)
+    import games as games_module
+    # التحقق من وجود الدوال المطلوبة
+    if hasattr(games_module, 'start_game'):
         from games import start_game, check_game_answer, get_hint, show_answer
         GAMES_LOADED = True
-        logger.info("تم تحميل games (package) بنجاح")
-    except ImportError as e:
-        logger.error(f"فشل تحميل جميع ملفات الألعاب: {e}")
-        GAMES_LOADED = False
+        GAMES_SOURCE = "games.py"
+        logger.info("تم تحميل games.py بنجاح")
+    else:
+        raise ImportError("games.py لا يحتوي على الدوال المطلوبة")
+except (ImportError, AttributeError) as e:
+    logger.warning(f"فشل تحميل games.py: {e}")
+    
+    # المحاولة الثانية: استيراد من مجلد games/
+    try:
+        import sys
+        import os
+        # إضافة مسار المجلد للـ path
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        games_dir = os.path.join(current_dir, 'games')
+        if games_dir not in sys.path:
+            sys.path.insert(0, games_dir)
+        
+        # محاولة الاستيراد من games/__init__.py
+        from games import start_game, check_game_answer, get_hint, show_answer
+        GAMES_LOADED = True
+        GAMES_SOURCE = "games/ (package)"
+        logger.info("تم تحميل games/ (package) بنجاح")
+    except (ImportError, AttributeError) as e2:
+        logger.error(f"فشل تحميل games/: {e2}")
+        
+        # المحاولة الثالثة: محاولة استيراد مباشر من ملفات المجلد
+        try:
+            from games.games import start_game, check_game_answer, get_hint, show_answer
+            GAMES_LOADED = True
+            GAMES_SOURCE = "games/games.py"
+            logger.info("تم تحميل games/games.py بنجاح")
+        except (ImportError, AttributeError) as e3:
+            logger.error(f"فشل تحميل جميع مصادر الألعاب: {e3}")
+            GAMES_LOADED = False
+            GAMES_SOURCE = None
 
 # إعداد Flask
 app = Flask(__name__)
@@ -201,6 +230,26 @@ def check_rate_limit(user_id):
     
     user_requests.append(now)
     return True
+
+# ============= Quick Reply Buttons =============
+
+def create_quick_reply_buttons():
+    """إنشاء أزرار سريعة ثابتة"""
+    return QuickReply(items=[
+        QuickReplyButton(action=MessageAction(label="أسرع", text="أسرع")),
+        QuickReplyButton(action=MessageAction(label="لعبة", text="لعبة")),
+        QuickReplyButton(action=MessageAction(label="سلسلة", text="سلسلة")),
+        QuickReplyButton(action=MessageAction(label="أغنية", text="أغنية")),
+        QuickReplyButton(action=MessageAction(label="ضد", text="ضد")),
+        QuickReplyButton(action=MessageAction(label="ترتيب", text="ترتيب")),
+        QuickReplyButton(action=MessageAction(label="تكوين", text="تكوين")),
+        QuickReplyButton(action=MessageAction(label="توافق", text="توافق")),
+        QuickReplyButton(action=MessageAction(label="Ai", text="Ai")),
+        QuickReplyButton(action=MessageAction(label="سؤال", text="سؤال")),
+        QuickReplyButton(action=MessageAction(label="منشن", text="منشن")),
+        QuickReplyButton(action=MessageAction(label="اعتراف", text="اعتراف")),
+        QuickReplyButton(action=MessageAction(label="تحدي", text="تحدي"))
+    ])
 
 # ============= Flex Messages =============
 
@@ -729,7 +778,7 @@ def index():
                         <span class="stat-value">
                             <span class="games-indicator"></span>
                         </span>
-                        <span class="stat-label">الألعاب: {games_status}</span>
+                        <span class="stat-label">الألعاب: {games_status}<br><small>{GAMES_SOURCE if GAMES_SOURCE else 'غير محمل'}</small></span>
                     </div>
                     <div class="stat-box">
                         <span class="stat-value">24/7</span>
@@ -757,12 +806,13 @@ if __name__ == "__main__":
     print("بوت الحوت - حالة البدء")
     print("=" * 50)
     if GAMES_LOADED:
-        print("[OK] تم تحميل ملفات الألعاب بنجاح")
+        print(f"[OK] تم تحميل ملفات الألعاب بنجاح من: {GAMES_SOURCE}")
     else:
         print("[X] تحذير: لم يتم تحميل ملفات الألعاب")
         print("تأكد من وجود أحد الملفات التالية:")
-        print("   - games.py")
-        print("   - مجلد games/ مع __init__.py")
+        print("   1. games.py (ملف واحد)")
+        print("   2. games/__init__.py (مجلد package)")
+        print("   3. games/games.py (ملف داخل مجلد)")
     print("=" * 50)
     
     # تهيئة قاعدة البيانات
