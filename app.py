@@ -1,4 +1,4 @@
-"""بوت الحوت v3.2 - نسخة محسّنة نهائية"""
+"""بوت الحوت v3.3 - نسخة محسّنة ومُصلحة"""
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
@@ -8,26 +8,21 @@ from datetime import datetime, timedelta
 from collections import defaultdict, deque, Counter
 from queue import Queue
 
-# Logging
 os.makedirs('logs', exist_ok=True)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler('logs/bot.log', encoding='utf-8')])
 logger = logging.getLogger("whale-bot")
 
-# الإعدادات
 LINE_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_SECRET = os.getenv('LINE_CHANNEL_SECRET')
 
-# تعريف app لحل مشكلة Gunicorn
 app = Flask(__name__)
 line_bot_api = LineBotApi(LINE_TOKEN) if LINE_TOKEN else None
 handler = WebhookHandler(LINE_SECRET) if LINE_SECRET else None
 active_games, registered_players = {}, set()
 
-# ألوان من الصورة فقط
 C = {'bg':'#0A0E27','card':'#0F2440','text':'#E0F2FF','text2':'#7FB3D5','cyan':'#00D9FF','glow':'#5EEBFF','sep':'#2C5F8D','border':'#00D9FF40'}
 
-# Rate Limiter
 class RateLimiter:
     def __init__(self, max_req=10, window=60):
         self.max_req, self.window, self.requests, self.lock = max_req, window, defaultdict(deque), threading.Lock()
@@ -41,7 +36,6 @@ class RateLimiter:
 
 rate_limiter = RateLimiter()
 
-# Metrics
 class Metrics:
     def __init__(self): self.msgs, self.games, self.start = Counter(), Counter(), datetime.now()
     def log_msg(self, uid): self.msgs[uid] += 1
@@ -50,7 +44,6 @@ class Metrics:
 
 metrics = Metrics()
 
-# DB Pool
 DB = 'whale_bot.db'
 class DBPool:
     def __init__(self, db, size=5):
@@ -121,7 +114,6 @@ def cleanup_inactive():
 
 threading.Thread(target=lambda: [time.sleep(21600) or cleanup_inactive() for _ in iter(int,1)], daemon=True).start()
 
-# المحتوى
 def load_txt(name):
     try:
         with open(f'{name}.txt','r',encoding='utf-8') as f: return [l.strip() for l in f if l.strip()]
@@ -138,12 +130,10 @@ def next_content(items, idx_name):
     globals()[idx_name] += 1
     return r
 
-# Quick Reply
 def get_qr():
     btns = ["أغنية","لعبة","سلسلة","أسرع","ضد","تكوين","ترتيب","كلمة","لون","المزيد"]
     return QuickReply(items=[QuickReplyButton(action=MessageAction(label=b,text=b)) for b in btns])
 
-# Flex Components
 def glass_box(contents, padding="20px"):
     return {"type":"box","layout":"vertical","contents":contents,"backgroundColor":C['card'],"cornerRadius":"16px",
         "paddingAll":padding,"borderWidth":"1px","borderColor":C['border'],"margin":"md"}
@@ -154,13 +144,6 @@ def progress_bar(current, total):
         {"type":"box","layout":"vertical","contents":[],"backgroundColor":C['card'],"height":"6px","flex":max(1,total-current),"cornerRadius":"3px"}
     ],"spacing":"xs","margin":"lg"}
 
-def game_header(title, subtitle):
-    return [{"type":"text","text":"♓","size":"6xl","color":C['glow'],"align":"center","margin":"none"},
-        {"type":"text","text":title,"size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
-        {"type":"text","text":subtitle,"size":"sm","color":C['text2'],"align":"center","margin":"xs"},
-        {"type":"separator","margin":"lg","color":C['sep']}]
-
-# Flex Cards
 def welcome_card():
     return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
         {"type":"text","text":"♓","size":"6xl","color":C['glow'],"align":"center","weight":"bold"},
@@ -224,16 +207,19 @@ def more_card():
 def stats_card(uid, name, is_reg):
     stats = get_stats(uid)
     if not stats:
-        return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
+        card = {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
             {"type":"text","text":"♓","size":"6xl","color":C['glow'],"align":"center","weight":"bold"},
             {"type":"text","text":"إحصائياتك","size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
             {"type":"separator","margin":"lg","color":C['sep']},
             glass_box([{"type":"text","text":name,"size":"lg","color":C['text'],"align":"center"},
                 {"type":"text","text":"غير مسجل" if not is_reg else "لم تبدأ","size":"md","color":C['text2'],"align":"center","margin":"md"}]),
             {"type":"text","text":"بوت الحوت © 2025","size":"xxs","color":C['text2'],"align":"center","margin":"lg"}
-        ],"backgroundColor":C['bg'],"paddingAll":"24px"},"footer":{"type":"box","layout":"vertical","contents":[
-            {"type":"button","action":{"type":"message","label":"انضم الآن","text":"انضم"},"style":"primary","color":C['cyan'],"height":"md"}
-        ],"paddingAll":"16px","backgroundColor":C['bg']} if not is_reg else None}
+        ],"backgroundColor":C['bg'],"paddingAll":"24px"}}
+        if not is_reg:
+            card["footer"] = {"type":"box","layout":"vertical","contents":[
+                {"type":"button","action":{"type":"message","label":"انضم الآن","text":"انضم"},"style":"primary","color":C['cyan'],"height":"md"}
+            ],"paddingAll":"16px","backgroundColor":C['bg']}
+        return card
     
     wr = (stats['wins']/stats['games_played']*100) if stats['games_played']>0 else 0
     return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
@@ -292,13 +278,11 @@ def leaderboard_card():
         {"type":"text","text":"بوت الحوت © 2025","size":"xxs","color":C['text2'],"align":"center","margin":"lg"}
     ],"backgroundColor":C['bg'],"paddingAll":"24px"}}
 
-# استيراد الألعاب
 try:
     from games import start_game, check_game_answer
     GAMES_LOADED = True
 except: logger.warning("games.py غير موجود"); GAMES_LOADED = False
 
-# معالج الرسائل
 CMDS = ['البداية','ابدأ','start','مساعدة','help','انضم','join','نقاطي','إحصائياتي','الصدارة','المتصدرين',
     'إيقاف','stop','أغنية','لعبة','سلسلة','أسرع','ضد','تكوين','ترتيب','كلمة','لون','سؤال','سوال','تحدي','اعتراف','منشن',
     'لمح','تلميح','جاوب','الحل','الجواب','المزيد']
@@ -316,7 +300,6 @@ def handle_message(event):
         if uid not in registered_players and get_stats(uid): registered_players.add(uid)
         gid = getattr(event.source, 'group_id', uid)
         
-        # أوامر
         if txt in ['البداية','ابدأ','start']: return line_bot_api.reply_message(event.reply_token, FlexSendMessage(alt_text="بوت الحوت", contents=welcome_card(), quick_reply=get_qr()))
         if txt in ['مساعدة','help']: return line_bot_api.reply_message(event.reply_token, FlexSendMessage(alt_text="المساعدة", contents=help_card(), quick_reply=get_qr()))
         if txt in ['المزيد']: return line_bot_api.reply_message(event.reply_token, FlexSendMessage(alt_text="المزيد", contents=more_card(), quick_reply=get_qr()))
@@ -332,7 +315,6 @@ def handle_message(event):
         if txt in ['اعتراف','confession']: return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=next_content(CONFESSIONS,'cf_idx'), quick_reply=get_qr()))
         if txt in ['منشن','mention']: return line_bot_api.reply_message(event.reply_token, TextSendMessage(text=next_content(MENTIONS,'m_idx'), quick_reply=get_qr()))
         
-        # ألعاب
         is_reg = uid in registered_players
         if GAMES_LOADED:
             gmap = {'أغنية':'song','لعبة':'game','سلسلة':'chain','أسرع':'fast','ضد':'opposite','تكوين':'build','ترتيب':'order','كلمة':'word','لون':'color'}
@@ -345,7 +327,6 @@ def handle_message(event):
                 if r: return line_bot_api.reply_message(event.reply_token, r)
     except Exception as e: logger.error(f"معالجة: {e}", exc_info=True)
 
-# Routes
 @app.route("/", methods=['GET'])
 def home():
     m = metrics.stats()
@@ -357,7 +338,7 @@ def home():
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>بوت الحوت v3.2</title>
+    <title>بوت الحوت v3.3</title>
     <style>
         *{{margin:0;padding:0;box-sizing:border-box}}
         body{{font-family:'Segoe UI',sans-serif;background:#0A0E27;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden}}
@@ -401,7 +382,7 @@ def home():
         </div>
         <div class="glass-card">
             <h1 class="title">بوت الحوت</h1>
-            <p class="subtitle">نظام ألعاب تفاعلية v3.2</p>
+            <p class="subtitle">نظام ألعاب تفاعلية v3.3</p>
             <div class="status-grid">
                 <div class="status-item">
                     <div class="status-label">حالة الخادم</div>
@@ -430,7 +411,7 @@ def home():
                 </div>
             </div>
             <div class="footer">
-                بوت الحوت v3.2 © 2025<br>
+                بوت الحوت v3.3 © 2025<br>
                 <a href="/health">Health Check</a>
             </div>
         </div>
@@ -452,7 +433,7 @@ def home():
 @app.route("/health", methods=['GET'])
 def health():
     m = metrics.stats()
-    return {{"status":"healthy","version":"3.2.0","timestamp":datetime.now().isoformat(),"active_games":len(active_games),
+    return {{"status":"healthy","version":"3.3.0","timestamp":datetime.now().isoformat(),"active_games":len(active_games),
         "registered_players":len(registered_players),"games_loaded":GAMES_LOADED,"metrics":{{"uptime_seconds":m['uptime'],
         "total_messages":m['total_msgs'],"total_games":m['total_games']}}}}
 
@@ -483,11 +464,10 @@ def handle_exception(e):
     logger.error(f"خطأ غير متوقع: {{e}}", exc_info=True)
     return 'OK', 200
 
-# التشغيل
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
     print(f"\n{{'='*60}}")
-    print(f"♓ بوت الحوت v3.2 ♓")
+    print(f"♓ بوت الحوت v3.3 ♓")
     print(f"{{'='*60}}")
     print(f"المنفذ: {{port}}")
     print(f"الألعاب: {{'متوفرة' if GAMES_LOADED else 'غير متوفرة'}}")
