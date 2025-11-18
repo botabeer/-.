@@ -193,21 +193,12 @@ def get_qr():
 def glass_box(contents, padding="20px"):
     return {"type":"box","layout":"vertical","contents":contents,"backgroundColor":C['glass'],"cornerRadius":"16px","paddingAll":padding,"borderWidth":"1px","borderColor":C['border'],"margin":"md"}
 
-def create_header(icon, title, subtitle):
-    return [
-        {"type":"box","layout":"vertical","contents":[{"type":"image","url":LOGO_URL,"size":"80px","aspectMode":"cover"}],
-         "width":"80px","height":"80px","cornerRadius":"40px","borderWidth":"2px","borderColor":C['cyan'],"margin":"none","alignItems":"center","justifyContent":"center"},
-        {"type":"text","text":title,"size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
-        {"type":"text","text":subtitle,"size":"sm","color":C['text2'],"align":"center","margin":"xs"},
-        {"type":"separator","margin":"lg","color":C['border']}
-    ]
-
 def welcome_card():
     return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
         {"type":"box","layout":"vertical","contents":[{"type":"image","url":LOGO_URL,"size":"80px","aspectMode":"cover"}],"width":"80px","height":"80px","cornerRadius":"40px","borderWidth":"2px","borderColor":C['cyan'],"margin":"none","alignItems":"center","justifyContent":"center"},
         {"type":"text","text":"بوت الحوت","size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
         {"type":"text","text":"نظام ألعاب تفاعلية","size":"sm","color":C['text2'],"align":"center","margin":"xs"},
-        {"type":"separator","margin":"lg","color":C['border']},
+        {"type":"separator","margin":"lg"},
         glass_box([{"type":"text","text":"🎮 الألعاب","size":"md","weight":"bold","color":C['text']},
             {"type":"text","text":"أغنية | لعبة | سلسلة | أسرع | ضد | تكوين | ترتيب | كلمة | لون","size":"xs","color":C['text2'],"wrap":True,"margin":"sm"}]),
         glass_box([{"type":"text","text":"🎯 التسلية","size":"md","weight":"bold","color":C['text']},
@@ -222,7 +213,10 @@ def welcome_card():
 def stats_card(uid, name, is_reg):
     stats = get_stats(uid)
     if not stats:
-        card = {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":create_header("","إحصائياتك","") + [
+        card = {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
+            {"type":"box","layout":"vertical","contents":[{"type":"image","url":LOGO_URL,"size":"60px","aspectMode":"cover"}],"width":"60px","height":"60px","cornerRadius":"30px","borderWidth":"2px","borderColor":C['cyan'],"margin":"none"},
+            {"type":"text","text":"إحصائياتك","size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
+            {"type":"separator","margin":"lg","color":C['border']},
             glass_box([{"type":"text","text":name,"size":"lg","color":C['text'],"align":"center"},
                 {"type":"text","text":"مسجل ✓" if is_reg else "غير مسجل","size":"sm","color":C['success'] if is_reg else C['text2'],"align":"center","margin":"sm"},
                 {"type":"text","text":"لم تبدأ بعد" if is_reg else "سجل للبدء","size":"md","color":C['text2'],"align":"center","margin":"md"}])
@@ -230,7 +224,10 @@ def stats_card(uid, name, is_reg):
         if not is_reg: card["footer"] = {"type":"box","layout":"vertical","contents":[{"type":"button","action":{"type":"message","label":"✅ انضم","text":"انضم"},"style":"primary","color":C['success']}],"paddingAll":"16px","backgroundColor":C['bg']}
         return card
     wr = (stats['wins']/stats['games_played']*100) if stats['games_played']>0 else 0
-    return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":create_header("","إحصائياتك","") + [
+    return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
+        {"type":"box","layout":"vertical","contents":[{"type":"image","url":LOGO_URL,"size":"60px","aspectMode":"cover"}],"width":"60px","height":"60px","cornerRadius":"30px","borderWidth":"2px","borderColor":C['cyan'],"margin":"none"},
+        {"type":"text","text":"إحصائياتك","size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
+        {"type":"separator","margin":"lg","color":C['border']},
         glass_box([{"type":"text","text":name,"size":"lg","color":C['text'],"align":"center"},{"type":"text","text":"مسجل ✓","size":"sm","color":C['success'],"align":"center","margin":"sm"}],"20px"),
         glass_box([{"type":"box","layout":"horizontal","contents":[{"type":"text","text":"💎 النقاط","size":"sm","color":C['text2'],"flex":1},
             {"type":"text","text":str(stats['total_points']),"size":"xxl","weight":"bold","color":C['cyan_glow'],"flex":1,"align":"end"}]},
@@ -245,7 +242,12 @@ def stats_card(uid, name, is_reg):
 
 def leaderboard_card():
     leaders = get_leaderboard()
-    if not leaders: return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":create_header("","لوحة الصدارة","") + [{"type":"text","text":"لا توجد بيانات","size":"md","color":C['text2'],"align":"center","margin":"lg"}],"backgroundColor":C['bg'],"paddingAll":"24px"}}
+    if not leaders: return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
+        {"type":"box","layout":"vertical","contents":[{"type":"image","url":LOGO_URL,"size":"60px","aspectMode":"cover"}],"width":"60px","height":"60px","cornerRadius":"30px","borderWidth":"2px","borderColor":C['cyan'],"margin":"none"},
+        {"type":"text","text":"لوحة الصدارة","size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
+        {"type":"separator","margin":"lg","color":C['border']},
+        {"type":"text","text":"لا توجد بيانات","size":"md","color":C['text2'],"align":"center","margin":"lg"}
+    ],"backgroundColor":C['bg'],"paddingAll":"24px"}}
     items = []
     for i,l in enumerate(leaders,1):
         rank = ["🥇","🥈","🥉"][i-1] if i<=3 else f"#{i}"
@@ -254,7 +256,13 @@ def leaderboard_card():
             {"type":"text","text":l['display_name'],"size":"sm","flex":3,"margin":"md","wrap":True,"color":C['cyan'] if i==1 else C['text']},
             {"type":"text","text":str(l['total_points']),"size":"lg" if i==1 else "md","weight":"bold","flex":1,"align":"end","color":C['cyan_glow'] if i==1 else C['text2']}
         ],"backgroundColor":C['glass'] if i<=3 else C['glass2'],"cornerRadius":"12px","paddingAll":"14px","margin":"sm" if i>1 else "md","borderWidth":"1px","borderColor":C['cyan'] if i==1 else C['border']})
-    return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":create_header("","لوحة الصدارة","أفضل اللاعبين") + [{"type":"box","layout":"vertical","contents":items,"margin":"md"}],"backgroundColor":C['bg'],"paddingAll":"24px"}}
+    return {"type":"bubble","size":"kilo","body":{"type":"box","layout":"vertical","contents":[
+        {"type":"box","layout":"vertical","contents":[{"type":"image","url":LOGO_URL,"size":"60px","aspectMode":"cover"}],"width":"60px","height":"60px","cornerRadius":"30px","borderWidth":"2px","borderColor":C['cyan'],"margin":"none"},
+        {"type":"text","text":"لوحة الصدارة","size":"xl","weight":"bold","color":C['cyan'],"align":"center","margin":"md"},
+        {"type":"text","text":"أفضل اللاعبين","size":"sm","color":C['text2'],"align":"center","margin":"xs"},
+        {"type":"separator","margin":"lg","color":C['border']},
+        {"type":"box","layout":"vertical","contents":items,"margin":"md"}
+    ],"backgroundColor":C['bg'],"paddingAll":"24px"}}
 
 try:
     from games import start_game, check_game_answer
