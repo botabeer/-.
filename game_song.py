@@ -1,20 +1,25 @@
 import random
-from linebot.models import TextSendMessage, FlexSendMessage
-from utils import normalize_text, create_game_card, create_hint_card, create_answer_card, create_results_card, COLORS
+from linebot.models import FlexSendMessage
+from utils import normalize_text, create_game_card, create_hint_card, create_answer_card, create_results_card
 
 class SongGame:
     def __init__(self):
         self.all_songs = [
-            {"lyrics": "قولي أحبك كي تزيد وسامتي", "singer": "كاظم الساهر"},
+            {"lyrics": "قولي احبك كي تزيد وسامتي", "singer": "كاظم الساهر"},
             {"lyrics": "يا طيور الطايرة فوق الحدود", "singer": "عبد المجيد عبدالله"},
-            {"lyrics": "أنا لو عشقت حبيبي بجنون", "singer": "نجوى كرم"},
+            {"lyrics": "انا لو عشقت حبيبي بجنون", "singer": "نجوى كرم"},
             {"lyrics": "حبيبي يا نور العين", "singer": "عمرو دياب"},
             {"lyrics": "على مودك يا بعد عمري", "singer": "محمد عبده"},
             {"lyrics": "تعبت من الصبر والانتظار", "singer": "راشد الماجد"},
-            {"lyrics": "يا حبيبي كل اللي ودك فيه", "singer": "أصالة"},
+            {"lyrics": "يا حبيبي كل اللي ودك فيه", "singer": "اصالة"},
             {"lyrics": "كل عام وانت حبيبي", "singer": "وائل كفوري"},
-            {"lyrics": "ما بلاش تبعد عني", "singer": "إليسا"},
-            {"lyrics": "يا قمر يا قمر يا قمر", "singer": "نانسي عجرم"}
+            {"lyrics": "ما بلاش تبعد عني", "singer": "اليسا"},
+            {"lyrics": "يا قمر يا قمر يا قمر", "singer": "نانسي عجرم"},
+            {"lyrics": "احبك موت وانت قاسي", "singer": "ماجد المهندس"},
+            {"lyrics": "زي العسل ماحلاه", "singer": "حسين الجسمي"},
+            {"lyrics": "انت معلم يا معلم", "singer": "شيرين عبد الوهاب"},
+            {"lyrics": "قلبي اختارك من الناس", "singer": "كارول سماحة"},
+            {"lyrics": "بحبك انا كتير", "singer": "اصيل ابو بكر"}
         ]
         self.questions = []
         self.current_song = None
@@ -41,27 +46,27 @@ class SongGame:
             {
                 "type": "box",
                 "layout": "vertical",
-                "backgroundColor": COLORS['glass'],
+                "backgroundColor": "#1a1f3a90",
                 "cornerRadius": "20px",
                 "paddingAll": "28px",
                 "borderWidth": "2px",
-                "borderColor": COLORS['border'],
+                "borderColor": "#00D9FF50",
                 "contents": [
-                    {"type": "text", "text": "كلمات الأغنية:", "size": "lg", "color": COLORS['text2'], "align": "center"},
-                    {"type": "text", "text": self.current_song['lyrics'], "size": "xl", "weight": "bold", "color": COLORS['cyan'], "align": "center", "margin": "lg", "wrap": True}
+                    {"type": "text", "text": "🎵 كلمات الاغنية:", "size": "lg", "color": "#8FB9D8", "align": "center"},
+                    {"type": "text", "text": self.current_song['lyrics'], "size": "xl", "weight": "bold", "color": "#00D9FF", "align": "center", "margin": "lg", "wrap": True}
                 ]
             },
-            {"type": "text", "text": "من المغني؟", "size": "lg", "color": COLORS['text'], "align": "center", "margin": "lg"}
+            {"type": "text", "text": "من المغني؟ 🎤", "size": "lg", "color": "#E8F4FF", "align": "center", "margin": "lg"}
         ]
         
-        card = create_game_card("لعبة الأغنية", self.question_number, self.total_questions, content)
-        return FlexSendMessage(alt_text=f"السؤال {self.question_number} - لعبة الأغنية", contents=card)
+        card = create_game_card("🎵 لعبة الاغنية", self.question_number, self.total_questions, content)
+        return FlexSendMessage(alt_text=f"السؤال {self.question_number} - لعبة الاغنية", contents=card)
 
     def get_hint(self):
         if not self.current_song:
             return None
         singer = self.current_song['singer']
-        hint_text = f"أول حرف: {singer[0]} " + "_ " * (len(singer) - 1)
+        hint_text = f"اول حرف: {singer[0]} " + "_ " * (len(singer) - 1)
         extra = f"عدد الحروف: {len(singer)}"
         self.hints_used += 1
         return FlexSendMessage(alt_text="تلميح", contents=create_hint_card(hint_text, extra))
@@ -69,7 +74,7 @@ class SongGame:
     def show_answer(self):
         if not self.current_song:
             return None
-        return FlexSendMessage(alt_text="الإجابة الصحيحة", contents=create_answer_card(self.current_song['singer']))
+        return FlexSendMessage(alt_text="الاجابة الصحيحة", contents=create_answer_card(self.current_song['singer']))
 
     def check_answer(self, answer, user_id, display_name):
         if not self.current_song:
@@ -79,7 +84,7 @@ class SongGame:
             if user_id not in self.player_scores:
                 self.player_scores[user_id] = {'name': display_name, 'score': 0}
             self.player_scores[user_id]['score'] += points
-            return {'response': TextSendMessage(text=f"إجابة صحيحة +{points} نقطة"), 'points': points, 'correct': True}
+            return {'correct': True, 'points': points}
         return None
 
     def get_final_results(self):
