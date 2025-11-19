@@ -1,6 +1,6 @@
 import random
-from linebot.models import TextSendMessage, FlexSendMessage
-from utils import normalize_text, create_game_card, create_hint_card, create_answer_card, create_results_card, COLORS
+from linebot.models import FlexSendMessage
+from utils import normalize_text, create_game_card, create_hint_card, create_answer_card, create_results_card
 
 class ChainWordsGame:
     def __init__(self):
@@ -9,7 +9,10 @@ class ChainWordsGame:
             ["سلام", "ملك", "كرم", "محمد", "دمشق"],
             ["قمر", "رمان", "نجم", "ماء", "ءيمان"],
             ["بحر", "رمل", "ليمون", "نسيم", "ماجد"],
-            ["جبل", "لحم", "مصر", "رياح", "حلب"]
+            ["جبل", "لحم", "مصر", "رياح", "حلب"],
+            ["باب", "بطل", "لون", "نهر", "روح"],
+            ["كتاب", "برق", "قلب", "بحر", "رمز"],
+            ["صباح", "حلم", "ملك", "كوب", "بحر"]
         ]
         self.current_chain = []
         self.current_index = 0
@@ -37,20 +40,20 @@ class ChainWordsGame:
             {
                 "type": "box",
                 "layout": "vertical",
-                "backgroundColor": COLORS['glass'],
+                "backgroundColor": "#1a1f3a90",
                 "cornerRadius": "20px",
                 "paddingAll": "28px",
                 "borderWidth": "2px",
-                "borderColor": COLORS['border'],
+                "borderColor": "#00D9FF50",
                 "contents": [
-                    {"type": "text", "text": "الكلمة الحالية:", "size": "lg", "color": COLORS['text2'], "align": "center"},
-                    {"type": "text", "text": current_word, "size": "xxl", "weight": "bold", "color": COLORS['cyan'], "align": "center", "margin": "lg"}
+                    {"type": "text", "text": "الكلمة الحالية:", "size": "lg", "color": "#8FB9D8", "align": "center"},
+                    {"type": "text", "text": current_word, "size": "xxl", "weight": "bold", "color": "#00D9FF", "align": "center", "margin": "lg"}
                 ]
             },
-            {"type": "text", "text": f"أكتب كلمة تبدأ بحرف: {current_word[-1]}", "size": "lg", "color": COLORS['text'], "align": "center", "margin": "lg", "wrap": True}
+            {"type": "text", "text": f"⛓️ اكتب كلمة تبدأ بحرف: {current_word[-1]}", "size": "lg", "color": "#E8F4FF", "align": "center", "margin": "lg", "wrap": True}
         ]
         
-        card = create_game_card("سلسلة الكلمات", self.question_number, self.total_questions, content)
+        card = create_game_card("⛓️ سلسلة الكلمات", self.question_number, self.total_questions, content)
         return FlexSendMessage(alt_text=f"السؤال {self.question_number} - سلسلة الكلمات", contents=card)
 
     def get_hint(self):
@@ -77,7 +80,7 @@ class ChainWordsGame:
                 self.player_scores[user_id] = {'name': display_name, 'score': 0}
             self.player_scores[user_id]['score'] += points
             self.current_index += 1
-            return {'response': TextSendMessage(text=f"إجابة صحيحة +{points} نقطة"), 'points': points, 'correct': True}
+            return {'correct': True, 'points': points}
         return None
 
     def get_final_results(self):
