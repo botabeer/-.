@@ -158,7 +158,7 @@ class CompatibilityGame:
                         "borderWidth": "2px",
                         "borderColor": C['border'],
                         "contents": [
-                            {"type": "text", "text": "💖 نتيجة التوافق", "weight": "bold", "size": "xxl", "align": "center", "color": C['glow']},
+                            {"type": "text", "text": "🖤 نتيجة التوافق", "weight": "bold", "size": "xxl", "align": "center", "color": C['glow']},
                             {"type": "separator", "color": C['sep'], "margin": "xl"},
                             {
                                 "type": "box",
