@@ -1066,7 +1066,7 @@ def internal_error(error):
 # تشغيل التطبيق
 if __name__ == "__main__":
     print("=" * 60)
-    print("🐋 بوت الحوت - LINE Bot")
+    print(" بوت الحوت - LINE Bot")
     print("=" * 60)
     print(f"{'✓' if GAMES_LOADED else '✗'} الألعاب: {'محملة' if GAMES_LOADED else 'غير محملة'}")
     print(f"✓ قاعدة البيانات: جاهزة")
@@ -1082,5 +1082,9 @@ if __name__ == "__main__":
     print("⚠️  ملاحظة: البوت يرد فقط على المستخدمين المسجلين")
     print("=" * 60)
     
+    if __name__ == "__main__":
+    import os
+
     port = int(os.environ.get("PORT", 5000))
-app.run(host="0.0.0.0", port=port)
+    print(f"🚀 البوت يعمل على المنفذ {port}")
+    app.run(host='0.0.0.0', port=port, debug=False)
