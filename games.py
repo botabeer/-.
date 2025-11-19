@@ -123,7 +123,7 @@ def get_hint(game):
         return None
     
     game_instance = game['instance']
-    hint = game_instance.get_hint()
+    hint = game_instance.get_hint() if hasattr(game_instance, 'get_hint') else None
     
     if hint and isinstance(hint, FlexSendMessage):
         return hint
@@ -137,20 +137,20 @@ def show_answer(game, group_id, active_games):
         return {'message': 'لا توجد لعبة نشطة'}
     
     game_instance = game['instance']
-    answer = game_instance.show_answer()
+    answer = game_instance.show_answer() if hasattr(game_instance, 'show_answer') else None
     
     # إذا لم تكن اللعبة تدعم عرض الإجابة
     if not answer:
         return {'message': 'هذه اللعبة لا تدعم عرض الإجابة'}
     
-    next_q = game_instance.next_question()
+    next_q = game_instance.next_question() if hasattr(game_instance, 'next_question') else None
     if next_q:
         return {
             'message': 'الإجابة الصحيحة - السؤال التالي',
             'flex': next_q.contents if isinstance(next_q, FlexSendMessage) else None
         }
     else:
-        final_results = game_instance.get_final_results()
+        final_results = game_instance.get_final_results() if hasattr(game_instance, 'get_final_results') else None
         if group_id in active_games:
             del active_games[group_id]
         return {
