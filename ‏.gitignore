@@ -1,64 +1,84 @@
-‏# Python
-‏__pycache__/
-‏*.py[cod]
-‏*$py.class
-‏*.so
-‏.Python
-‏env/
-‏venv/
-‏ENV/
-‏build/
-‏develop-eggs/
-‏dist/
-‏downloads/
-‏eggs/
-‏.eggs/
-‏lib/
-‏lib64/
-‏parts/
-‏sdist/
-‏var/
-‏wheels/
-‏*.egg-info/
-‏.installed.cfg
-‏*.egg
+# Whale Bot - GitIgnore File
 
-‏# Virtual Environment
-‏venv/
-‏ENV/
-‏env/
+# ==================== Python ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-‏# Environment Variables
-‏.env
-‏.env.local
-‏.env.*.local
+# ==================== Virtual Environment ====================
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
 
-‏# Database
-‏*.db
-‏*.sqlite
-‏*.sqlite3
-‏whale_bot.db
+# ==================== Environment Variables ====================
+.env
+.env.local
+.env.*.local
 
-‏# Logs
-‏*.log
-‏whale_bot.log
+# ==================== Database ====================
+*.db
+*.sqlite
+*.sqlite3
+whale_bot.db
+database.db
 
-‏# IDE
-‏.vscode/
-‏.idea/
-‏*.swp
-‏*.swo
+# ==================== Logs ====================
+*.log
+whale_bot.log
+logs/
+*.log.*
+
+# ==================== IDE ====================
+.vscode/
+.idea/
+*.swp
+*.swo
 *~
+.DS_Store
 
-‏# OS
-‏.DS_Store
-‏Thumbs.db
+# ==================== Testing ====================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
 
-‏# Backup files
-‏*.bak
-‏*.backup
-‏*.old
+# ==================== Temporary ====================
+*.tmp
+*.temp
+*.bak
+*.backup
 
-‏# Test files
-‏test_*.py
-‏*_test.py
+# ==================== OS ====================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==================== Render ====================
+.render/
+
+# ==================== Keep ====================
+!data/*.txt
+!data/
