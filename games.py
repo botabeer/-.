@@ -5,7 +5,9 @@
 
 from linebot.models import FlexSendMessage
 
-# استيراد ملفات الألعاب
+# ---------------------------------------------------------
+#               🔵  استيراد ملفات الألعاب
+# ---------------------------------------------------------
 from game_opposite import OppositeGame
 from game_song import SongGame
 from game_chain import ChainWordsGame
@@ -15,7 +17,7 @@ from game_lbgame import LBGame
 from game_fast import FastGame
 from game_compatibility import CompatibilityGame
 
-# قاموس جميع الألعاب المتاحة (مأخوذ من الملف الثاني + دمج مع الأول)
+# قاموس جميع الألعاب المتاحة
 GAME_CLASSES = {
     'ضد': OppositeGame,
     'اغنية': SongGame,
@@ -29,7 +31,7 @@ GAME_CLASSES = {
 
 
 # ---------------------------------------------------------
-#               🔵  START GAME (دمج)
+#               🔵  START GAME
 # ---------------------------------------------------------
 def start_game(group_id, game_type, user_id, user_name):
     """
@@ -67,7 +69,7 @@ def start_game(group_id, game_type, user_id, user_name):
 
 
 # ---------------------------------------------------------
-#               🔵  CHECK ANSWER (دمج كامل)
+#               🔵  CHECK ANSWER
 # ---------------------------------------------------------
 def check_game_answer(game, text, user_id, user_name, group_id, active_games):
     """
@@ -78,21 +80,22 @@ def check_game_answer(game, text, user_id, user_name, group_id, active_games):
 
     game_instance = game['instance']
 
-    # معالجة لعبة إنسان/حيوان/نبات/بلد
+    # لعبة إنسان/حيوان/نبات/بلد
     if isinstance(game_instance, LBGame):
         return _handle_lbgame_answer(game_instance, text, user_id, user_name, group_id, active_games)
 
-    # الألعاب العادية
+    # الألعاب الأخرى
     return _handle_standard_game_answer(game_instance, text, user_id, user_name, group_id, active_games)
 
 
 # ---------------------------------------------------------
-#         🔵  معالجة خاصة للعبة LBGame (مُدمجة)
+#     🔵  LBGame – معالجة خاصة
 # ---------------------------------------------------------
 def _handle_lbgame_answer(game_instance, text, user_id, user_name, group_id, active_games):
     result = game_instance.check_answer(text, user_id, user_name)
 
     if result and result.get('correct'):
+        # إذا أنهى المرحلة
         if result.get('complete'):
             next_q = game_instance.next_question()
 
@@ -104,20 +107,20 @@ def _handle_lbgame_answer(game_instance, text, user_id, user_name, group_id, act
                     'flex': next_q.contents if isinstance(next_q, FlexSendMessage) else None
                 }
 
-            # انتهت اللعبة
+            # نهاية اللعبة
             final_results = game_instance.get_final_results()
             if group_id in active_games:
                 del active_games[group_id]
 
             return {
-                'message': ' انتهت اللعبة',
+                'message': '🎉 انتهت اللعبة',
                 'correct': True,
                 'game_over': True,
                 'points': result['points'],
                 'flex': final_results.contents if isinstance(final_results, FlexSendMessage) else None
             }
 
-        # خطوة جزئية
+        # إجابة صحيحة بدون إنهاء
         next_q = game_instance.next_question()
         return {
             'message': '✅ صحيح - الخطوة التالية',
@@ -130,14 +133,14 @@ def _handle_lbgame_answer(game_instance, text, user_id, user_name, group_id, act
 
 
 # ---------------------------------------------------------
-#    🔵  الألعاب العادية – دمج كامل لمنطق الملفين
+#     🔵  الألعاب العادية – معالجة موحدة
 # ---------------------------------------------------------
 def _handle_standard_game_answer(game_instance, text, user_id, user_name, group_id, active_games):
     result = game_instance.check_answer(text, user_id, user_name)
 
     if result and result.get('correct'):
 
-        # بعض الألعاب ترجع flex جاهز (مثل لعبة التوافق)
+        # بعض الألعاب ترجع Flex مباشرة
         if result.get('flex'):
             return result
 
@@ -151,7 +154,7 @@ def _handle_standard_game_answer(game_instance, text, user_id, user_name, group_
                 'flex': next_q.contents if isinstance(next_q, FlexSendMessage) else None
             }
 
-        # لا يوجد سؤال جديد – نهاية اللعبة
+        # نهاية اللعبة
         final_results = game_instance.get_final_results()
         if group_id in active_games:
             del active_games[group_id]
@@ -181,14 +184,14 @@ def get_hint(game):
 
     hint = game_instance.get_hint()
 
-    if hint and isinstance(hint, FlexSendMessage):
+    if isinstance(hint, FlexSendMessage):
         return hint
 
     return hint
 
 
 # ---------------------------------------------------------
-#                   🔵 SHOW ANSWER (مدموج)
+#                   🔵 SHOW ANSWER
 # ---------------------------------------------------------
 def show_answer(game, group_id, active_games):
     if 'instance' not in game:
@@ -202,7 +205,7 @@ def show_answer(game, group_id, active_games):
     answer = game_instance.show_answer()
 
     if not answer:
-        return {'message': '❌ لا توجد إجابة متاحة'}
+        return {'message': '❌ لا توجد إجابة'}
 
     next_q = game_instance.next_question() if hasattr(game_instance, 'next_question') else None
 
@@ -219,7 +222,7 @@ def show_answer(game, group_id, active_games):
         del active_games[group_id]
 
     return {
-        'message': ' انتهت اللعبة',
+        'message': '🎉 انتهت اللعبة',
         'game_over': True,
         'flex': final_results.contents if isinstance(final_results, FlexSendMessage) else None
     }
