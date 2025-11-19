@@ -1,40 +1,29 @@
-"""
-مجلد الألعاب - Whale Bot Games Package
-جميع الألعاب المتاحة في البوت
-"""
+# __init__.py
 
-from .speed import SpeedGame
-from .word_game import WordGame
-from .chain_words import ChainWordsGame
-from .song import SongGame
-from .opposite import OppositeGame
-from .order import OrderGame
-from .build import BuildGame
-from .compatibility import CompatibilityGame
+# استيراد جميع الألعاب
+from .game_ai import AI_Game
+from .game_build import BuildGame
+from .game_chain import ChainWordsGame
+from .game_compatibility import CompatibilityGame
+from .game_fast import FastGame
+from .game_lbgame import LBGame
+from .game_opposite import OppositeGame
+from .game_order import OrderGame
+from .game_song import SongGame
 
-__all__ = [
-    'SpeedGame',
-    'WordGame',
-    'ChainWordsGame',
-    'SongGame',
-    'OppositeGame',
-    'OrderGame',
-    'BuildGame',
-    'CompatibilityGame'
-    'AiGame'
-]
-
-# قاموس الألعاب المتاحة
+# يمكن تعريف قاموس لجميع الألعاب لتسهيل الوصول
 GAME_CLASSES = {
-    'اسرع': SpeedGame,
-    'لعبة': WordGame,
-    'سلسلة': ChainWordsGame,
-    'اغنية': SongGame,
-    'ضد': OppositeGame,
-    'ترتيب': OrderGame,
-    'تكوين': BuildGame,
-    'توافق': CompatibilityGame
+    "ai": AI_Game,
+    "build": BuildGame,
+    "chain": ChainWordsGame,
+    "compatibility": CompatibilityGame,
+    "fast": FastGame,
+    "lbgame": LBGame,
+    "opposite": OppositeGame,
+    "order": OrderGame,
+    "song": SongGame,
 }
 
-def get_game_instance(game_type):
-    """إرجاع instance من اللعبة المط
+# اختيار اللعبة بسهولة
+def get_game(name):
+    return GAME_CLASSES.get(name.lower())
