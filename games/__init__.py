@@ -1,210 +1,226 @@
-# games/__init__.py
 """
-نظام إدارة الألعاب - بوت الحوت
+🐋 بوت الحوت - نظام الألعاب
 """
 
-# استيراد جميع الألعاب
-from .game_ai import AI_Game
-from .game_build import BuildGame
-from .game_chain import ChainWordsGame
-from .game_compatibility import CompatibilityGame
-from .game_fast import FastGame
-from .game_lbgame import LBGame
-from .game_opposite import OppositeGame
-from .game_order import OrderGame
-from .game_song import SongGame
+import random
+import logging
+from typing import Dict, Any, Optional
 
-# قاموس جميع الألعاب المتاحة
+logger = logging.getLogger(__name__)
+
+# استيراد الألعاب الفردية
+try:
+    from .game_opposite import OppositeGame
+    from .game_song import SongGame
+    from .game_chain import ChainWordsGame
+    from .game_order import OrderGame
+    from .game_build import BuildGame
+    from .game_lbgame import LBGame
+    from .game_fast import FastGame
+    from .game_compatibility import CompatibilityGame
+    from .game_ai import AiChat
+    
+    GAMES_AVAILABLE = True
+except ImportError as e:
+    logger.error(f"خطأ في استيراد الألعاب: {e}")
+    GAMES_AVAILABLE = False
+
+# قاموس الألعاب
 GAME_CLASSES = {
-    "ai": AI_Game,
-    "اي": AI_Game,
-    "build": BuildGame,
-    "تكوين": BuildGame,
-    "chain": ChainWordsGame,
-    "سلسلة": ChainWordsGame,
-    "compatibility": CompatibilityGame,
-    "توافق": CompatibilityGame,
-    "fast": FastGame,
-    "اسرع": FastGame,
-    "lbgame": LBGame,
-    "لعبة": LBGame,
-    "opposite": OppositeGame,
-    "ضد": OppositeGame,
-    "order": OrderGame,
-    "ترتيب": OrderGame,
-    "song": SongGame,
-    "اغنية": SongGame,
+    'ضد': OppositeGame if GAMES_AVAILABLE else None,
+    'اغنية': SongGame if GAMES_AVAILABLE else None,
+    'سلسلة': ChainWordsGame if GAMES_AVAILABLE else None,
+    'ترتيب': OrderGame if GAMES_AVAILABLE else None,
+    'تكوين': BuildGame if GAMES_AVAILABLE else None,
+    'لعبة': LBGame if GAMES_AVAILABLE else None,
+    'اسرع': FastGame if GAMES_AVAILABLE else None,
+    'توافق': CompatibilityGame if GAMES_AVAILABLE else None,
+    'ai': AiChat if GAMES_AVAILABLE else None
 }
 
-def get_game(name):
-    """الحصول على كلاس اللعبة بالاسم"""
-    return GAME_CLASSES.get(name.lower())
-
-def start_game(group_id, game_type, user_id, user_name):
+def start_game(group_id: str, game_type: str, user_id: str, user_name: str) -> Dict[str, Any]:
     """
     بدء لعبة جديدة
     
     Args:
         group_id: معرف المجموعة
-        game_type: نوع اللعبة (عربي أو انجليزي)
+        game_type: نوع اللعبة
         user_id: معرف المستخدم
         user_name: اسم المستخدم
-    
+        
     Returns:
-        dict: {
-            'game_data': بيانات اللعبة,
-            'message': رسالة نصية,
-            'flex': Flex Message (اختياري)
-        }
+        قاموس يحتوي على بيانات اللعبة والرسالة
     """
-    game_class = get_game(game_type)
-    
-    if not game_class:
-        return {
-            'game_data': {'type': game_type, 'error': True},
-            'message': f"❌ اللعبة '{game_type}' غير موجودة\nاكتب 'ابدأ' لاختيار لعبة عشوائية"
-        }
-    
     try:
+        game_class = GAME_CLASSES.get(game_type.lower())
+        
+        if not game_class:
+            return {
+                'success': False,
+                'message': f"❌ اللعبة '{game_type}' غير متوفرة",
+                'game_data': None
+            }
+        
+        # إنشاء كائن اللعبة
         game = game_class()
-        result = game.start(group_id, user_id, user_name)
+        game_data = game.start()
         
-        # إضافة نوع اللعبة لبيانات اللعبة
-        if 'game_data' in result:
-            result['game_data']['type'] = game_type
-            result['game_data']['class'] = game.__class__.__name__
+        # إضافة معلومات إضافية
+        game_data['type'] = game_type
+        game_data['creator'] = user_id
+        game_data['creator_name'] = user_name
+        game_data['players'] = [user_id]
+        game_data['player_scores'] = {user_id: {'name': user_name, 'score': 0}}
         
-        return result
-    except Exception as e:
-        import logging
-        logging.error(f"خطأ في بدء اللعبة {game_type}: {e}")
         return {
-            'game_data': {'type': game_type, 'error': True},
-            'message': f"❌ حدث خطأ في بدء اللعبة\nالرجاء المحاولة مرة أخرى"
+            'success': True,
+            'message': game_data.get('message', 'بدأت اللعبة!'),
+            'game_data': game_data,
+            'flex': game_data.get('flex')
+        }
+        
+    except Exception as e:
+        logger.error(f"خطأ في بدء اللعبة {game_type}: {e}", exc_info=True)
+        return {
+            'success': False,
+            'message': f"❌ حدث خطأ عند بدء اللعبة: {str(e)}",
+            'game_data': None
         }
 
-def check_game_answer(game_data, answer, user_id, user_name, group_id, active_games):
+def check_game_answer(game: Dict[str, Any], answer: str, user_id: str, 
+                      user_name: str, group_id: str, active_games: Dict) -> Dict[str, Any]:
     """
     التحقق من إجابة اللاعب
     
     Args:
-        game_data: بيانات اللعبة الحالية
-        answer: إجابة اللاعب
+        game: بيانات اللعبة الحالية
+        answer: إجابة المستخدم
         user_id: معرف المستخدم
         user_name: اسم المستخدم
         group_id: معرف المجموعة
         active_games: قاموس الألعاب النشطة
-    
+        
     Returns:
-        dict: {
-            'correct': هل الإجابة صحيحة؟,
-            'game_over': هل انتهت اللعبة؟,
-            'message': رسالة الرد (اختياري),
-            'flex': Flex Message (اختياري)
-        }
+        قاموس يحتوي على نتيجة التحقق
     """
-    if not game_data or game_data.get('error'):
-        return {'correct': False, 'game_over': False}
-    
-    game_type = game_data.get('type', 'fast')
-    game_class = get_game(game_type)
-    
-    if not game_class:
-        return {'correct': False, 'game_over': False}
-    
     try:
-        game = game_class()
-        result = game.check_answer(game_data, answer, user_id, user_name, group_id, active_games)
-        return result if result else {'correct': False, 'game_over': False}
+        game_type = game.get('type', 'unknown')
+        game_class = GAME_CLASSES.get(game_type.lower())
+        
+        if not game_class:
+            return {'message': None}
+        
+        # إنشاء كائن اللعبة
+        game_obj = game_class()
+        result = game_obj.check_answer(game, answer, user_id, user_name)
+        
+        # تحديث بيانات اللعبة
+        if result.get('correct'):
+            # تحديث النقاط
+            if 'player_scores' not in game:
+                game['player_scores'] = {}
+            if user_id not in game['player_scores']:
+                game['player_scores'][user_id] = {'name': user_name, 'score': 0}
+            
+            points = result.get('points', 2)
+            game['player_scores'][user_id]['score'] += points
+            
+            # الانتقال للسؤال التالي
+            if result.get('next_question'):
+                game['current_question'] = result['next_question']
+                game['current_round'] += 1
+        
+        # التحقق من انتهاء اللعبة
+        if game.get('current_round', 0) >= game.get('total_rounds', 5):
+            result['game_over'] = True
+            result['final_scores'] = game.get('player_scores', {})
+            
+            # حذف اللعبة من القائمة النشطة
+            if group_id in active_games:
+                del active_games[group_id]
+        
+        return result
+        
     except Exception as e:
-        import logging
-        logging.error(f"خطأ في فحص الإجابة {game_type}: {e}")
-        return {'correct': False, 'game_over': False}
+        logger.error(f"خطأ في التحقق من الإجابة: {e}", exc_info=True)
+        return {'message': None}
 
-def get_hint(game_data):
+def get_hint(game: Dict[str, Any]) -> Optional[str]:
     """
-    الحصول على تلميح للعبة
+    الحصول على تلميح للسؤال الحالي
     
     Args:
-        game_data: بيانات اللعبة الحالية
-    
+        game: بيانات اللعبة الحالية
+        
     Returns:
-        str: نص التلميح أو None
+        نص التلميح أو None
     """
-    if not game_data or game_data.get('error'):
-        return None
-    
-    game_type = game_data.get('type', 'fast')
-    game_class = get_game(game_type)
-    
-    if not game_class:
-        return None
-    
     try:
-        game = game_class()
-        if hasattr(game, 'get_hint'):
-            return game.get_hint(game_data)
-        else:
-            return "💡 التلميح غير متوفر لهذه اللعبة"
+        game_type = game.get('type', 'unknown')
+        game_class = GAME_CLASSES.get(game_type.lower())
+        
+        if not game_class:
+            return None
+        
+        game_obj = game_class()
+        return game_obj.get_hint(game)
+        
     except Exception as e:
-        import logging
-        logging.error(f"خطأ في الحصول على التلميح {game_type}: {e}")
+        logger.error(f"خطأ في الحصول على تلميح: {e}")
         return None
 
-def show_answer(game_data, group_id, active_games):
+def show_answer(game: Dict[str, Any], group_id: str, active_games: Dict) -> Dict[str, Any]:
     """
     عرض الإجابة الصحيحة والانتقال للسؤال التالي
     
     Args:
-        game_data: بيانات اللعبة الحالية
+        game: بيانات اللعبة الحالية
         group_id: معرف المجموعة
         active_games: قاموس الألعاب النشطة
-    
+        
     Returns:
-        dict: {
-            'message': رسالة الإجابة,
-            'flex': Flex Message (اختياري)
-        }
+        قاموس يحتوي على الإجابة والسؤال التالي
     """
-    if not game_data or game_data.get('error'):
-        return {'message': '❌ لا توجد لعبة نشطة'}
-    
-    game_type = game_data.get('type', 'fast')
-    game_class = get_game(game_type)
-    
-    if not game_class:
-        return {'message': '❌ اللعبة غير موجودة'}
-    
     try:
-        game = game_class()
-        if hasattr(game, 'show_answer'):
-            return game.show_answer(game_data, group_id, active_games)
+        game_type = game.get('type', 'unknown')
+        game_class = GAME_CLASSES.get(game_type.lower())
+        
+        if not game_class:
+            return {'message': "❌ اللعبة غير متوفرة"}
+        
+        game_obj = game_class()
+        result = game_obj.show_answer(game)
+        
+        # الانتقال للسؤال التالي
+        game['current_round'] += 1
+        
+        if game['current_round'] < game.get('total_rounds', 5):
+            # توليد سؤال جديد
+            next_q = game_obj.generate_question()
+            if next_q:
+                game['current_question'] = next_q
+                result['flex'] = next_q.get('flex')
+                result['message'] = "الإجابة الصحيحة: " + result.get('answer', 'غير متوفر')
         else:
-            # سلوك افتراضي: عرض الإجابة فقط
-            answer = game_data.get('answer', 'غير متوفر')
-            return {
-                'message': f"✅ الإجابة الصحيحة:\n{answer}\n\n💡 اكتب 'ابدأ' للعبة جديدة"
-            }
+            # انتهت اللعبة
+            result['game_over'] = True
+            result['final_scores'] = game.get('player_scores', {})
+            
+            # حذف اللعبة
+            if group_id in active_games:
+                del active_games[group_id]
+        
+        return result
+        
     except Exception as e:
-        import logging
-        logging.error(f"خطأ في عرض الإجابة {game_type}: {e}")
-        return {'message': '❌ حدث خطأ في عرض الإجابة'}
+        logger.error(f"خطأ في عرض الإجابة: {e}", exc_info=True)
+        return {'message': "❌ حدث خطأ"}
 
-# تصدير الدوال والكلاسات المهمة
 __all__ = [
+    'GAME_CLASSES',
     'start_game',
     'check_game_answer',
     'get_hint',
     'show_answer',
-    'get_game',
-    'GAME_CLASSES',
-    'AI_Game',
-    'BuildGame',
-    'ChainWordsGame',
-    'CompatibilityGame',
-    'FastGame',
-    'LBGame',
-    'OppositeGame',
-    'OrderGame',
-    'SongGame',
+    'GAMES_AVAILABLE'
 ]
