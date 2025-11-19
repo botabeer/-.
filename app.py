@@ -1,7 +1,7 @@
 from flask import Flask, request, abort, jsonify
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage, FlexSendMessage, QuickReply, QuickReplyButton, MessageAction
+from linebot.models import MessageEvent, TextMessage, TextSendMessage, FlexSendMessage
 import os
 import sqlite3
 import logging
@@ -22,38 +22,43 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# استيراد الإعدادات
+# ══════════════════════════════════════════════════════════════
+# الإعدادات الافتراضية (تُحمّل دائماً أولاً)
+# ══════════════════════════════════════════════════════════════
+DB_NAME = 'whale_bot.db'
+C = {
+    'bg': '#0A0E27',
+    'topbg': '#88AEE0',
+    'card': '#0F2440',
+    'cyan': '#00D9FF',
+    'text': '#E0F2FF',
+    'text2': '#7FB3D5',
+    'sep': '#1F3A53'
+}
+POINTS = {'correct': 2, 'hint': -1}
+RATE_LIMIT = {'max_requests': 20, 'window': 60}
+CMDS = {
+    'start': ['ابدأ', 'start', 'بدء', 'هاي'],
+    'help': ['مساعدة', 'help'],
+    'stats': ['نقاطي', 'احصائياتي'],
+    'leaderboard': ['الصدارة', 'المتصدرين'],
+    'stop': ['إيقاف', 'stop', 'ايقاف'],
+    'hint': ['لمح', 'تلميح'],
+    'answer': ['جاوب', 'الجواب'],
+    'join': ['انضم', 'join'],
+    'leave': ['انسحب', 'leave'],
+    'replay': ['إعادة', 'اعادة']
+}
+RANK_EMOJIS = {1: '🥇', 2: '🥈', 3: '🥉', 4: '4️⃣', 5: '5️⃣', 6: '6️⃣', 7: '7️⃣', 8: '8️⃣', 9: '9️⃣', 10: '🔟'}
+
+# محاولة استيراد الإعدادات من config.py (اختياري)
 try:
     from config import *
-    logger.info("✓ تم تحميل config.py")
+    logger.info("✓ تم تحميل config.py وتحديث الإعدادات")
+except ImportError:
+    logger.info("ℹ️ ملف config.py غير موجود - استخدام الإعدادات الافتراضية")
 except Exception as e:
-    logger.error(f"✗ خطأ في تحميل config.py: {e}")
-    # إعدادات افتراضية
-    DB_NAME = 'whale_bot.db'
-    C = {
-        'bg': '#0A0E27',
-        'topbg': '#88AEE0',
-        'card': '#0F2440',
-        'cyan': '#00D9FF',
-        'text': '#E0F2FF',
-        'text2': '#7FB3D5',
-        'sep': '#1F3A53'
-    }
-    POINTS = {'correct': 2, 'hint': -1}
-    RATE_LIMIT = {'max_requests': 20, 'window': 60}
-    CMDS = {
-        'start': ['ابدأ', 'start', 'بدء', 'هاي'],
-        'help': ['مساعدة', 'help'],
-        'stats': ['نقاطي', 'احصائياتي'],
-        'leaderboard': ['الصدارة', 'المتصدرين'],
-        'stop': ['إيقاف', 'stop', 'ايقاف'],
-        'hint': ['لمح', 'تلميح'],
-        'answer': ['جاوب', 'الجواب'],
-        'join': ['انضم', 'join'],
-        'leave': ['انسحب', 'leave'],
-        'replay': ['إعادة', 'اعادة']
-    }
-    RANK_EMOJIS = {1: '🥇', 2: '🥈', 3: '🥉', 4: '4️⃣', 5: '5️⃣', 6: '6️⃣', 7: '7️⃣', 8: '8️⃣', 9: '9️⃣', 10: '🔟'}
+    logger.warning(f"⚠️ خطأ في تحميل config.py: {e} - استخدام الإعدادات الافتراضية")
 
 # رابط اللوجو الجديد
 LOGO_URL = "https://i.imgur.com/qcWILGi.jpeg"
@@ -530,19 +535,19 @@ def handle_message(event):
         text_lower = text.lower()
         
         # أوامر البداية والترحيب
-        if any(cmd in text_lower for cmd in CMDS['start'] + ['بوت', 'whale', 'مرحبا', 'السلام', 'هلا']):
+        if any(cmd in text_lower for cmd in CMDS.get('start', ['ابدأ']) + ['بوت', 'whale', 'مرحبا', 'السلام', 'هلا']):
             flex = FlexSendMessage(alt_text="بوت الحوت", contents=create_welcome_card())
             line_bot_api.reply_message(event.reply_token, flex)
             return
         
         # المساعدة
-        if any(cmd in text_lower for cmd in CMDS['help']):
+        if any(cmd in text_lower for cmd in CMDS.get('help', ['مساعدة'])):
             flex = FlexSendMessage(alt_text="المساعدة", contents=create_help_card())
             line_bot_api.reply_message(event.reply_token, flex)
             return
         
         # الإحصائيات
-        if any(cmd in text_lower for cmd in CMDS['stats']):
+        if any(cmd in text_lower for cmd in CMDS.get('stats', ['نقاطي'])):
             stats = get_user_stats(user_id)
             if stats:
                 flex = FlexSendMessage(alt_text="إحصائياتك", contents=create_stats_card(stats))
@@ -555,7 +560,7 @@ def handle_message(event):
             return
         
         # الصدارة
-        if any(cmd in text_lower for cmd in CMDS['leaderboard']):
+        if any(cmd in text_lower for cmd in CMDS.get('leaderboard', ['الصدارة'])):
             leaderboard = get_leaderboard()
             if leaderboard:
                 flex = FlexSendMessage(alt_text="لوحة الصدارة", contents=create_leaderboard_card(leaderboard))
@@ -568,7 +573,7 @@ def handle_message(event):
             return
         
         # إيقاف اللعبة
-        if any(cmd in text_lower for cmd in CMDS['stop']):
+        if any(cmd in text_lower for cmd in CMDS.get('stop', ['إيقاف'])):
             if group_id in active_games:
                 del active_games[group_id]
                 line_bot_api.reply_message(
@@ -615,7 +620,7 @@ def handle_message(event):
             return
         
         # إعادة اللعبة
-        if any(cmd in text_lower for cmd in CMDS['replay']):
+        if any(cmd in text_lower for cmd in CMDS.get('replay', ['إعادة', 'اعادة'])):
             if group_id in active_games and GAMES_LOADED:
                 game = active_games[group_id]
                 game_type = game.get('type', 'اسرع')
@@ -640,7 +645,7 @@ def handle_message(event):
             return
         
         # التلميح
-        if any(cmd in text_lower for cmd in CMDS['hint']):
+        if any(cmd in text_lower for cmd in CMDS.get('hint', ['لمح'])):
             if group_id in active_games and GAMES_LOADED:
                 game = active_games[group_id]
                 hint_text = get_hint(game)
@@ -665,7 +670,7 @@ def handle_message(event):
             return
         
         # عرض الإجابة والانتقال
-        if any(cmd in text_lower for cmd in CMDS['answer']):
+        if any(cmd in text_lower for cmd in CMDS.get('answer', ['جاوب'])):
             if group_id in active_games and GAMES_LOADED:
                 game = active_games[group_id]
                 answer_result = show_answer(game, group_id, active_games)
@@ -686,7 +691,7 @@ def handle_message(event):
             return
         
         # الانضمام للعبة
-        if any(cmd in text_lower for cmd in CMDS['join']):
+        if any(cmd in text_lower for cmd in CMDS.get('join', ['انضم'])):
             if group_id in active_games:
                 game = active_games[group_id]
                 if 'players' not in game:
@@ -711,7 +716,7 @@ def handle_message(event):
             return
         
         # الانسحاب من اللعبة
-        if any(cmd in text_lower for cmd in CMDS['leave']):
+        if any(cmd in text_lower for cmd in CMDS.get('leave', ['انسحب'])):
             if group_id in active_games:
                 game = active_games[group_id]
                 if 'players' in game and user_id in game['players']:
@@ -1065,10 +1070,8 @@ def internal_error(error):
 
 # تشغيل التطبيق
 if __name__ == "__main__":
-    import os
-
     print("=" * 60)
-    print(" بوت الحوت - LINE Bot")
+    print("🐋 بوت الحوت - LINE Bot")
     print("=" * 60)
     print(f"{'✓' if GAMES_LOADED else '✗'} الألعاب: {'محملة' if GAMES_LOADED else 'غير محملة'}")
     print(f"✓ قاعدة البيانات: جاهزة")
@@ -1078,11 +1081,10 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     print(f"🚀 البوت يعمل على المنفذ {port}")
     print(f"🌐 الصفحة الرئيسية: http://localhost:{port}")
-    print(f"❤️  فحص الصحة: http://localhost:{port}/health")
+    print(f"❤️ فحص الصحة: http://localhost:{port}/health")
     print(f"📊 الإحصائيات: http://localhost:{port}/stats")
     print("=" * 60)
-    print("⚠️  ملاحظة: البوت يرد فقط على المستخدمين المسجلين")
+    print("⚠️ ملاحظة: البوت يرد فقط على المستخدمين المسجلين")
     print("=" * 60)
-
-    # تشغيل التطبيق
-    app.run(host='0.0.0.0', port=port, debug=False)
+    
+    app.run(host="0.0.0.0", port=port)
