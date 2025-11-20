@@ -1,109 +1,148 @@
+# ============================================
+# games/game_fast.py - لعبة أسرع
+# ============================================
+
+"""
+لعبة أسرع
+=========
+أول من يكتب الكلمة أو الدعاء الصحيح يفوز
+لا تدعم التلميح أو إظهار الإجابة
+"""
+
 import random
-import time
-from linebot.models import FlexSendMessage
-from utils import normalize_text, create_game_card, create_answer_card, create_results_card, COLORS
+from .base import BaseGame
+from rules import POINTS, GAMES_INFO
+from utils import validate_answer, normalize_text
 
-class FastGame:
+
+class FastTypingGame(BaseGame):
+    """لعبة أسرع - اكتب الكلمة بسرعة"""
+    
     def __init__(self):
-        self.all_words = [
-            {"word": "سبحان الله", "type": "ذكر"},
-            {"word": "الحمد لله", "type": "ذكر"},
-            {"word": "لا إله إلا الله", "type": "ذكر"},
-            {"word": "الله أكبر", "type": "ذكر"},
-            {"word": "استغفر الله", "type": "ذكر"},
-            {"word": "بسم الله", "type": "ذكر"},
-            {"word": "لا حول ولا قوة إلا بالله", "type": "ذكر"},
-            {"word": "اللهم صل على محمد", "type": "دعاء"},
-            {"word": "اللهم اغفر لي", "type": "دعاء"},
-            {"word": "اللهم ارحمني", "type": "دعاء"},
-            {"word": "اللهم اهدني", "type": "دعاء"},
-            {"word": "اللهم ارزقني", "type": "دعاء"},
-            {"word": "ربنا آتنا في الدنيا حسنة", "type": "دعاء"},
-            {"word": "اللهم إني أسألك الجنة", "type": "دعاء"}
-        ]
-        self.questions = []
-        self.current_word = None
-        self.question_number = 0
-        self.total_questions = 5
-        self.player_scores = {}
-        self.start_time = None
-        self.time_limit = 30  # 30 ثانية لكل سؤال
-
-    def start_game(self):
-        self.questions = random.sample(self.all_words, min(self.total_questions, len(self.all_words)))
-        self.question_number = 0
-        self.player_scores = {}
-        return self.next_question()
-
-    def next_question(self):
-        if self.question_number >= self.total_questions:
-            return None
-        self.current_word = self.questions[self.question_number]
-        self.question_number += 1
-        self.start_time = time.time()
+        game_info = GAMES_INFO['اسرع']
+        super().__init__(
+            name=game_info['name'],
+            rounds=game_info['rounds'],
+            supports_hint=game_info['supports_hint']
+        )
         
-        C = COLORS
-        content = [
-            {
-                "type": "box",
-                "layout": "vertical",
-                "backgroundColor": C['glass'],
-                "cornerRadius": "20px",
-                "paddingAll": "28px",
-                "borderWidth": "2px",
-                "borderColor": C['border'],
-                "contents": [
-                    {"type": "text", "text": "⏱️ اكتب أسرع:", "size": "lg", "color": C['text2'], "align": "center"},
-                    {"type": "text", "text": self.current_word['word'], "size": "xxl", "weight": "bold", "color": C['cyan'], "align": "center", "margin": "lg", "wrap": True},
-                    {"type": "text", "text": f"النوع: {self.current_word['type']}", "size": "md", "color": C['text2'], "align": "center", "margin": "md"}
-                ]
-            },
-            {"type": "text", "text": f"⏰ الوقت المتاح: {self.time_limit} ثانية", "size": "sm", "color": C['warning'], "align": "center", "margin": "lg"}
+        # قائمة الكلمات والأدعية
+        self.words_list = [
+            # كلمات بسيطة
+            "سبحان الله",
+            "الحمد لله",
+            "لا إله إلا الله",
+            "الله أكبر",
+            "استغفر الله",
+            "بسم الله",
+            "ما شاء الله",
+            "لا حول ولا قوة إلا بالله",
+            
+            # أدعية قصيرة
+            "اللهم صل على محمد",
+            "ربنا آتنا في الدنيا حسنة",
+            "اللهم إني أسألك العافية",
+            "حسبنا الله ونعم الوكيل",
+            
+            # كلمات عربية
+            "مرحبا",
+            "شكرا",
+            "السلام عليكم",
+            "وعليكم السلام",
+            "صباح الخير",
+            "مساء الخير",
+            "تصبح على خير",
+            "كيف حالك",
+            "بارك الله فيك",
+            "جزاك الله خيرا"
         ]
         
-        card = create_game_card("⏱️ لعبة أسرع", self.question_number, self.total_questions, content)
-        return FlexSendMessage(alt_text=f"السؤال {self.question_number} - لعبة أسرع", contents=card)
-
+        # قائمة التحديات (كلمات صعبة)
+        self.challenges = [
+            "الاستقلال",
+            "المسؤولية",
+            "الديموقراطية",
+            "الاستثمار",
+            "البرمجية",
+            "الخوارزمية",
+            "المعلوماتية",
+            "الإلكترونية"
+        ]
+    
+    def generate_question(self):
+        """
+        توليد سؤال جديد
+        
+        Returns:
+            نص السؤال
+        """
+        # اختيار عشوائي بين كلمة عادية أو تحدي
+        if random.random() < 0.7:  # 70% كلمات عادية
+            word = random.choice(self.words_list)
+            question = f"اكتب: {word}"
+        else:  # 30% تحديات
+            word = random.choice(self.challenges)
+            question = f"تحدي - اكتب بسرعة: {word}"
+        
+        # حفظ الإجابة الصحيحة
+        self.current_answer = word
+        
+        return question
+    
+    def check_answer(self, user_id, answer):
+        """
+        التحقق من الإجابة
+        
+        Args:
+            user_id: معرف المستخدم
+            answer: إجابة المستخدم
+            
+        Returns:
+            dict مع النتيجة
+        """
+        # تطبيع النصوص
+        user_answer = normalize_text(answer)
+        correct_answer = normalize_text(self.current_answer)
+        
+        # التحقق من التطابق
+        is_correct = user_answer.lower() == correct_answer.lower()
+        
+        # حساب النقاط
+        points_earned = 0
+        if is_correct:
+            points_earned = POINTS['correct']
+            self.update_score(user_id, points_earned)
+        
+        # الانتقال للسؤال التالي
+        game_continues = self.next_question()
+        
+        result = {
+            'correct': is_correct,
+            'correct_answer': self.current_answer,
+            'points_earned': points_earned,
+            'total_points': self.get_score(user_id),
+            'current_round': self.current_round,
+            'total_rounds': self.total_rounds,
+            'game_ended': not game_continues,
+            'next_question': self.current_question if game_continues else None
+        }
+        
+        return result
+    
     def get_hint(self):
-        # لا يدعم التلميحات
+        """
+        لا تدعم التلميح
+        
+        Returns:
+            None
+        """
         return None
-
+    
     def show_answer(self):
-        if not self.current_word:
-            return None
-        return FlexSendMessage(alt_text="الإجابة الصحيحة", contents=create_answer_card(self.current_word['word']))
-
-    def check_answer(self, answer, user_id, display_name):
-        if not self.current_word or not self.start_time:
-            return None
+        """
+        لا تدعم إظهار الإجابة
         
-        # حساب الوقت المستغرق
-        elapsed_time = time.time() - self.start_time
-        
-        # التحقق من انتهاء الوقت
-        if elapsed_time > self.time_limit:
-            return None
-        
-        # التحقق من صحة الإجابة
-        if normalize_text(answer) == normalize_text(self.current_word['word']):
-            # حساب النقاط بناءً على السرعة
-            if elapsed_time < 5:
-                points = 5  # سريع جداً
-            elif elapsed_time < 10:
-                points = 4
-            elif elapsed_time < 15:
-                points = 3
-            elif elapsed_time < 20:
-                points = 2
-            else:
-                points = 1
-            
-            if user_id not in self.player_scores:
-                self.player_scores[user_id] = {'name': display_name, 'score': 0}
-            self.player_scores[user_id]['score'] += points
-            
-            return {'correct': True, 'points': points, 'time': round(elapsed_time, 2)}
+        Returns:
+            None
+        """
         return None
-
-    def get_final_results(self):
-        return create_results_card(self.player_scores)
