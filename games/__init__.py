@@ -1,3 +1,7 @@
+# ============================================
+# games/__init__.py
+# ============================================
+
 from games.game_fast import FastGame
 from games.game_lbgame import LBGame
 from games.game_chain import ChainGame
@@ -6,8 +10,9 @@ from games.game_opposite import OppositeGame
 from games.game_order import OrderGame
 from games.game_build import BuildGame
 from games.game_compatibility import CompatibilityGame
-from games.game_ai import AIGame
+from games.game_ai import AiChat  # تم تعديل الاسم من AIGame إلى AiChat
 
+# القاموس الذي يربط مفتاح اللعبة بالكلاس
 GAME_CLASSES = {
     'fast': FastGame,
     'lbgame': LBGame,
@@ -17,7 +22,7 @@ GAME_CLASSES = {
     'order': OrderGame,
     'build': BuildGame,
     'compatibility': CompatibilityGame,
-    'ai': AIGame
+    'ai': AiChat  # تعديل هنا أيضًا
 }
 
 def get_game_class(game_key):
