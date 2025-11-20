@@ -1,39 +1,10 @@
-# ============================================
-# requirements.txt - المكتبات المطلوبة
-# ============================================
-
-# Flask - إطار عمل الويب
 Flask
-Werkzeug
-
-# LINE Bot SDK
 line-bot-sdk
-
-# متغيرات البيئة
 python-dotenv
-
-# خادم WSGI للإنتاج
+google-generativeai
 gunicorn
-
-# أدوات إضافية
-requests
-urllib3
-certifi
-
-# معالجة JSON
-simplejson
-
-# دعم العربية
-python-bidi
-arabic-reshaper
-
-# أدوات الوقت والتاريخ
-pytz==2023.3.post1
-
-# قاعدة البيانات (SQLite مدمج في Python)
-# لا حاجة لمكتبات إضافية
-
-# أدوات التطوير (اختيارية في الإنتاج)
-# pytest
-# black
-# flake8
+APScheduler
+redis
+pillow
+pandas
+matplotlib
