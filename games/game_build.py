@@ -195,4 +195,4 @@ class LettersWordsGame(BaseGame):
         Returns:
             الإجابة
         """
-        return f'الكلمات المطلوبة: {", ".join(self.current_answer)}
+        return f'الكلمات المطلوبة: {", ".join(self.current_answer)}'
