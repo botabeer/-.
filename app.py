@@ -1,415 +1,212 @@
-"""
-Whale Bot
-=========
-Main application file
-"""
-
-import logging
-import time
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
-from linebot.exceptions import InvalidSignatureError, LineBotApiError
-from linebot.models import (
-    MessageEvent, TextMessage, TextSendMessage, FlexSendMessage
-)
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
+import os
+from dotenv import load_dotenv
+from database import Database
+from style import create_welcome_card, create_question_card, create_result_card, create_stats_card, create_leaderboard_card
+from games import get_game_class
+from rules import GAMES_INFO, COMMANDS
+import utils
+from gemini_service import GeminiService
 
-from config import *
-from database import db
-from style import welcome_card, question_card, result_card, stats_card, ranks_card, hint_card
-from utils import (
-    read_random_line, parse_game_line, sanitize_input, 
-    check_similarity, create_hint, ensure_directory, ensure_file
-)
+load_dotenv()
 
-# Setup logging
-logging.basicConfig(level=LOG_LEVEL, format=LOG_FORMAT)
-logger = logging.getLogger(__name__)
-
-# Flask app
 app = Flask(__name__)
+line_api = LineBotApi(os.getenv('LINE_CHANNEL_ACCESS_TOKEN'))
+handler = WebhookHandler(os.getenv('LINE_CHANNEL_SECRET'))
+db = Database()
+gemini = GeminiService()
 
-# LINE Bot API
-try:
-    line_api = LineBotApi(LINE_ACCESS_TOKEN)
-    handler = WebhookHandler(LINE_SECRET)
-    logger.info("LINE Bot initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize LINE Bot: {e}")
-    exit(1)
-
-# Game sessions
 active_games = {}
 
-# Ensure directories exist
-ensure_directory(DATA_DIR)
-ensure_directory(GAMES_DIR)
-
-# Routes
-@app.route("/", methods=['GET'])
+@app.route("/")
 def home():
-    """Home page"""
-    return f"""
-    <html>
-    <head>
-        <title>Whale Bot</title>
-        <meta charset="utf-8">
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                background: linear-gradient(135deg, #000000 0%, #1A1A1A 100%);
-                color: #FFFFFF;
-                text-align: center;
-                padding: 50px;
-                margin: 0;
-            }}
-            h1 {{ color: #4DD0E1; margin-bottom: 20px; }}
-            p {{ color: #9E9E9E; font-size: 1.1em; }}
-            .status {{ color: #26C6DA; font-weight: bold; margin-top: 30px; }}
-        </style>
-    </head>
-    <body>
-        <h1>Whale Bot</h1>
-        <p>LINE Bot is running</p>
-        <div class="status">Version {VERSION}</div>
-        <div class="status">{DEVELOPER}</div>
-    </body>
-    </html>
-    """
+    return "Whale Bot is running!"
 
 @app.route("/callback", methods=['POST'])
 def callback():
-    """LINE webhook callback"""
-    signature = request.headers.get('X-Line-Signature', '')
+    signature = request.headers['X-Line-Signature']
     body = request.get_data(as_text=True)
-    
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
-        logger.error("Invalid signature")
         abort(400)
-    except Exception as e:
-        logger.error(f"Callback error: {e}")
-    
     return 'OK'
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    """Handle incoming messages"""
     user_id = event.source.user_id
-    text = sanitize_input(event.message.text, MAX_INPUT)
+    text = event.message.text.strip()
     
-    # Get user profile
-    try:
-        profile = line_api.get_profile(user_id)
-        name = profile.display_name
-    except:
-        name = "مستخدم"
+    profile = line_api.get_profile(user_id)
+    user_name = profile.display_name
     
-    logger.info(f"User: {name} ({user_id}), Message: {text}")
-    
-    # Get or create player
     player = db.get_player(user_id)
     if not player:
-        player = db.create_player(user_id, name)
+        db.create_player(user_id, user_name)
     else:
-        db.update_name(user_id, name)
+        db.update_name(user_id, user_name)
     
-    # Route commands
-    messages = []
-    
-    # Check for commands
-    if any(cmd in text for cmd in CMD['start']):
-        messages = handle_start()
-    
-    elif any(cmd in text for cmd in CMD['stats']):
-        messages = handle_stats(user_id)
-    
-    elif any(cmd in text for cmd in CMD['ranks']):
-        messages = handle_ranks()
-    
-    elif any(cmd in text for cmd in CMD['stop']):
-        messages = handle_stop(user_id)
-    
-    elif any(cmd in text for cmd in CMD['hint']):
-        messages = handle_hint(user_id)
-    
-    elif any(cmd in text for cmd in CMD['skip']):
-        messages = handle_skip(user_id)
-    
-    elif text in GAMES:
-        messages = handle_game_start(user_id, text)
-    
-    elif text in CONTENT:
-        messages = handle_content(text)
-    
-    elif user_id in active_games:
-        messages = handle_game_answer(user_id, name, text)
-    
-    else:
-        messages = [TextSendMessage(text=MSG['invalid'])]
-    
-    # Send reply
-    try:
-        if messages:
-            line_api.reply_message(event.reply_token, messages)
-    except LineBotApiError as e:
-        logger.error(f"Failed to send message: {e}")
+    messages = process_input(user_id, text)
+    line_api.reply_message(event.reply_token, messages)
 
-# Command handlers
-
-def handle_start():
-    """Handle start command"""
-    return [FlexSendMessage(alt_text="مرحباً", contents=welcome_card())]
-
-def handle_stats(user_id):
-    """Handle stats command"""
-    player = db.get_player(user_id)
-    if not player:
-        return [TextSendMessage(text=MSG['error'])]
+def process_input(user_id, text):
+    text_lower = text.lower()
     
-    return [FlexSendMessage(
-        alt_text="احصائياتك",
-        contents=stats_card(
-            player['name'],
-            player['points'],
-            player['games_played'],
-            player['games_won']
-        )
-    )]
-
-def handle_ranks():
-    """Handle ranks command"""
-    players = db.get_leaderboard(LEADERBOARD_SIZE)
-    if not players:
-        return [TextSendMessage(text=MSG['no_players'])]
+    if text_lower in COMMANDS['start']:
+        return [create_welcome_card()]
     
-    return [FlexSendMessage(
-        alt_text="المتصدرون",
-        contents=ranks_card(players)
-    )]
-
-def handle_stop(user_id):
-    """Handle stop command"""
+    if text_lower in COMMANDS['stats']:
+        return [create_stats_card(user_id, db)]
+    
+    if text_lower in COMMANDS['leaderboard']:
+        return [create_leaderboard_card(db)]
+    
+    if text_lower in COMMANDS['stop']:
+        if user_id in active_games:
+            del active_games[user_id]
+            return [TextSendMessage(text="تم ايقاف اللعبة")]
+        return [TextSendMessage(text="لا توجد لعبة نشطة")]
+    
+    for game_key, game_info in GAMES_INFO.items():
+        if text in game_info['triggers']:
+            return start_game(user_id, game_key)
+    
     if user_id in active_games:
-        game = active_games[user_id]
-        db.save_game_history(
-            user_id, 
-            game['type'], 
-            game['points'], 
-            game['round'] - 1, 
-            False
-        )
-        del active_games[user_id]
-        return [TextSendMessage(text=MSG['stopped'])]
-    return [TextSendMessage(text=MSG['no_game'])]
+        return handle_game_input(user_id, text)
+    
+    if text_lower == 'ai' or text_lower == 'محادثة':
+        return start_game(user_id, 'ai')
+    
+    return [TextSendMessage(text="ارسل 'ابدا' لعرض القائمة")]
 
-def handle_hint(user_id):
-    """Handle hint command"""
-    if user_id not in active_games:
-        return [TextSendMessage(text=MSG['no_game'])]
-    
-    game = active_games[user_id]
-    game_info = GAMES.get(game['type'])
-    
-    if not game_info or not game_info.get('hint'):
-        return [TextSendMessage(text="التلميح غير متاح في هذه اللعبة")]
-    
-    if game.get('hint_used'):
-        return [TextSendMessage(text="تم استخدام التلميح مسبقاً")]
-    
-    answer = game.get('answer', '')
-    if not answer:
-        return [TextSendMessage(text=MSG['error'])]
-    
-    hint_text = create_hint(answer)
-    game['hint_used'] = True
-    game['points'] += POINTS['hint']
-    db.update_points(user_id, POINTS['hint'])
-    
-    return [FlexSendMessage(
-        alt_text="تلميح",
-        contents=hint_card(hint_text)
-    )]
-
-def handle_skip(user_id):
-    """Handle skip command"""
-    if user_id not in active_games:
-        return [TextSendMessage(text=MSG['no_game'])]
-    
-    game = active_games[user_id]
-    game_info = GAMES.get(game['type'])
-    
-    if not game_info or not game_info.get('skip'):
-        return [TextSendMessage(text="التخطي غير متاح في هذه اللعبة")]
-    
-    return handle_next_round(user_id, skip=True)
-
-def handle_game_start(user_id, game_key):
-    """Start a new game"""
+def start_game(user_id, game_key):
     if user_id in active_games:
-        return [TextSendMessage(text=MSG['game_active'])]
+        return [TextSendMessage(text="لديك لعبة نشطة، ارسل 'ايقاف' لانهائها")]
     
-    game_info = GAMES.get(game_key)
-    if not game_info:
-        return [TextSendMessage(text=MSG['error'])]
+    game_info = GAMES_INFO[game_key]
+    game_class = get_game_class(game_key)
     
-    # Initialize game session
+    if not game_class:
+        return [TextSendMessage(text="خطأ في تحميل اللعبة")]
+    
+    game = game_class()
     active_games[user_id] = {
         'type': game_key,
+        'game': game,
         'round': 1,
-        'points': 0,
-        'start_time': time.time(),
-        'hint_used': False
+        'points': 0
     }
     
-    return load_question(user_id)
-
-def load_question(user_id):
-    """Load next question"""
-    if user_id not in active_games:
-        return [TextSendMessage(text=MSG['no_game'])]
+    if game_key == 'ai':
+        return [TextSendMessage(text="مرحبا! انا مساعدك الذكي. اسالني عن اي شيء (حد اقصى 5 رسائل)")]
     
-    game = active_games[user_id]
-    game_info = GAMES.get(game['type'])
+    if game_key == 'compatibility':
+        return [TextSendMessage(text="اكتب اسمين مفصولين بمسافة لحساب التوافق")]
     
-    if not game_info:
-        return [TextSendMessage(text=MSG['error'])]
+    question = game.generate_question()
+    active_games[user_id]['question'] = question
     
-    # Read question from file
-    filepath = f"{GAMES_DIR}/{game_info['file']}"
-    ensure_file(filepath, "سؤال تجريبي|جواب\n")
-    
-    line = read_random_line(filepath)
-    if not line:
-        return [TextSendMessage(text="لا توجد أسئلة متاحة")]
-    
-    question, answer = parse_game_line(line)
-    if not question or not answer:
-        return [TextSendMessage(text=MSG['error'])]
-    
-    # Store in session
-    game['question'] = question
-    game['answer'] = answer
-    game['hint_used'] = False
-    game['round_start'] = time.time()
-    
-    return [FlexSendMessage(
-        alt_text=game_info['name'],
-        contents=question_card(
-            game_info['name'],
-            question,
-            game['round'],
-            ROUNDS
-        )
+    return [create_question_card(
+        game_info['name'],
+        question['text'],
+        1,
+        game.rounds,
+        game.supports_hint
     )]
 
-def handle_game_answer(user_id, name, answer):
-    """Handle game answer"""
-    if user_id not in active_games:
-        return [TextSendMessage(text=MSG['no_game'])]
+def handle_game_input(user_id, text):
+    session = active_games[user_id]
+    game = session['game']
+    game_key = session['type']
     
-    game = active_games[user_id]
-    correct_answer = game.get('answer', '')
+    text_lower = text.lower()
     
-    if not correct_answer:
-        return [TextSendMessage(text=MSG['error'])]
+    if text_lower in COMMANDS['hint'] and game.supports_hint:
+        hint = game.get_hint()
+        session['points'] -= 1
+        return [TextSendMessage(text=f"تلميح: {hint}\nخصم نقطة واحدة")]
     
-    # Check answer
-    is_correct = check_similarity(answer, correct_answer)
-    
-    if is_correct:
-        # Calculate points
-        points = POINTS['correct']
-        game['points'] += points
-        db.update_points(user_id, points)
+    if text_lower in COMMANDS['skip']:
+        answer = game.show_answer()
+        session['round'] += 1
         
-        messages = [FlexSendMessage(
-            alt_text="صحيح",
-            contents=result_card(
-                MSG['correct'],
-                f"أحسنت {name}",
-                points,
-                True
-            )
-        )]
+        if session['round'] > game.rounds:
+            return end_game(user_id)
         
-        # Next round or end game
-        game['round'] += 1
-        if game['round'] > ROUNDS:
-            # Game ended
-            db.update_stats(user_id, won=True)
-            db.save_game_history(
-                user_id,
-                game['type'],
-                game['points'],
-                ROUNDS,
-                True
-            )
-            del active_games[user_id]
-            messages.append(TextSendMessage(
-                text=f"{MSG['game_end']}\nمجموع نقاطك: {game['points']}"
-            ))
-        else:
-            # Next question
-            messages.extend(load_question(user_id))
+        question = game.next_question()
+        session['question'] = question
         
-        return messages
-    else:
-        return [FlexSendMessage(
-            alt_text="خطأ",
-            contents=result_card(
-                MSG['wrong'],
-                "حاول مرة أخرى",
-                None,
-                False
+        game_info = GAMES_INFO[game_key]
+        return [
+            create_result_card(False, f"الاجابة: {answer}", 0),
+            create_question_card(
+                game_info['name'],
+                question['text'],
+                session['round'],
+                game.rounds,
+                game.supports_hint
             )
-        )]
-
-def handle_next_round(user_id, skip=False):
-    """Move to next round"""
-    if user_id not in active_games:
-        return [TextSendMessage(text=MSG['no_game'])]
+        ]
     
-    game = active_games[user_id]
+    result = game.check_answer(user_id, text)
     
-    if skip:
-        messages = [TextSendMessage(text=f"الإجابة الصحيحة: {game.get('answer', '')}")]
-    else:
-        messages = []
+    if game_key == 'ai':
+        if result['correct']:
+            session['round'] += 1
+            if session['round'] > 5:
+                del active_games[user_id]
+                return [TextSendMessage(text=result['message'] + "\n\nانتهت المحادثة (حد اقصى 5 رسائل)")]
+            return [TextSendMessage(text=result['message'])]
+        return [TextSendMessage(text=result['message'])]
     
-    game['round'] += 1
-    if game['round'] > ROUNDS:
-        # Game ended
-        db.update_stats(user_id, won=False)
-        db.save_game_history(
-            user_id,
-            game['type'],
-            game['points'],
-            game['round'] - 1,
-            False
-        )
+    if game_key == 'compatibility':
         del active_games[user_id]
-        messages.append(TextSendMessage(
-            text=f"{MSG['game_end']}\nمجموع نقاطك: {game['points']}"
-        ))
+        return [create_result_card(True, result['message'], 0)]
+    
+    if result['correct']:
+        session['points'] += result['points']
+        session['round'] += 1
+        
+        if session['round'] > game.rounds:
+            return end_game(user_id)
+        
+        question = game.next_question()
+        session['question'] = question
+        
+        game_info = GAMES_INFO[game_key]
+        return [
+            create_result_card(True, result['message'], result['points']),
+            create_question_card(
+                game_info['name'],
+                question['text'],
+                session['round'],
+                game.rounds,
+                game.supports_hint
+            )
+        ]
     else:
-        messages.extend(load_question(user_id))
-    
-    return messages
+        return [create_result_card(False, result['message'], 0)]
 
-def handle_content(content_type):
-    """Handle content requests"""
-    filename = CONTENT.get(content_type)
-    if not filename:
-        return [TextSendMessage(text=MSG['error'])]
+def end_game(user_id):
+    session = active_games[user_id]
+    points = session['points']
+    game_key = session['type']
     
-    filepath = f"{DATA_DIR}/{filename}"
-    ensure_file(filepath, f"{content_type} تجريبي\n")
+    won = points > 0
     
-    line = read_random_line(filepath)
-    return [TextSendMessage(text=line or MSG['error'])]
+    db.update_points(user_id, points)
+    db.update_stats(user_id, won)
+    db.save_game_history(user_id, game_key, points, session['round'] - 1, won)
+    
+    del active_games[user_id]
+    
+    message = f"انتهت اللعبة!\nنقاطك: {points}\n\nارسل 'ابدا' للعب مرة اخرى"
+    return [TextSendMessage(text=message)]
 
-# Run app
 if __name__ == "__main__":
-    logger.info(f"Starting Whale Bot v{VERSION} on port {PORT}")
-    app.run(host=HOST, port=PORT, debug=DEBUG)
+    port = int(os.getenv('PORT', 5000))
+    debug = os.getenv('DEBUG', 'False') == 'True'
+    app.run(host='0.0.0.0', port=port, debug=debug)
