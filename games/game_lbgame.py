@@ -1,171 +1,268 @@
+# ============================================
+# games/game_lbgame.py - لعبة إنسان حيوان نبات بلد
+# ============================================
+
+"""
+لعبة إنسان حيوان نبات بلد
+==========================
+إيجاد كلمات تبدأ بحرف معين
+تدعم التلميح وإظهار الإجابة
+"""
+
 import random
-from linebot.models import FlexSendMessage
-from utils import normalize_text, create_game_card, create_hint_card, create_answer_card, create_results_card
+from .base import BaseGame
+from rules import POINTS, GAMES_INFO
+from utils import normalize_text
 
-class LBGame:
+
+class HumanAnimalPlantGame(BaseGame):
+    """لعبة إنسان حيوان نبات بلد"""
+    
     def __init__(self):
-        self.all_questions = [
-            {
-                "letter": "م",
-                "answers": {
-                    "human": "محمد",
-                    "animal": "ماعز",
-                    "plant": "موز",
-                    "country": "مصر"
-                }
+        game_info = GAMES_INFO['لعبة']
+        super().__init__(
+            name=game_info['name'],
+            rounds=game_info['rounds'],
+            supports_hint=game_info['supports_hint']
+        )
+        
+        # الحروف المستخدمة
+        self.letters = list("ابتجحخدرزسشصضطعغفقكلمنهوي")
+        
+        # قاعدة البيانات
+        self.database = {
+            'ا': {
+                'انسان': ['أحمد', 'إبراهيم', 'أمل', 'إسراء'],
+                'حيوان': ['أسد', 'أرنب', 'أفعى', 'إوز'],
+                'نبات': ['أرز', 'إجاص', 'أناناس'],
+                'بلد': ['الأردن', 'الإمارات', 'أفغانستان', 'إيطاليا']
             },
-            {
-                "letter": "ع",
-                "answers": {
-                    "human": "علي",
-                    "animal": "عصفور",
-                    "plant": "عنب",
-                    "country": "عمان"
-                }
+            'ب': {
+                'انسان': ['باسل', 'بدر', 'بسمة', 'بشرى'],
+                'حيوان': ['بقرة', 'بط', 'ببغاء', 'بعوض'],
+                'نبات': ['بطاطس', 'برتقال', 'بصل', 'بقدونس'],
+                'بلد': ['البحرين', 'بريطانيا', 'باكستان', 'بلجيكا']
             },
-            {
-                "letter": "ح",
-                "answers": {
-                    "human": "حسن",
-                    "animal": "حمار",
-                    "plant": "حمص",
-                    "country": "الحجاز"
-                }
+            'ت': {
+                'انسان': ['تامر', 'تميم', 'تالا', 'تسنيم'],
+                'حيوان': ['تمساح', 'تنين', 'ثعلب', 'ثور'],
+                'نبات': ['تفاح', 'تمر', 'توت', 'تين'],
+                'بلد': ['تونس', 'تركيا', 'تايلند', 'تشاد']
             },
-            {
-                "letter": "س",
-                "answers": {
-                    "human": "سالم",
-                    "animal": "سمكة",
-                    "plant": "سبانخ",
-                    "country": "سوريا"
-                }
+            'ج': {
+                'انسان': ['جمال', 'جاسر', 'جنى', 'جودي'],
+                'حيوان': ['جمل', 'جاموس', 'جراد'],
+                'نبات': ['جزر', 'جوافة', 'جوز'],
+                'بلد': ['الجزائر', 'جيبوتي', 'جورجيا']
             },
-            {
-                "letter": "ر",
-                "answers": {
-                    "human": "رامي",
-                    "animal": "راكون",
-                    "plant": "رمان",
-                    "country": "روسيا"
-                }
+            'ح': {
+                'انسان': ['حسن', 'حمزة', 'حنان', 'حليمة'],
+                'حيوان': ['حصان', 'حمار', 'حوت', 'حلزون'],
+                'نبات': ['حمص', 'حبق'],
+                'بلد': ['الحبشة']
             },
-            {
-                "letter": "ن",
-                "answers": {
-                    "human": "نورا",
-                    "animal": "نمر",
-                    "plant": "نعناع",
-                    "country": "النرويج"
-                }
+            'خ': {
+                'انسان': ['خالد', 'خليل', 'خديجة', 'خولة'],
+                'حيوان': ['خروف', 'خنزير', 'خفاش'],
+                'نبات': ['خس', 'خيار', 'خوخ'],
+                'بلد': ['الخرطوم']
             },
-            {
-                "letter": "ب",
-                "answers": {
-                    "human": "باسم",
-                    "animal": "بقرة",
-                    "plant": "بطاطس",
-                    "country": "البحرين"
-                }
+            'د': {
+                'انسان': ['داود', 'دانيال', 'دانا', 'ديمة'],
+                'حيوان': ['دجاج', 'ديك', 'دب', 'دولفين'],
+                'نبات': ['دراق', 'دوم'],
+                'بلد': ['دمشق', 'الدوحة', 'دبي']
+            },
+            'ر': {
+                'انسان': ['رامي', 'راشد', 'رنا', 'ريم'],
+                'حيوان': ['رخم'],
+                'نبات': ['رمان', 'ريحان'],
+                'بلد': ['الرياض', 'روسيا', 'رومانيا']
+            },
+            'ز': {
+                'انسان': ['زياد', 'زيد', 'زينب', 'زهراء'],
+                'حيوان': ['زرافة'],
+                'نبات': ['زيتون', 'زنجبيل', 'زعتر'],
+                'بلد': ['زامبيا']
+            },
+            'س': {
+                'انسان': ['سالم', 'سعد', 'سارة', 'سلمى'],
+                'حيوان': ['سمك', 'سلحفاة', 'سنجاب'],
+                'نبات': ['سبانخ', 'سمسم'],
+                'بلد': ['السعودية', 'سوريا', 'السودان', 'سنغافورة']
+            },
+            'ش': {
+                'انسان': ['شادي', 'شاهين', 'شذى', 'شيماء'],
+                'حيوان': ['شاة'],
+                'نبات': ['شعير', 'شمام'],
+                'بلد': ['الشام']
+            },
+            'ص': {
+                'انسان': ['صالح', 'صقر', 'صفاء', 'صبا'],
+                'حيوان': ['صقر'],
+                'نبات': ['صبار'],
+                'بلد': ['صنعاء', 'الصين', 'صربيا']
+            },
+            'ع': {
+                'انسان': ['عادل', 'عمر', 'عائشة', 'علياء'],
+                'حيوان': ['عصفور', 'عقرب', 'عنكبوت'],
+                'نبات': ['عنب', 'عدس'],
+                'بلد': ['عمان', 'العراق']
+            },
+            'ف': {
+                'انسان': ['فادي', 'فهد', 'فاطمة', 'فرح'],
+                'حيوان': ['فأر', 'فيل', 'فهد'],
+                'نبات': ['فول', 'فجل', 'فراولة'],
+                'بلد': ['فلسطين', 'فرنسا', 'فنلندا']
+            },
+            'ق': {
+                'انسان': ['قاسم', 'قيس', 'قمر'],
+                'حيوان': ['قط', 'قرد'],
+                'نبات': ['قمح', 'قرنفل'],
+                'بلد': ['قطر', 'القاهرة']
+            },
+            'ك': {
+                'انسان': ['كريم', 'كمال', 'كوثر'],
+                'حيوان': ['كلب', 'كنغر'],
+                'نبات': ['كرز', 'كمثرى'],
+                'بلد': ['الكويت', 'كندا', 'كوريا']
+            },
+            'ل': {
+                'انسان': ['لؤي', 'ليث', 'لينا', 'ليلى'],
+                'حيوان': ['ليث'],
+                'نبات': ['ليمون', 'لوز'],
+                'بلد': ['لبنان', 'ليبيا']
+            },
+            'م': {
+                'انسان': ['محمد', 'مالك', 'مريم', 'منى'],
+                'حيوان': ['ماعز'],
+                'نبات': ['موز', 'مانجو', 'ملوخية'],
+                'بلد': ['مصر', 'المغرب', 'موريتانيا', 'ماليزيا']
+            },
+            'ن': {
+                'انسان': ['ناصر', 'نايف', 'نور', 'نجلاء'],
+                'حيوان': ['نمر', 'نسر', 'نحل'],
+                'نبات': ['نعناع'],
+                'بلد': ['نيجيريا']
+            },
+            'ه': {
+                'انسان': ['هاني', 'هشام', 'هند', 'هالة'],
+                'حيوان': ['هر'],
+                'نبات': ['هيل'],
+                'بلد': ['الهند', 'هولندا']
+            },
+            'و': {
+                'انسان': ['وليد', 'وائل', 'وفاء', 'ورد'],
+                'حيوان': ['وطواط'],
+                'نبات': ['ورد'],
+                'بلد': ['واشنطن']
+            },
+            'ي': {
+                'انسان': ['ياسر', 'يوسف', 'ياسمين', 'يسرى'],
+                'حيوان': ['يمام'],
+                'نبات': ['يانسون'],
+                'بلد': ['اليمن', 'اليابان']
             }
-        ]
-        self.questions = []
-        self.current_question = None
-        self.hints_used = 0
-        self.question_number = 0
-        self.total_questions = 5
-        self.player_scores = {}
-        self.current_step = 0  # 0: human, 1: animal, 2: plant, 3: country
-        self.user_answers = {}
-
-    def start_game(self):
-        self.questions = random.sample(self.all_questions, min(self.total_questions, len(self.all_questions)))
-        self.question_number = 0
-        self.player_scores = {}
-        self.hints_used = 0
-        self.current_step = 0
-        self.user_answers = {}
-        return self.next_question()
-
-    def next_question(self):
-        if self.question_number >= self.total_questions:
-            return None
+        }
         
-        # إذا انتقلنا لسؤال جديد
-        if self.current_step == 0:
-            self.current_question = self.questions[self.question_number]
-            self.question_number += 1
-            self.hints_used = 0
-            self.user_answers = {}
+        self.current_letter = None
+        self.current_category = None
+    
+    def generate_question(self):
+        """
+        توليد سؤال جديد
         
-        # تحديد نوع السؤال الحالي
-        steps = ["إنسان", "حيوان", "نبات", "بلد"]
-        current_type = steps[self.current_step]
+        Returns:
+            نص السؤال
+        """
+        # اختيار حرف عشوائي
+        self.current_letter = random.choice(self.letters)
         
-        content = [
-            {"type": "text", "text": f"🎮 لعبة: إنسان، حيوان، نبات، بلد", "size": "lg", "color": "#E8F4FF", "align": "center", "wrap": True},
-            {
-                "type": "box",
-                "layout": "vertical",
-                "backgroundColor": "#1a1f3a90",
-                "cornerRadius": "20px",
-                "paddingAll": "28px",
-                "margin": "lg",
-                "borderWidth": "2px",
-                "borderColor": "#00D9FF50",
-                "contents": [
-                    {"type": "text", "text": f"الحرف: {self.current_question['letter']}", "size": "xxl", "weight": "bold", "color": "#00D9FF", "align": "center"},
-                    {"type": "text", "text": f"المطلوب: {current_type}", "size": "lg", "color": "#8FB9D8", "align": "center", "margin": "md"}
-                ]
-            },
-            {"type": "text", "text": f"اكتب {current_type} يبدأ بحرف {self.current_question['letter']}", "size": "sm", "color": "#E8F4FF", "align": "center", "margin": "lg", "wrap": True}
-        ]
+        # اختيار فئة عشوائية
+        categories = ['انسان', 'حيوان', 'نبات', 'بلد']
+        self.current_category = random.choice(categories)
         
-        card = create_game_card(f"🎮 لعبة - {current_type}", self.question_number, self.total_questions, content)
-        return FlexSendMessage(alt_text=f"السؤال {self.question_number} - لعبة", contents=card)
-
-    def get_hint(self):
-        if not self.current_question:
-            return None
-        
-        steps_keys = ["human", "animal", "plant", "country"]
-        answer = self.current_question['answers'][steps_keys[self.current_step]]
-        hint_text = f"الكلمة: {answer[0]} " + "_ " * (len(answer) - 1)
-        extra = f"عدد الحروف: {len(answer)}"
-        self.hints_used += 1
-        return FlexSendMessage(alt_text="تلميح", contents=create_hint_card(hint_text, extra))
-
-    def show_answer(self):
-        if not self.current_question:
-            return None
-        steps_keys = ["human", "animal", "plant", "country"]
-        answer = self.current_question['answers'][steps_keys[self.current_step]]
-        return FlexSendMessage(alt_text="الإجابة الصحيحة", contents=create_answer_card(answer))
-
-    def check_answer(self, answer, user_id, display_name):
-        if not self.current_question:
-            return None
-        
-        steps_keys = ["human", "animal", "plant", "country"]
-        correct_answer = self.current_question['answers'][steps_keys[self.current_step]]
-        
-        if normalize_text(answer) == normalize_text(correct_answer):
-            # الإجابة صحيحة للخطوة الحالية
-            self.user_answers[steps_keys[self.current_step]] = answer
-            self.current_step += 1
-            
-            # إذا انتهت جميع الخطوات
-            if self.current_step >= 4:
-                points = 2 if self.hints_used == 0 else 1
-                if user_id not in self.player_scores:
-                    self.player_scores[user_id] = {'name': display_name, 'score': 0}
-                self.player_scores[user_id]['score'] += points
-                self.current_step = 0
-                return {'correct': True, 'points': points, 'complete': True}
+        # تحديد الإجابات الصحيحة
+        if self.current_letter in self.database:
+            answers = self.database[self.current_letter].get(self.current_category, [])
+            if answers:
+                self.current_answer = answers
             else:
-                # الانتقال للخطوة التالية
-                return {'correct': True, 'points': 0, 'complete': False}
-        return None
-
-    def get_final_results(self):
-        return create_results_card(self.player_scores)
+                self.current_answer = []
+        else:
+            self.current_answer = []
+        
+        question = f"اذكر {self.current_category} يبدأ بحرف: {self.current_letter}"
+        
+        return question
+    
+    def check_answer(self, user_id, answer):
+        """
+        التحقق من الإجابة
+        
+        Args:
+            user_id: معرف المستخدم
+            answer: إجابة المستخدم
+            
+        Returns:
+            dict مع النتيجة
+        """
+        user_answer = normalize_text(answer).lower()
+        
+        # التحقق من الإجابة
+        is_correct = False
+        if self.current_answer:
+            for correct in self.current_answer:
+                if user_answer == normalize_text(correct).lower():
+                    is_correct = True
+                    break
+        
+        # حساب النقاط
+        points_earned = 0
+        if is_correct:
+            points_earned = POINTS['correct']
+            self.update_score(user_id, points_earned)
+        
+        # الانتقال للسؤال التالي
+        game_continues = self.next_question()
+        
+        result = {
+            'correct': is_correct,
+            'correct_answer': self.current_answer[0] if self.current_answer else 'غير متوفر',
+            'all_answers': self.current_answer,
+            'points_earned': points_earned,
+            'total_points': self.get_score(user_id),
+            'current_round': self.current_round,
+            'total_rounds': self.total_rounds,
+            'game_ended': not game_continues,
+            'next_question': self.current_question if game_continues else None
+        }
+        
+        return result
+    
+    def get_hint(self):
+        """
+        الحصول على تلميح
+        
+        Returns:
+            التلميح
+        """
+        if not self.current_answer:
+            return "لا يوجد تلميح متاح"
+        
+        answer = self.current_answer[0]
+        hint_length = max(2, len(answer) // 2)
+        
+        hint = answer[:hint_length] + ('_' * (len(answer) - hint_length))
+        return f"التلميح: {hint}"
+    
+    def show_answer(self):
+        """
+        إظهار الإجابة الصحيحة
+        
+        Returns:
+            الإجابة
+        """
+        if self.current_answer:
+            return self.current_answer[0]
+        return "لا توجد إجابة"
