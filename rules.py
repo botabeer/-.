@@ -2,7 +2,7 @@
 rules.py - القوانين ونظام النقاط (قابل للتعديل حسب احتياجات البوت)
 """
 
-# نظام النقاط - قابل للتعديل
+# نظام النقاط
 POINTS = {
     'correct': 2,      # إجابة صحيحة
     'hint': -1,        # طلب تلميح
@@ -12,17 +12,17 @@ POINTS = {
     'participation': 1 # نقطة المشاركة
 }
 
-# إعدادات اللعبة - قابل للتعديل
+# إعدادات اللعبة العامة
 GAME_SETTINGS = {
-    'rounds': 5,                    # عدد الجولات الافتراضي
-    'time_limit': 60,               # الحد الزمني بالثواني
-    'min_answer_length': 2,         # الحد الأدنى لطول الإجابة
-    'max_leaderboard_entries': 10,  # عدد المتصدرين المعروضين
-    'points_for_speed': True,       # نقاط إضافية للسرعة
-    'allow_hints': True             # السماح بالتلميحات
+    'rounds': 5,
+    'time_limit': 60,
+    'min_answer_length': 2,
+    'max_leaderboard_entries': 10,
+    'points_for_speed': True,
+    'allow_hints': True
 }
 
-# معلومات الألعاب - قابل للتعديل والتوسع
+# معلومات الألعاب
 GAMES_INFO = {
     'game1': {
         'name': 'اللعبة الأولى',
@@ -45,10 +45,9 @@ GAMES_INFO = {
         'supports_hint': False,
         'difficulty': 'صعب'
     }
-    # أضف المزيد من الألعاب هنا
 }
 
-# الأوامر المتاحة - قابل للتعديل
+# الأوامر المتاحة
 COMMANDS = {
     'start': ['ابدأ', 'start', 'بدء'],
     'help': ['مساعدة', 'help', 'ساعدني'],
@@ -64,7 +63,7 @@ COMMANDS = {
     'content4': ['محتوى4', 'content4']
 }
 
-# رسائل الألعاب - قابل للتعديل
+# رسائل الألعاب
 GAME_MESSAGES = {
     'start': 'بدأت اللعبة',
     'correct': 'إجابة صحيحة',
@@ -76,18 +75,36 @@ GAME_MESSAGES = {
     'next_round': 'الجولة التالية'
 }
 
-# إعدادات التلميحات - قابل للتعديل
+# إعدادات التلميحات
 HINT_SETTINGS = {
-    'max_hints_per_game': 3,        # الحد الأقصى للتلميحات
-    'hint_cost': POINTS['hint'],    # تكلفة التلميح
-    'reveal_percentage': 0.4        # نسبة الكشف في التلميح (40%)
+    'max_hints_per_game': 3,
+    'hint_cost': POINTS['hint'],
+    'reveal_percentage': 0.4
 }
 
-# قواعد التحقق من الإجابات - قابل للتعديل
+# قواعد التحقق من الإجابات
 VALIDATION_RULES = {
-    'case_sensitive': False,        # حساسية الأحرف الكبيرة/الصغيرة
-    'ignore_diacritics': True,      # تجاهل التشكيل
-    'trim_whitespace': True,        # إزالة المسافات الزائدة
-    'allow_partial_match': False,   # قبول التطابق الجزئي
-    'similarity_threshold': 0.8     # عتبة التشابه للإجابات
+    'case_sensitive': False,
+    'ignore_diacritics': True,
+    'trim_whitespace': True,
+    'allow_partial_match': False,
+    'similarity_threshold': 0.8
 }
+
+# رسائل النظام المطلوبة في app.py
+SYSTEM_MESSAGES = {
+    'not_registered': 'يجب التسجيل أولاً لاستخدام البوت.',
+    'no_active_game': 'لا توجد لعبة نشطة حالياً.',
+    'game_stopped': 'تم إيقاف اللعبة بنجاح.',
+    'invalid_command': 'عذراً، الأمر غير معروف.',
+    'error': 'حدث خطأ غير متوقع.'
+}
+
+# قواعد اللعبة العامة (يستخدمها أمر المساعدة)
+GAME_RULES = """
+قواعد اللعب:
+- أجب على الأسئلة قبل انتهاء الوقت.
+- يمكنك طلب تلميح ولكنه يكلف نقاطا.
+- يمكنك إظهار الإجابة دون الحصول على نقاط.
+- يتم حساب النقاط في نهاية كل لعبة.
+"""
