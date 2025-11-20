@@ -5,7 +5,7 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage
 import os
 from dotenv import load_dotenv
 from database import Database
-from style_v2 import *
+from style import *
 from games import get_game_class
 from games.game_ai import AiChat
 from rules import GAMES_INFO, COMMANDS
