@@ -1,6 +1,14 @@
-# Whale Bot - GitIgnore File
+# ============================================
+# .gitignore - ملفات يجب تجاهلها في Git
+# ============================================
 
-# ==================== Python ====================
+# قاعدة البيانات
+*.db
+*.sqlite
+*.sqlite3
+whale_bot.db
+
+# بيئة Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -18,39 +26,22 @@ parts/
 sdist/
 var/
 wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
-# ==================== Virtual Environment ====================
+# البيئة الافتراضية
 venv/
-env/
 ENV/
-env.bak/
-venv.bak/
+env/
+.venv
 
-# ==================== Environment Variables ====================
+# متغيرات البيئة
 .env
 .env.local
 .env.*.local
 
-# ==================== Database ====================
-*.db
-*.sqlite
-*.sqlite3
-whale_bot.db
-database.db
-
-# ==================== Logs ====================
-*.log
-whale_bot.log
-logs/
-*.log.*
-
-# ==================== IDE ====================
+# IDE
 .vscode/
 .idea/
 *.swp
@@ -58,27 +49,39 @@ logs/
 *~
 .DS_Store
 
-# ==================== Testing ====================
+# السجلات
+*.log
+logs/
+
+# ملفات مؤقتة
+tmp/
+temp/
+*.tmp
+*.bak
+*.cache
+
+# ملفات النظام
+Thumbs.db
+.DS_Store
+
+# اختبارات
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
-.nox/
 
-# ==================== Temporary ====================
-*.tmp
-*.temp
-*.bak
-*.backup
+# Jupyter Notebook
+.ipynb_checkpoints
 
-# ==================== OS ====================
-.DS_Store
-Thumbs.db
-desktop.ini
+# التوثيق
+docs/_build/
 
-# ==================== Render ====================
-.render/
+# ملفات الضغط
+*.zip
+*.tar.gz
+*.rar
 
-# ==================== Keep ====================
-!data/*.txt
-!data/
+# Node (إذا كان هناك frontend)
+node_modules/
+npm-debug.log
+yarn-error.log
