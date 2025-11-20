@@ -25,7 +25,7 @@ from linebot.models import (
 from config import *
 from rules import POINTS, GAME_SETTINGS, GAMES_INFO, COMMANDS, SYSTEM_MESSAGES, GAME_RULES
 from style import (
-    COLORS, create_welcome_card, create_game_question_card,
+    COLORS, create_welcome_flex, create_game_question_card,
     create_result_card, create_leaderboard_card, create_stats_card
 )
 from games import (
@@ -87,12 +87,10 @@ def get_or_create_player(user_id, name):
     cursor = conn.cursor()
     
     try:
-        # التحقق من وجود اللاعب
         cursor.execute('SELECT * FROM players WHERE user_id = ?', (user_id,))
         player = cursor.fetchone()
         
         if not player:
-            # إنشاء لاعب جديد
             cursor.execute('''
                 INSERT INTO players (user_id, name)
                 VALUES (?, ?)
@@ -100,7 +98,6 @@ def get_or_create_player(user_id, name):
             conn.commit()
             logger.info(f"New player created: {name} ({user_id})")
         else:
-            # تحديث آخر نشاط
             cursor.execute('''
                 UPDATE players 
                 SET last_active = CURRENT_TIMESTAMP 
@@ -108,7 +105,6 @@ def get_or_create_player(user_id, name):
             ''', (user_id,))
             conn.commit()
         
-        # الحصول على بيانات اللاعب
         cursor.execute('SELECT * FROM players WHERE user_id = ?', (user_id,))
         return dict(cursor.fetchone())
         
@@ -220,16 +216,13 @@ def get_player_stats(user_id):
 
 def handle_start_command(user_id, user_name):
     """معالجة أمر البدء"""
-    # التأكد من تسجيل المستخدم
     player = get_or_create_player(user_id, user_name)
     
-    # إنشاء رسالة الترحيب
     welcome_flex = FlexSendMessage(
         alt_text="مرحباً بك في بوت الحوت",
-        contents=create_welcome_card()
+        contents=create_welcome_flex()
     )
     
-    # إنشاء Quick Reply للألعاب
     quick_reply_items = []
     for game_key, game_info in GAMES_INFO.items():
         quick_reply_items.append(
@@ -241,9 +234,8 @@ def handle_start_command(user_id, user_name):
             )
         )
     
-    quick_reply = QuickReply(items=quick_reply_items[:13])  # حد أقصى 13 عنصر
+    quick_reply = QuickReply(items=quick_reply_items[:13])
     
-    # رسالة نصية مع Quick Reply
     text_message = TextSendMessage(
         text="اختر لعبة من القائمة:",
         quick_reply=quick_reply
@@ -253,7 +245,6 @@ def handle_start_command(user_id, user_name):
 
 
 def handle_stats_command(user_id):
-    """معالجة أمر الإحصائيات"""
     stats = get_player_stats(user_id)
     
     if not stats:
@@ -273,13 +264,11 @@ def handle_stats_command(user_id):
 
 
 def handle_leaderboard_command():
-    """معالجة أمر المتصدرين"""
     players = get_leaderboard(10)
     
     if not players:
         return [TextSendMessage(text="لا يوجد لاعبون في القائمة بعد")]
     
-    # تحويل البيانات للفورمات المطلوب
     leaderboard_data = [
         (p['name'], p['points'], p['rank']) 
         for p in players
@@ -294,7 +283,6 @@ def handle_leaderboard_command():
 
 
 def handle_help_command():
-    """معالجة أمر المساعدة"""
     help_text = f"""مرحباً بك في بوت الحوت
 
 الألعاب المتاحة:
@@ -308,8 +296,6 @@ def handle_help_command():
 
 
 def handle_game_start(user_id, game_key):
-    """بدء لعبة جديدة"""
-    # التحقق من وجود اللعبة
     if game_key not in GAMES_INFO:
         return [TextSendMessage(text="لعبة غير موجودة")]
     
@@ -319,24 +305,20 @@ def handle_game_start(user_id, game_key):
     if not game_class_name:
         return [TextSendMessage(text="اللعبة غير متاحة حالياً")]
     
-    # التحقق من وجود لعبة نشطة
     if get_active_game(user_id):
         return [TextSendMessage(text="يوجد لعبة نشطة بالفعل. استخدم 'إيقاف' لإنهائها أولاً.")]
     
-    # بدء اللعبة
     game = start_game(game_class_name, user_id)
     
     if not game:
         return [TextSendMessage(text="فشل بدء اللعبة")]
     
-    # الحصول على السؤال الأول
     try:
         question = game.get_current_question()
         
         if not question:
             return [TextSendMessage(text="فشل تحميل السؤال")]
         
-        # إنشاء كارد السؤال
         question_flex = FlexSendMessage(
             alt_text=f"{game_info['name']} - السؤال 1",
             contents=create_game_question_card(
@@ -357,13 +339,11 @@ def handle_game_start(user_id, game_key):
 
 
 def handle_game_answer(user_id, user_name, answer):
-    """معالجة إجابة اللعبة"""
     game = get_active_game(user_id)
     
     if not game:
         return [TextSendMessage(text=SYSTEM_MESSAGES['no_active_game'])]
     
-    # التحقق من الإجابة
     result = check_game_answer(user_id, user_id, answer)
     
     if not result:
@@ -371,7 +351,6 @@ def handle_game_answer(user_id, user_name, answer):
     
     messages = []
     
-    # رسالة النتيجة
     if result.get('correct'):
         points_change = POINTS['correct']
         update_player_points(user_id, points_change)
@@ -392,19 +371,17 @@ def handle_game_answer(user_id, user_name, answer):
         )
         messages.append(result_message)
     
-    # التحقق من انتهاء اللعبة
     if result.get('game_ended'):
         total_points = result.get('total_points', 0)
         update_game_stats(user_id, won=(total_points > 0))
         
         final_message = TextSendMessage(
-            text=f"انتهت اللعبة!\nمجموع نقاطك: {total_points}"
+            text=f"انتهت اللعبة\nمجموع نقاطك: {total_points}"
         )
         messages.append(final_message)
         
-        # Quick Reply للعب مرة أخرى
         replay_message = TextSendMessage(
-            text="هل تريد اللعب مرة أخرى؟",
+            text="هل تريد اللعب مرة أخرى",
             quick_reply=QuickReply(items=[
                 QuickReplyButton(action=MessageAction(label="نعم", text="إعادة")),
                 QuickReplyButton(action=MessageAction(label="لا", text="نقاطي"))
@@ -412,7 +389,6 @@ def handle_game_answer(user_id, user_name, answer):
         )
         messages.append(replay_message)
     else:
-        # السؤال التالي
         try:
             next_question = game.get_current_question()
             current_round = result.get('current_round', 1)
@@ -436,7 +412,6 @@ def handle_game_answer(user_id, user_name, answer):
 
 
 def handle_hint_command(user_id):
-    """معالجة أمر التلميح"""
     game = get_active_game(user_id)
     
     if not game:
@@ -447,16 +422,12 @@ def handle_hint_command(user_id):
     if not hint:
         return [TextSendMessage(text="التلميح غير متوفر لهذه اللعبة")]
     
-    # خصم نقطة
     update_player_points(user_id, POINTS['hint'])
     
-    hint_message = TextSendMessage(text=f"تلميح: {hint}\n(تم خصم نقطة واحدة)")
-    
-    return [hint_message]
+    return [TextSendMessage(text=f"تلميح: {hint}\n(تم خصم نقطة واحدة)")]    
 
 
 def handle_show_answer_command(user_id):
-    """معالجة أمر إظهار الإجابة"""
     game = get_active_game(user_id)
     
     if not game:
@@ -469,7 +440,6 @@ def handle_show_answer_command(user_id):
     
     answer_message = TextSendMessage(text=f"الإجابة الصحيحة: {answer}")
     
-    # السؤال التالي
     try:
         next_question = game.get_current_question()
         
@@ -488,16 +458,14 @@ def handle_show_answer_command(user_id):
             )
             return [answer_message, question_flex]
         else:
-            # انتهت اللعبة
             stop_game(user_id)
-            return [answer_message, TextSendMessage(text="انتهت اللعبة!")]
+            return [answer_message, TextSendMessage(text="انتهت اللعبة")]
     except Exception as e:
         logger.error(f"Error in show answer: {e}")
         return [answer_message]
 
 
 def handle_stop_command(user_id):
-    """معالجة أمر الإيقاف"""
     if stop_game(user_id):
         return [TextSendMessage(text=SYSTEM_MESSAGES['game_stopped'])]
     else:
@@ -505,7 +473,6 @@ def handle_stop_command(user_id):
 
 
 def handle_entertainment_command(command):
-    """معالجة أوامر المحتوى الترفيهي"""
     file_path = ENTERTAINMENT_COMMANDS.get(command)
     
     if not file_path:
@@ -525,7 +492,6 @@ def handle_entertainment_command(command):
 
 @app.route("/callback", methods=['POST'])
 def callback():
-    """نقطة استقبال رسائل LINE"""
     signature = request.headers['X-Line-Signature']
     body = request.get_data(as_text=True)
     
@@ -542,14 +508,9 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    """معالجة الرسائل النصية"""
     user_id = event.source.user_id
-    message_text = event.message.text.strip()
+    message_text = sanitize_input(event.message.text.strip())
     
-    # تنظيف المدخلات
-    message_text = sanitize_input(message_text)
-    
-    # الحصول على اسم المستخدم
     try:
         profile = line_bot_api.get_profile(user_id)
         user_name = profile.display_name
@@ -558,54 +519,41 @@ def handle_message(event):
     
     logger.info(f"Message from {user_name} ({user_id}): {message_text}")
     
-    # تحديد نوع الأمر
     messages = []
     
-    # أوامر البدء
     if any(cmd in message_text for cmd in COMMANDS['start']):
         messages = handle_start_command(user_id, user_name)
     
-    # أوامر المساعدة
     elif any(cmd in message_text for cmd in COMMANDS['help']):
         messages = handle_help_command()
     
-    # أوامر الإحصائيات
     elif any(cmd in message_text for cmd in COMMANDS['stats']):
         messages = handle_stats_command(user_id)
     
-    # أوامر المتصدرين
     elif any(cmd in message_text for cmd in COMMANDS['leaderboard']):
         messages = handle_leaderboard_command()
     
-    # أوامر الإيقاف
     elif any(cmd in message_text for cmd in COMMANDS['stop']):
         messages = handle_stop_command(user_id)
     
-    # أوامر التلميح
     elif any(cmd in message_text for cmd in COMMANDS['hint']):
         messages = handle_hint_command(user_id)
     
-    # أوامر الإجابة
     elif any(cmd in message_text for cmd in COMMANDS['answer']):
         messages = handle_show_answer_command(user_id)
     
-    # بدء لعبة جديدة
     elif message_text in AVAILABLE_GAMES:
         messages = handle_game_start(user_id, message_text)
     
-    # محتوى ترفيهي
     elif message_text in ENTERTAINMENT_COMMANDS:
         messages = handle_entertainment_command(message_text)
     
-    # إجابة على سؤال في لعبة نشطة
     elif get_active_game(user_id):
         messages = handle_game_answer(user_id, user_name, message_text)
     
-    # أمر غير معروف
     else:
         messages = [TextSendMessage(text=SYSTEM_MESSAGES['invalid_command'])]
     
-    # إرسال الرسائل
     try:
         if messages:
             line_bot_api.reply_message(event.reply_token, messages)
@@ -619,7 +567,6 @@ def handle_message(event):
 
 @app.route("/", methods=['GET'])
 def home():
-    """الصفحة الرئيسية"""
     return """
     <html>
         <head>
@@ -636,7 +583,7 @@ def home():
             </style>
         </head>
         <body>
-            <h1>🐋 بوت الحوت</h1>
+            <h1>بوت الحوت</h1>
             <p>البوت يعمل بنجاح</p>
             <p>أضف البوت على LINE لبدء اللعب</p>
         </body>
@@ -646,7 +593,6 @@ def home():
 
 @app.route("/health", methods=['GET'])
 def health():
-    """فحص صحة الخادم"""
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
