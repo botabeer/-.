@@ -1,42 +1,49 @@
-# ============================================
-# style.py - الستايل والتصاميم
-# ============================================
+"""
+UI Components
+=============
+Clean and professional Flex Message templates
+"""
 
-from rules import MAIN_GAMES, EXTRA_CONTENT, GAMES_INFO, DEVELOPER_INFO, GAME_RULES
+from config import GAMES, CONTENT, DEVELOPER
 
-COLORS = {
-    'bg': '#0A0E27', 'card': '#0F2440', 'text': '#E0F2FF',
-    'text2': '#7FB3D5', 'cyan': '#00D9FF', 'glow': '#5EEBFF',
-    'sep': '#2C5F8D', 'border': '#00D9FF40', 'success': '#00FF88',
-    'error': '#FF4466', 'warning': '#FFB800'
+# Color Palette
+C = {
+    'bg': '#0F172A',
+    'card': '#1E293B',
+    'primary': '#3B82F6',
+    'secondary': '#64748B',
+    'success': '#10B981',
+    'error': '#EF4444',
+    'text': '#F1F5F9',
+    'muted': '#94A3B8',
+    'border': '#334155'
 }
 
-LOGO_URL = "https://i.imgur.com/qcWILGi.jpeg"
+LOGO = "https://i.imgur.com/qcWILGi.jpeg"
 
-def create_welcome_flex():
-    """كارد الترحيب الرئيسي مع جميع الألعاب والمحتوى"""
-    games_buttons = []
-    for i, game in enumerate(MAIN_GAMES, 1):
-        games_buttons.append({
+def welcome_card():
+    """Main welcome card"""
+    games_list = [
+        {
             "type": "button",
-            "action": {"type": "message", "label": f"{i}. {GAMES_INFO[game]['name']}", "text": game},
-            "style": "primary" if i <= 4 else "secondary",
-            "color": COLORS['cyan'], "height": "sm"
-        })
+            "action": {"type": "message", "label": info['name'], "text": cmd},
+            "style": "primary",
+            "color": C['primary'],
+            "height": "sm"
+        }
+        for cmd, info in GAMES.items()
+    ]
     
-    extra_buttons = []
-    for content in EXTRA_CONTENT:
-        extra_buttons.append({
+    content_list = [
+        {
             "type": "button",
-            "action": {"type": "message", "label": f"- {content}", "text": content},
-            "style": "secondary", "color": COLORS['text2'], "height": "sm"
-        })
-    
-    extra_buttons.append({
-        "type": "button",
-        "action": {"type": "message", "label": "Ai محادثة ذكية", "text": "ai"},
-        "style": "primary", "color": COLORS['success'], "height": "sm"
-    })
+            "action": {"type": "message", "label": item, "text": item},
+            "style": "secondary",
+            "color": C['secondary'],
+            "height": "sm"
+        }
+        for item in CONTENT
+    ]
     
     return {
         "type": "carousel",
@@ -44,135 +51,307 @@ def create_welcome_flex():
             {
                 "type": "bubble",
                 "body": {
-                    "type": "box", "layout": "vertical",
+                    "type": "box",
+                    "layout": "vertical",
                     "contents": [
-                        {"type": "image", "url": LOGO_URL, "size": "full", "aspectMode": "cover", "aspectRatio": "2:1"},
-                        {"type": "box", "layout": "vertical", "contents": [
-                            {"type": "text", "text": "بوت الحوت", "weight": "bold", "size": "xxl", "color": COLORS['cyan'], "align": "center"},
-                            {"type": "separator", "margin": "md", "color": COLORS['sep']},
-                            {"type": "text", "text": "ألعاب رئيسية:", "weight": "bold", "size": "md", "color": COLORS['text'], "margin": "lg"}
-                        ] + games_buttons, "paddingAll": "20px"}
-                    ], "paddingAll": "0px", "backgroundColor": COLORS['card']
+                        {
+                            "type": "image",
+                            "url": LOGO,
+                            "size": "full",
+                            "aspectMode": "cover",
+                            "aspectRatio": "2:1"
+                        },
+                        {
+                            "type": "box",
+                            "layout": "vertical",
+                            "contents": [
+                                {
+                                    "type": "text",
+                                    "text": "بوت الحوت",
+                                    "weight": "bold",
+                                    "size": "xxl",
+                                    "color": C['primary'],
+                                    "align": "center"
+                                },
+                                {
+                                    "type": "separator",
+                                    "margin": "md",
+                                    "color": C['border']
+                                },
+                                {
+                                    "type": "text",
+                                    "text": "الألعاب المتاحة",
+                                    "weight": "bold",
+                                    "size": "md",
+                                    "color": C['text'],
+                                    "margin": "lg"
+                                }
+                            ] + games_list,
+                            "paddingAll": "20px"
+                        }
+                    ],
+                    "paddingAll": "0px",
+                    "backgroundColor": C['card']
                 }
             },
             {
                 "type": "bubble",
                 "body": {
-                    "type": "box", "layout": "vertical",
+                    "type": "box",
+                    "layout": "vertical",
                     "contents": [
-                        {"type": "text", "text": "محتوى إضافي", "weight": "bold", "size": "xl", "color": COLORS['cyan'], "align": "center"},
-                        {"type": "separator", "margin": "md", "color": COLORS['sep']}
-                    ] + extra_buttons + [
-                        {"type": "separator", "margin": "lg", "color": COLORS['sep']},
-                        {"type": "text", "text": DEVELOPER_INFO['copyright'], "size": "xxs", "color": COLORS['text2'], "align": "center", "margin": "md"}
-                    ], "paddingAll": "20px", "backgroundColor": COLORS['card']
+                        {
+                            "type": "text",
+                            "text": "محتوى إضافي",
+                            "weight": "bold",
+                            "size": "xl",
+                            "color": C['primary'],
+                            "align": "center"
+                        },
+                        {
+                            "type": "separator",
+                            "margin": "md",
+                            "color": C['border']
+                        }
+                    ] + content_list + [
+                        {
+                            "type": "separator",
+                            "margin": "lg",
+                            "color": C['border']
+                        },
+                        {
+                            "type": "text",
+                            "text": DEVELOPER,
+                            "size": "xxs",
+                            "color": C['muted'],
+                            "align": "center",
+                            "margin": "md"
+                        }
+                    ],
+                    "paddingAll": "20px",
+                    "backgroundColor": C['card']
                 }
             }
         ]
     }
 
-def create_help_flex():
-    """نافذة المساعدة"""
+def question_card(game_name, question, round_num, total_rounds):
+    """Game question card"""
     return {
         "type": "bubble",
         "body": {
-            "type": "box", "layout": "vertical",
+            "type": "box",
+            "layout": "vertical",
             "contents": [
-                {"type": "text", "text": "الأوامر المتاحة", "weight": "bold", "size": "xl", "color": COLORS['cyan'], "align": "center"},
-                {"type": "separator", "margin": "md", "color": COLORS['sep']},
-                {"type": "text", "text": GAME_RULES, "wrap": True, "color": COLORS['text'], "size": "sm", "margin": "lg"},
-                {"type": "separator", "margin": "lg", "color": COLORS['sep']},
-                {"type": "box", "layout": "horizontal", "spacing": "sm", "margin": "lg", "contents": [
-                    {"type": "button", "action": {"type": "message", "label": "انضم", "text": "انضم"}, "style": "primary", "color": COLORS['cyan'], "flex": 1},
-                    {"type": "button", "action": {"type": "message", "label": "انسحب", "text": "انسحب"}, "style": "secondary", "flex": 1}
-                ]},
-                {"type": "box", "layout": "horizontal", "spacing": "sm", "margin": "sm", "contents": [
-                    {"type": "button", "action": {"type": "message", "label": "إيقاف", "text": "إيقاف"}, "style": "secondary", "flex": 1},
-                    {"type": "button", "action": {"type": "message", "label": "نقاطي", "text": "نقاطي"}, "style": "secondary", "flex": 1}
-                ]},
-                {"type": "box", "layout": "horizontal", "spacing": "sm", "margin": "sm", "contents": [
-                    {"type": "button", "action": {"type": "message", "label": "الصدارة", "text": "الصدارة"}, "style": "primary", "color": COLORS['success'], "flex": 1},
-                    {"type": "button", "action": {"type": "message", "label": "ابدأ", "text": "ابدأ"}, "style": "primary", "color": COLORS['cyan'], "flex": 1}
-                ]},
-                {"type": "separator", "margin": "lg", "color": COLORS['sep']},
-                {"type": "text", "text": DEVELOPER_INFO['copyright'], "size": "xxs", "color": COLORS['text2'], "align": "center", "margin": "md"}
-            ], "paddingAll": "20px", "backgroundColor": COLORS['card']
+                {
+                    "type": "box",
+                    "layout": "horizontal",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": game_name,
+                            "weight": "bold",
+                            "size": "lg",
+                            "color": C['primary']
+                        },
+                        {
+                            "type": "text",
+                            "text": f"{round_num}/{total_rounds}",
+                            "size": "sm",
+                            "color": C['muted'],
+                            "align": "end"
+                        }
+                    ]
+                },
+                {
+                    "type": "separator",
+                    "margin": "md",
+                    "color": C['border']
+                },
+                {
+                    "type": "text",
+                    "text": question,
+                    "wrap": True,
+                    "color": C['text'],
+                    "size": "md",
+                    "margin": "lg"
+                }
+            ],
+            "backgroundColor": C['card'],
+            "paddingAll": "20px"
         }
     }
 
-def create_game_question_card(game_name, question_text, round_num, total_rounds, supports_hint=True):
-    """كارد السؤال في اللعبة"""
+def result_card(title, message, points=None, success=True):
+    """Result card"""
+    color = C['success'] if success else C['error']
     contents = [
-        {"type": "box", "layout": "horizontal", "contents": [
-            {"type": "text", "text": game_name, "weight": "bold", "size": "lg", "color": COLORS['cyan']},
-            {"type": "text", "text": f"{round_num}/{total_rounds}", "size": "sm", "color": COLORS['text2'], "align": "end"}
-        ]},
-        {"type": "separator", "margin": "md", "color": COLORS['sep']},
-        {"type": "text", "text": question_text, "wrap": True, "color": COLORS['text'], "size": "md", "margin": "lg"}
+        {
+            "type": "text",
+            "text": title,
+            "weight": "bold",
+            "size": "xl",
+            "color": color,
+            "align": "center"
+        },
+        {
+            "type": "separator",
+            "margin": "md",
+            "color": C['border']
+        },
+        {
+            "type": "text",
+            "text": message,
+            "wrap": True,
+            "color": C['text'],
+            "size": "md",
+            "margin": "md",
+            "align": "center"
+        }
     ]
     
-    if supports_hint:
-        contents.append({"type": "box", "layout": "horizontal", "contents": [
-            {"type": "button", "action": {"type": "message", "label": "لمح", "text": "لمح"}, "style": "secondary", "color": COLORS['warning'], "flex": 1},
-            {"type": "button", "action": {"type": "message", "label": "جاوب", "text": "جاوب"}, "style": "primary", "color": COLORS['cyan'], "flex": 1}
-        ], "spacing": "sm", "margin": "lg"})
-    
-    return {"type": "bubble", "body": {"type": "box", "layout": "vertical", "contents": contents, "backgroundColor": COLORS['card'], "paddingAll": "20px"}}
-
-def create_result_card(title, message, points=None, is_success=True):
-    """كارد النتيجة"""
-    color = COLORS['success'] if is_success else COLORS['error']
-    contents = [
-        {"type": "text", "text": title, "weight": "bold", "size": "xl", "color": color, "align": "center"},
-        {"type": "separator", "margin": "md", "color": COLORS['sep']},
-        {"type": "text", "text": message, "wrap": True, "color": COLORS['text'], "size": "md", "margin": "md", "align": "center"}
-    ]
     if points is not None:
-        contents.append({"type": "text", "text": f"النقاط: {points:+d}", "color": COLORS['cyan'], "size": "lg", "margin": "md", "align": "center", "weight": "bold"})
-    return {"type": "bubble", "body": {"type": "box", "layout": "vertical", "contents": contents, "backgroundColor": COLORS['card'], "paddingAll": "20px"}}
+        contents.append({
+            "type": "text",
+            "text": f"النقاط: {points:+d}",
+            "color": C['primary'],
+            "size": "lg",
+            "margin": "md",
+            "align": "center",
+            "weight": "bold"
+        })
+    
+    return {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": contents,
+            "backgroundColor": C['card'],
+            "paddingAll": "20px"
+        }
+    }
 
-def create_leaderboard_card(players):
-    """كارد المتصدرين"""
+def stats_card(name, points, played, won):
+    """Player statistics card"""
+    win_rate = (won / played * 100) if played > 0 else 0
+    
+    return {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": "إحصائياتك",
+                    "weight": "bold",
+                    "size": "xl",
+                    "color": C['primary'],
+                    "align": "center"
+                },
+                {
+                    "type": "separator",
+                    "margin": "md",
+                    "color": C['border']
+                },
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                        _stat_row("الاسم", name, C['text']),
+                        _stat_row("النقاط", str(points), C['primary']),
+                        _stat_row("الألعاب", str(played), C['text']),
+                        _stat_row("الفوز", str(won), C['success']),
+                        _stat_row("نسبة الفوز", f"{win_rate:.1f}%", C['muted'])
+                    ],
+                    "margin": "lg",
+                    "spacing": "md"
+                }
+            ],
+            "backgroundColor": C['card'],
+            "paddingAll": "20px"
+        }
+    }
+
+def ranks_card(players):
+    """Leaderboard card"""
     contents = [
-        {"type": "text", "text": "المتصدرون", "weight": "bold", "size": "xl", "color": COLORS['cyan'], "align": "center"},
-        {"type": "separator", "margin": "md", "color": COLORS['sep']}
+        {
+            "type": "text",
+            "text": "المتصدرون",
+            "weight": "bold",
+            "size": "xl",
+            "color": C['primary'],
+            "align": "center"
+        },
+        {
+            "type": "separator",
+            "margin": "md",
+            "color": C['border']
+        }
     ]
-    for name, points, rank in players[:10]:
-        rank_colors = {1: COLORS['warning'], 2: COLORS['text'], 3: COLORS['text2']}
-        rank_color = rank_colors.get(rank, COLORS['text2'])
-        contents.append({"type": "box", "layout": "horizontal", "contents": [
-            {"type": "text", "text": f"{rank}.", "size": "sm", "color": rank_color, "flex": 1},
-            {"type": "text", "text": name, "size": "sm", "color": COLORS['text'], "flex": 4},
-            {"type": "text", "text": str(points), "size": "sm", "color": COLORS['cyan'], "align": "end", "flex": 2}
-        ], "margin": "md"})
-    return {"type": "bubble", "body": {"type": "box", "layout": "vertical", "contents": contents, "backgroundColor": COLORS['card'], "paddingAll": "20px"}}
+    
+    for i, player in enumerate(players, 1):
+        rank_color = {1: C['primary'], 2: C['text'], 3: C['muted']}.get(i, C['secondary'])
+        contents.append({
+            "type": "box",
+            "layout": "horizontal",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": f"{i}.",
+                    "size": "sm",
+                    "color": rank_color,
+                    "flex": 1
+                },
+                {
+                    "type": "text",
+                    "text": player['name'],
+                    "size": "sm",
+                    "color": C['text'],
+                    "flex": 4
+                },
+                {
+                    "type": "text",
+                    "text": str(player['points']),
+                    "size": "sm",
+                    "color": C['primary'],
+                    "align": "end",
+                    "flex": 2
+                }
+            ],
+            "margin": "md"
+        })
+    
+    return {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": contents,
+            "backgroundColor": C['card'],
+            "paddingAll": "20px"
+        }
+    }
 
-def create_stats_card(name, points, games_played, games_won):
-    """كارد الإحصائيات"""
-    win_rate = (games_won / games_played * 100) if games_played > 0 else 0
-    return {"type": "bubble", "body": {"type": "box", "layout": "vertical", "contents": [
-        {"type": "text", "text": "إحصائياتك", "weight": "bold", "size": "xl", "color": COLORS['cyan'], "align": "center"},
-        {"type": "separator", "margin": "md", "color": COLORS['sep']},
-        {"type": "box", "layout": "vertical", "contents": [
-            {"type": "box", "layout": "horizontal", "contents": [
-                {"type": "text", "text": "الاسم:", "color": COLORS['text2'], "flex": 2},
-                {"type": "text", "text": name, "color": COLORS['text'], "flex": 3}
-            ]},
-            {"type": "box", "layout": "horizontal", "contents": [
-                {"type": "text", "text": "النقاط:", "color": COLORS['text2'], "flex": 2},
-                {"type": "text", "text": str(points), "color": COLORS['cyan'], "flex": 3, "weight": "bold"}
-            ], "margin": "md"},
-            {"type": "box", "layout": "horizontal", "contents": [
-                {"type": "text", "text": "الألعاب:", "color": COLORS['text2'], "flex": 2},
-                {"type": "text", "text": str(games_played), "color": COLORS['text'], "flex": 3}
-            ], "margin": "md"},
-            {"type": "box", "layout": "horizontal", "contents": [
-                {"type": "text", "text": "الفوز:", "color": COLORS['text2'], "flex": 2},
-                {"type": "text", "text": str(games_won), "color": COLORS['success'], "flex": 3}
-            ], "margin": "md"},
-            {"type": "box", "layout": "horizontal", "contents": [
-                {"type": "text", "text": "نسبة الفوز:", "color": COLORS['text2'], "flex": 2},
-                {"type": "text", "text": f"{win_rate:.1f}%", "color": COLORS['warning'], "flex": 3}
-            ], "margin": "md"}
-        ], "margin": "lg"}
-    ], "backgroundColor": COLORS['card'], "paddingAll": "20px"}}
+def _stat_row(label, value, color):
+    """Helper for stat rows"""
+    return {
+        "type": "box",
+        "layout": "horizontal",
+        "contents": [
+            {
+                "type": "text",
+                "text": f"{label}:",
+                "color": C['muted'],
+                "flex": 2
+            },
+            {
+                "type": "text",
+                "text": value,
+                "color": color,
+                "flex": 3
+            }
+        ]
+    }
