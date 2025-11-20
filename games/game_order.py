@@ -1,189 +1,80 @@
-# ============================================
-# games/game_order.py - لعبة الترتيب
-# ============================================
-
-"""
-لعبة الترتيب
-============
-ترتيب العناصر حسب المطلوب
-تدعم التلميح وإظهار الإجابة
-"""
-
+from games.base import BaseGame
+import utils
 import random
-from .base import BaseGame
-from rules import POINTS, GAMES_INFO
-from utils import normalize_text
-
 
 class OrderGame(BaseGame):
-    """لعبة ترتيب العناصر"""
-    
     def __init__(self):
-        game_info = GAMES_INFO['ترتيب']
-        super().__init__(
-            name=game_info['name'],
-            rounds=game_info['rounds'],
-            supports_hint=game_info['supports_hint']
-        )
-        
-        # قاعدة بيانات أسئلة الترتيب
-        self.order_questions = [
+        super().__init__('ترتيب', rounds=5, supports_hint=True, supports_skip=True)
+        self.sequences = [
             {
-                'question': 'رتب الأشهر الهجرية:',
-                'items': ['محرم', 'صفر', 'ربيع الأول', 'ربيع الثاني'],
-                'type': 'months'
+                'type': 'ايام',
+                'items': ['السبت', 'الاحد', 'الاثنين', 'الثلاثاء', 'الاربعاء', 'الخميس', 'الجمعة']
             },
             {
-                'question': 'رتب الأرقام من الأصغر للأكبر:',
-                'items': ['5', '2', '9', '1'],
-                'answer': ['1', '2', '5', '9'],
-                'type': 'numbers'
+                'type': 'اشهر',
+                'items': ['يناير', 'فبراير', 'مارس', 'ابريل', 'مايو', 'يونيو', 'يوليو', 'اغسطس', 'سبتمبر', 'اكتوبر', 'نوفمبر', 'ديسمبر']
             },
             {
-                'question': 'رتب حسب الحجم (من الأصغر للأكبر):',
-                'items': ['فيل', 'نملة', 'قط', 'أسد'],
-                'answer': ['نملة', 'قط', 'أسد', 'فيل'],
-                'type': 'size'
+                'type': 'اشهر هجرية',
+                'items': ['محرم', 'صفر', 'ربيع الاول', 'ربيع الثاني', 'جمادى الاولى', 'جمادى الثانية', 'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة']
             },
             {
-                'question': 'رتب الدول حسب المساحة (من الأكبر للأصغر):',
-                'items': ['البحرين', 'السعودية', 'قطر', 'الإمارات'],
-                'answer': ['السعودية', 'الإمارات', 'قطر', 'البحرين'],
-                'type': 'area'
+                'type': 'ارقام',
+                'items': ['واحد', 'اثنان', 'ثلاثة', 'اربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة', 'عشرة']
             },
             {
-                'question': 'رتب مراحل حياة الإنسان:',
-                'items': ['شيخوخة', 'طفولة', 'شباب', 'مراهقة'],
-                'answer': ['طفولة', 'مراهقة', 'شباب', 'شيخوخة'],
-                'type': 'life'
-            },
-            {
-                'question': 'رتب الوجبات حسب الوقت:',
-                'items': ['عشاء', 'فطور', 'غداء'],
-                'answer': ['فطور', 'غداء', 'عشاء'],
-                'type': 'meals'
-            },
-            {
-                'question': 'رتب الكواكب حسب البعد عن الشمس:',
-                'items': ['المريخ', 'الأرض', 'عطارد', 'الزهرة'],
-                'answer': ['عطارد', 'الزهرة', 'الأرض', 'المريخ'],
-                'type': 'planets'
-            },
-            {
-                'question': 'رتب الفصول:',
-                'items': ['خريف', 'صيف', 'ربيع', 'شتاء'],
-                'answer': ['ربيع', 'صيف', 'خريف', 'شتاء'],
-                'type': 'seasons'
-            },
-            {
-                'question': 'رتب حسب السرعة (من الأبطأ للأسرع):',
-                'items': ['طائرة', 'سيارة', 'دراجة', 'شخص يمشي'],
-                'answer': ['شخص يمشي', 'دراجة', 'سيارة', 'طائرة'],
-                'type': 'speed'
-            },
-            {
-                'question': 'رتب الألوان حسب ألوان قوس قزح:',
-                'items': ['أزرق', 'أحمر', 'أصفر', 'أخضر'],
-                'answer': ['أحمر', 'أصفر', 'أخضر', 'أزرق'],
-                'type': 'colors'
+                'type': 'احجام',
+                'items': ['صغير جدا', 'صغير', 'متوسط', 'كبير', 'كبير جدا']
             }
         ]
-        
-        self.current_question_data = None
-        self.shuffled_items = []
     
     def generate_question(self):
-        """
-        توليد سؤال جديد
+        sequence = random.choice(self.sequences)
+        correct_order = sequence['items'].copy()
         
-        Returns:
-            نص السؤال
-        """
-        # اختيار سؤال عشوائي
-        self.current_question_data = random.choice(self.order_questions)
+        sample_size = min(4, len(correct_order))
+        sampled = random.sample(correct_order, sample_size)
         
-        # خلط العناصر
-        self.shuffled_items = self.current_question_data['items'].copy()
-        random.shuffle(self.shuffled_items)
+        shuffled = sampled.copy()
+        random.shuffle(shuffled)
         
-        # حفظ الإجابة الصحيحة
-        if 'answer' in self.current_question_data:
-            self.current_answer = self.current_question_data['answer']
-        else:
-            self.current_answer = self.current_question_data['items']
+        self.current_question = f"رتب {sequence['type']} التالية:\n{' - '.join(shuffled)}"
+        self.current_answer = [item for item in correct_order if item in sampled]
         
-        # إنشاء السؤال
-        question = f"{self.current_question_data['question']}\n"
-        question += ', '.join(self.shuffled_items)
-        question += "\n\nأجب بترتيب العناصر مفصولة بفواصل"
-        
-        return question
+        return {
+            'text': self.current_question,
+            'answer': self.current_answer
+        }
     
     def check_answer(self, user_id, answer):
-        """
-        التحقق من الإجابة
+        answer = answer.strip()
+        parts = [p.strip() for p in answer.split('-')]
         
-        Args:
-            user_id: معرف المستخدم
-            answer: إجابة المستخدم
-            
-        Returns:
-            dict مع النتيجة
-        """
-        # تنظيف وتقسيم إجابة المستخدم
-        user_items = [normalize_text(item.strip()).lower() 
-                      for item in answer.split(',')]
+        if len(parts) != len(self.current_answer):
+            return {
+                'correct': False,
+                'message': f'الرجاء ترتيب {len(self.current_answer)} عناصر مفصولة بـ -',
+                'points': 0
+            }
         
-        # تنظيف الإجابة الصحيحة
-        correct_items = [normalize_text(item).lower() 
-                        for item in self.current_answer]
+        normalized_answer = [utils.normalize_text(p) for p in parts]
+        normalized_correct = [utils.normalize_text(p) for p in self.current_answer]
         
-        # التحقق من التطابق
-        is_correct = user_items == correct_items
-        
-        # حساب النقاط
-        points_earned = 0
-        if is_correct:
-            points_earned = POINTS['correct']
-            self.update_score(user_id, points_earned)
-        
-        # الانتقال للسؤال التالي
-        game_continues = self.next_question()
-        
-        result = {
-            'correct': is_correct,
-            'correct_answer': ', '.join(self.current_answer),
-            'user_answer': ', '.join(user_items),
-            'points_earned': points_earned,
-            'total_points': self.get_score(user_id),
-            'current_round': self.current_round,
-            'total_rounds': self.total_rounds,
-            'game_ended': not game_continues,
-            'next_question': self.current_question if game_continues else None
-        }
-        
-        return result
+        if normalized_answer == normalized_correct:
+            return {
+                'correct': True,
+                'message': 'ممتاز! الترتيب صحيح',
+                'points': 2
+            }
+        else:
+            correct = ' - '.join(self.current_answer)
+            return {
+                'correct': False,
+                'message': f'خطأ! الترتيب الصحيح:\n{correct}',
+                'points': 0
+            }
     
-    def get_hint(self):
-        """
-        الحصول على تلميح
-        
-        Returns:
-            التلميح
-        """
-        if not self.current_answer or len(self.current_answer) < 2:
-            return "لا يوجد تلميح متاح"
-        
-        # تلميح: أول عنصرين في الترتيب الصحيح
-        hint = f"التلميح: يبدأ الترتيب بـ: {self.current_answer[0]}, {self.current_answer[1]}"
-        
-        return hint
-    
-    def show_answer(self):
-        """
-        إظهار الإجابة الصحيحة
-        
-        Returns:
-            الإجابة
-        """
-        return f'الترتيب الصحيح: {", ".join(self.current_answer)}'
+    def _generate_hint(self):
+        if len(self.current_answer) >= 2:
+            return f"يبدأ بـ: {self.current_answer[0]}"
+        return "لا يوجد تلميح"
