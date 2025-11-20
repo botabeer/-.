@@ -1,69 +1,82 @@
-# ============================================
-# gemini_service.py - خدمة Gemini AI
-# ============================================
-
 import google.generativeai as genai
-from rules import GEMINI_CONFIG
-import logging
+import os
+from dotenv import load_dotenv
 
-logger = logging.getLogger(__name__)
+load_dotenv()
 
 class GeminiService:
-    """خدمة Gemini AI مع Load Balancing بين API Keys"""
-    
     def __init__(self):
-        self.api_keys = [k for k in GEMINI_CONFIG['api_keys'] if k]
-        self.current_key_index = 0
-        self.model_name = GEMINI_CONFIG['model']
-        self.model = None
-        self._init_model()
-    
-    def _init_model(self):
-        """تهيئة النموذج"""
-        if not self.api_keys:
-            logger.error("No Gemini API keys available")
-            return
+        self.api_keys = []
+        for i in range(1, 10):
+            key = os.getenv(f'GEMINI_API_KEY_{i}')
+            if key:
+                self.api_keys.append(key)
         
-        try:
-            genai.configure(api_key=self.api_keys[self.current_key_index])
-            self.model = genai.GenerativeModel(
-                model_name=self.model_name,
-                generation_config={
-                    'temperature': GEMINI_CONFIG['temperature'],
-                    'max_output_tokens': GEMINI_CONFIG['max_tokens']
-                },
-                system_instruction=GEMINI_CONFIG['system_instruction']
-            )
-            logger.info(f"Gemini initialized with key {self.current_key_index + 1}")
-        except Exception as e:
-            logger.error(f"Gemini init failed: {e}")
-            self.model = None
+        if not self.api_keys:
+            raise ValueError("لا توجد مفاتيح Gemini API في ملف .env")
+        
+        self.current_key_index = 0
+        self.model_name = 'gemini-2.0-flash-exp'
+        self.system_instruction = '''أنت مساعد ذكي عربي ودود ومفيد. 
+تحدث بطريقة طبيعية وودية.
+أجب على الأسئلة بشكل مختصر وواضح.
+استخدم اللغة العربية الفصحى البسيطة.
+كن محترما ومهذبا في جميع الردود.'''
+        
+        self._configure_current_key()
+    
+    def _configure_current_key(self):
+        current_key = self.api_keys[self.current_key_index]
+        genai.configure(api_key=current_key)
     
     def _rotate_key(self):
-        """تبديل API Key عند الفشل"""
-        if len(self.api_keys) <= 1:
-            return False
         self.current_key_index = (self.current_key_index + 1) % len(self.api_keys)
-        self._init_model()
-        return True
+        self._configure_current_key()
     
     def generate_response(self, message, retry=True):
-        """توليد رد من Gemini"""
-        if not self.model:
-            return "عذراً، خدمة المحادثة الذكية غير متاحة حالياً"
-        
         try:
-            response = self.model.generate_content(message)
+            model = genai.GenerativeModel(
+                model_name=self.model_name,
+                system_instruction=self.system_instruction
+            )
+            
+            generation_config = {
+                'temperature': 0.9,
+                'top_p': 0.95,
+                'top_k': 40,
+                'max_output_tokens': 500
+            }
+            
+            response = model.generate_content(
+                message,
+                generation_config=generation_config
+            )
+            
             return response.text
+        
         except Exception as e:
-            logger.error(f"Gemini generate error: {e}")
-            if retry and self._rotate_key():
-                return self.generate_response(message, retry=False)
-            return "عذراً، حدث خطأ في المحادثة"
+            error_msg = str(e)
+            
+            if 'quota' in error_msg.lower() or 'limit' in error_msg.lower():
+                if retry and len(self.api_keys) > 1:
+                    self._rotate_key()
+                    return self.generate_response(message, retry=False)
+            
+            return "عذرا، حدث خطأ في معالجة طلبك. حاول مرة أخرى."
     
-    def chat(self, user_message, context=None):
-        """محادثة مع سياق"""
-        full_message = f"{context}\n\n{user_message}" if context else user_message
-        return self.generate_response(full_message)
-
-gemini = GeminiService()
+    def chat(self, messages_history):
+        try:
+            model = genai.GenerativeModel(
+                model_name=self.model_name,
+                system_instruction=self.system_instruction
+            )
+            
+            chat = model.start_chat(history=[])
+            
+            for msg in messages_history:
+                chat.send_message(msg)
+            
+            return chat.last.text
+        
+        except Exception as e:
+            return "عذرا، حدث خطأ في المحادثة."
