@@ -3,29 +3,29 @@
 # ============================================
 
 # Flask - إطار عمل الويب
-Flask==3.0.0
-Werkzeug==3.0.1
+Flask
+Werkzeug
 
 # LINE Bot SDK
-line-bot-sdk==3.5.0
+line-bot-sdk
 
 # متغيرات البيئة
-python-dotenv==1.0.0
+python-dotenv
 
 # خادم WSGI للإنتاج
-gunicorn==21.2.0
+gunicorn
 
 # أدوات إضافية
-requests==2.31.0
-urllib3==2.1.0
-certifi==2023.11.17
+requests
+urllib3
+certifi
 
 # معالجة JSON
-simplejson==3.19.2
+simplejson
 
 # دعم العربية
-python-bidi==0.4.2
-arabic-reshaper==3.0.0
+python-bidi
+arabic-reshaper
 
 # أدوات الوقت والتاريخ
 pytz==2023.3.post1
@@ -34,6 +34,6 @@ pytz==2023.3.post1
 # لا حاجة لمكتبات إضافية
 
 # أدوات التطوير (اختيارية في الإنتاج)
-# pytest==7.4.3
-# black==23.12.0
-# flake8==6.1.0
+# pytest
+# black
+# flake8
