@@ -1,210 +1,174 @@
+# ============================================
+# games/game_compatibility.py - لعبة التوافق
+# ============================================
+
+"""
+لعبة التوافق
+============
+حساب نسبة التوافق بين اسمين
+لعبة ترفيهية بدون تلميح أو إظهار إجابة
+جولة واحدة فقط
+"""
+
 import random
-from linebot.models import FlexSendMessage
-from utils import COLORS
+from .base import BaseGame
+from rules import POINTS, GAMES_INFO
+from utils import normalize_text
 
-class CompatibilityGame:
+
+class CompatibilityGame(BaseGame):
+    """لعبة حساب التوافق بين الأسماء"""
+    
     def __init__(self):
-        self.total_questions = 1  # جولة واحدة فقط
-        self.question_number = 0
-        self.player_scores = {}
-
-    def start_game(self):
-        self.question_number = 0
-        self.player_scores = {}
-        return self.next_question()
-
-    def next_question(self):
-        if self.question_number >= self.total_questions:
-            return None
-        self.question_number += 1
+        game_info = GAMES_INFO['توافق']
+        super().__init__(
+            name=game_info['name'],
+            rounds=game_info['rounds'],  # جولة واحدة فقط
+            supports_hint=game_info['supports_hint']  # False
+        )
         
-        C = COLORS
-        content = [
-            {
-                "type": "box",
-                "layout": "vertical",
-                "backgroundColor": C['glass'],
-                "cornerRadius": "20px",
-                "paddingAll": "28px",
-                "borderWidth": "2px",
-                "borderColor": C['border'],
-                "contents": [
-                    {"type": "text", "text": "▫️ لعبة التوافق", "size": "xxl", "weight": "bold", "color": C['cyan'], "align": "center"},
-                    {"type": "text", "text": "احسب نسبة التوافق بين اسمين", "size": "md", "color": C['text2'], "align": "center", "margin": "md", "wrap": True}
-                ]
-            },
-            {"type": "text", "text": "اكتب الاسمين مفصولين بفاصلة\nمثال: احمد، فاطمة", "size": "sm", "color": C['text'], "align": "center", "margin": "lg", "wrap": True}
-        ]
+        self.name1 = None
+        self.name2 = None
+        self.compatibility_percentage = 0
+        self.waiting_for_names = True
+    
+    def generate_question(self):
+        """
+        توليد سؤال جديد
         
-        card = {
-            "type": "bubble",
-            "size": "mega",
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "backgroundColor": C['bg'],
-                "paddingAll": "0px",
-                "contents": [{
-                    "type": "box",
-                    "layout": "vertical",
-                    "backgroundColor": C['topbg'],
-                    "paddingTop": "40px",
-                    "paddingBottom": "150px",
-                    "contents": [{
-                        "type": "box",
-                        "layout": "vertical",
-                        "cornerRadius": "30px",
-                        "backgroundColor": C['bg'],
-                        "paddingAll": "30px",
-                        "offsetTop": "60px",
-                        "borderWidth": "2px",
-                        "borderColor": C['border'],
-                        "contents": content
-                    }]
-                }]
-            }
-        }
+        Returns:
+            نص السؤال
+        """
+        question = "أدخل اسمين لحساب نسبة التوافق بينهما\nمثال: محمد, فاطمة"
         
-        return FlexSendMessage(alt_text="لعبة التوافق", contents=card)
-
+        return question
+    
     def calculate_compatibility(self, name1, name2):
-        """حساب نسبة التوافق بناءً على الأحرف المشتركة"""
+        """
+        حساب نسبة التوافق (خوارزمية ترفيهية)
+        
+        Args:
+            name1: الاسم الأول
+            name2: الاسم الثاني
+            
+        Returns:
+            نسبة التوافق (0-100)
+        """
         # تنظيف الأسماء
-        name1 = name1.strip().replace(' ', '')
-        name2 = name2.strip().replace(' ', '')
+        name1 = normalize_text(name1).lower()
+        name2 = normalize_text(name2).lower()
         
-        # حساب الأحرف المشتركة
-        common = len(set(name1) & set(name2))
-        total = len(set(name1) | set(name2))
+        # خوارزمية بسيطة: حساب الأحرف المشتركة
+        common_letters = set(name1) & set(name2)
+        all_letters = set(name1) | set(name2)
         
-        if total == 0:
-            return random.randint(50, 90)
+        if not all_letters:
+            base_percentage = 50
+        else:
+            base_percentage = (len(common_letters) / len(all_letters)) * 100
         
-        # نسبة أساسية من الأحرف المشتركة
-        base_percentage = (common / total) * 100
+        # إضافة عامل عشوائي للتنويع (+/- 20)
+        random_factor = random.randint(-20, 20)
         
-        # إضافة عامل عشوائي للمرح
-        random_factor = random.randint(-15, 25)
+        # حساب النسبة النهائية
+        percentage = int(base_percentage + random_factor)
         
-        # النسبة النهائية
-        percentage = max(10, min(100, int(base_percentage + random_factor)))
+        # التأكد من أن النسبة بين 1 و 100
+        percentage = max(1, min(100, percentage))
         
         return percentage
-
-    def get_hint(self):
-        # لا يدعم التلميحات
-        return None
-
-    def show_answer(self):
-        # لا توجد إجابة محددة
-        return None
-
-    def check_answer(self, answer, user_id, display_name):
-        """معالجة الإجابة وحساب التوافق"""
-        # تقسيم الإجابة إلى اسمين
-        parts = [p.strip() for p in answer.replace('،', ',').split(',')]
+    
+    def get_compatibility_message(self, percentage):
+        """
+        الحصول على رسالة حسب نسبة التوافق
         
-        if len(parts) != 2:
-            return None
+        Args:
+            percentage: نسبة التوافق
+            
+        Returns:
+            الرسالة المناسبة
+        """
+        if percentage >= 90:
+            return "توافق ممتاز! تكاد تكونان متطابقين"
+        elif percentage >= 75:
+            return "توافق عالي جداً! علاقة رائعة"
+        elif percentage >= 60:
+            return "توافق جيد! يمكن بناء علاقة قوية"
+        elif percentage >= 45:
+            return "توافق متوسط. يحتاج إلى بعض التفاهم"
+        elif percentage >= 30:
+            return "توافق منخفض. قد تواجهان بعض التحديات"
+        else:
+            return "توافق ضعيف. شخصيات مختلفة جداً"
+    
+    def check_answer(self, user_id, answer):
+        """
+        التحقق من الإجابة (معالجة الأسماء)
         
-        name1, name2 = parts
+        Args:
+            user_id: معرف المستخدم
+            answer: الأسماء المدخلة
+            
+        Returns:
+            dict مع النتيجة
+        """
+        # تقسيم الأسماء
+        names = [name.strip() for name in answer.split(',')]
         
-        if not name1 or not name2:
-            return None
+        if len(names) < 2:
+            return {
+                'correct': False,
+                'error': 'يرجى إدخال اسمين مفصولين بفاصلة',
+                'game_ended': False
+            }
+        
+        self.name1 = names[0]
+        self.name2 = names[1]
         
         # حساب نسبة التوافق
-        percentage = self.calculate_compatibility(name1, name2)
+        self.compatibility_percentage = self.calculate_compatibility(
+            self.name1, self.name2
+        )
         
-        # تحديد الرسالة بناءً على النسبة
-        if percentage >= 90:
-            message = "توافق مثالي! "
-            emoji = ""
-        elif percentage >= 75:
-            message = "توافق رائع! "
-            emoji = ""
-        elif percentage >= 60:
-            message = "توافق جيد! "
-            emoji = ""
-        elif percentage >= 45:
-            message = "توافق متوسط "
-            emoji = ""
-        else:
-            message = "توافق ضعيف "
-            emoji = ""
+        # الحصول على الرسالة
+        message = self.get_compatibility_message(self.compatibility_percentage)
         
-        # إنشاء بطاقة النتيجة
-        C = COLORS
-        result_card = {
-            "type": "bubble",
-            "size": "mega",
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "backgroundColor": C['bg'],
-                "paddingAll": "0px",
-                "contents": [{
-                    "type": "box",
-                    "layout": "vertical",
-                    "backgroundColor": C['topbg'],
-                    "paddingTop": "40px",
-                    "paddingBottom": "150px",
-                    "contents": [{
-                        "type": "box",
-                        "layout": "vertical",
-                        "cornerRadius": "30px",
-                        "backgroundColor": C['bg'],
-                        "paddingAll": "35px",
-                        "offsetTop": "60px",
-                        "borderWidth": "2px",
-                        "borderColor": C['border'],
-                        "contents": [
-                            {"type": "text", "text": "🖤 نتيجة التوافق", "weight": "bold", "size": "xxl", "align": "center", "color": C['glow']},
-                            {"type": "separator", "color": C['sep'], "margin": "xl"},
-                            {
-                                "type": "box",
-                                "layout": "vertical",
-                                "backgroundColor": C['glass'],
-                                "cornerRadius": "20px",
-                                "paddingAll": "25px",
-                                "margin": "xl",
-                                "borderWidth": "2px",
-                                "borderColor": C['cyan'],
-                                "contents": [
-                                    {"type": "text", "text": f"{name1} & {name2}", "size": "xl", "weight": "bold", "color": C['text'], "align": "center", "wrap": True},
-                                    {"type": "text", "text": f"{emoji} {percentage}% {emoji}", "size": "3xl", "weight": "bold", "color": C['cyan'], "align": "center", "margin": "lg"},
-                                    {"type": "text", "text": message, "size": "lg", "color": C['text2'], "align": "center", "margin": "md"}
-                                ]
-                            },
-                            {"type": "button", "action": {"type": "message", "label": "🔄 جرب مرة أخرى", "text": "توافق"}, "style": "primary", "color": C['cyan'], "height": "md", "margin": "xxl"}
-                        ]
-                    }]
-                }]
-            }
-        }
+        # تحديث النتيجة
+        self.update_score(user_id, POINTS['skip'])  # نقاط صفر لأنها لعبة ترفيهية
         
-        return {
+        # إنهاء اللعبة (جولة واحدة فقط)
+        self.is_active = False
+        
+        result = {
             'correct': True,
-            'points': 0,
-            'message': f'نسبة التوافق: {percentage}%',
-            'flex': result_card
+            'name1': self.name1,
+            'name2': self.name2,
+            'compatibility_percentage': self.compatibility_percentage,
+            'message': message,
+            'points_earned': 0,
+            'total_points': self.get_score(user_id),
+            'current_round': 1,
+            'total_rounds': 1,
+            'game_ended': True,
+            'next_question': None
         }
-
-    def get_final_results(self):
-        # لا توجد نتائج نهائية لهذه اللعبة
-        C = COLORS
-        card = {
-            "type": "bubble",
-            "size": "mega",
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "backgroundColor": C['card'],
-                "cornerRadius": "25px",
-                "paddingAll": "30px",
-                "contents": [
-                    {"type": "text", "text": "شكراً للعب! 🖤", "weight": "bold", "size": "xxl", "color": C['glow'], "align": "center"},
-                    {"type": "text", "text": "هذه لعبة ترفيهية فقط", "size": "md", "color": C['text2'], "align": "center", "margin": "md"}
-                ]
-            }
-        }
-        return FlexSendMessage(alt_text="شكراً للعب", contents=card)
+        
+        return result
+    
+    def get_hint(self):
+        """
+        لا تدعم التلميح
+        
+        Returns:
+            None
+        """
+        return None
+    
+    def show_answer(self):
+        """
+        لا تدعم إظهار الإجابة
+        
+        Returns:
+            None
+        """
+        return None
