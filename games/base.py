@@ -1,93 +1,190 @@
+# ============================================
+# games/base.py - الكلاس الأساسي للألعاب
+# ============================================
+
 """
-Base Game Class - الفئة الأساسية لجميع الألعاب
-توفر الوظائف المشتركة بين جميع الألعاب
+الكلاس الأساسي للألعاب
+======================
+جميع الألعاب ترث من هذا الكلاس
 """
 
 from abc import ABC, abstractmethod
-from utils import create_game_card, create_hint_card, create_answer_card, create_results_card
+from datetime import datetime
 
 
 class BaseGame(ABC):
-    """الفئة الأساسية لجميع الألعاب"""
+    """الكلاس الأساسي لجميع الألعاب"""
     
-    def __init__(self, game_name, total_rounds=5):
+    def __init__(self, name, rounds=5, supports_hint=True):
         """
-        تهيئة اللعبة الأساسية
+        تهيئة اللعبة
         
         Args:
-            game_name: اسم اللعبة
-            total_rounds: عدد الجولات (افتراضي 5)
+            name: اسم اللعبة
+            rounds: عدد الجولات
+            supports_hint: هل تدعم التلميح
         """
-        self.game_name = game_name
-        self.total_rounds = total_rounds
+        self.name = name
+        self.total_rounds = rounds
         self.current_round = 0
-        self.player_scores = {}
-        self.questions = []
+        self.supports_hint = supports_hint
+        self.players_scores = {}
         self.current_question = None
-        self.hint_used = False
+        self.current_answer = None
+        self.started_at = datetime.now()
+        self.is_active = True
     
     @abstractmethod
-    def generate_questions(self):
-        """توليد الأسئلة - يجب تنفيذه في كل لعبة"""
+    def generate_question(self):
+        """
+        توليد سؤال جديد
+        يجب تنفيذها في كل لعبة
+        
+        Returns:
+            السؤال الجديد
+        """
         pass
     
     @abstractmethod
-    def check_answer(self, text, user_id, user_name):
-        """فحص الإجابة - يجب تنفيذه في كل لعبة"""
+    def check_answer(self, user_id, answer):
+        """
+        التحقق من الإجابة
+        يجب تنفيذها في كل لعبة
+        
+        Args:
+            user_id: معرف المستخدم
+            answer: الإجابة
+            
+        Returns:
+            dict مع النتيجة
+        """
         pass
     
-    def start_game(self):
-        """بدء اللعبة وإنشاء الأسئلة"""
-        self.generate_questions()
-        self.current_round = 0
-        self.hint_used = False
-        return self.next_question()
+    def get_current_question(self):
+        """
+        الحصول على السؤال الحالي أو توليد جديد
+        
+        Returns:
+            السؤال الحالي
+        """
+        if not self.current_question or self.current_round == 0:
+            self.next_question()
+        
+        return self.current_question
     
     def next_question(self):
         """الانتقال للسؤال التالي"""
-        if self.current_round >= self.total_rounds:
-            return None
-        
-        self.current_round += 1
-        self.hint_used = False
-        
-        if self.current_round <= len(self.questions):
-            self.current_question = self.questions[self.current_round - 1]
-            return self._create_question_card()
-        
-        return None
-    
-    @abstractmethod
-    def _create_question_card(self):
-        """إنشاء بطاقة السؤال - يجب تنفيذه في كل لعبة"""
-        pass
+        if self.current_round < self.total_rounds:
+            self.current_round += 1
+            self.current_question = self.generate_question()
+            return True
+        else:
+            self.is_active = False
+            return False
     
     def get_hint(self):
-        """الحصول على تلميح - اختياري"""
-        return None
-    
-    def show_answer(self):
-        """عرض الإجابة الصحيحة"""
-        if not self.current_question:
+        """
+        الحصول على تلميح
+        يمكن تخصيصها في كل لعبة
+        
+        Returns:
+            التلميح أو None
+        """
+        if not self.supports_hint or not self.current_answer:
             return None
         
-        answer = self.current_question.get('answer', 'غير متوفر')
-        return create_answer_card(answer)
-    
-    def add_score(self, user_id, user_name, points):
-        """إضافة نقاط للاعب"""
-        if user_id not in self.player_scores:
-            self.player_scores[user_id] = {
-                'name': user_name,
-                'score': 0
-            }
+        # تلميح افتراضي: إظهار بعض الأحرف
+        answer = str(self.current_answer)
+        hint_length = max(1, len(answer) // 3)
         
-        self.player_scores[user_id]['score'] += points
+        hint = answer[:hint_length] + ('_' * (len(answer) - hint_length))
+        return hint
     
-    def get_final_results(self):
-        """الحصول على النتائج النهائية"""
-        return create_results_card(self.player_scores)
+    def show_answer(self):
+        """
+        إظهار الإجابة الصحيحة
+        
+        Returns:
+            الإجابة الصحيحة
+        """
+        return self.current_answer
     
-    def is_game_over(self):
-        """التحقق من انتهاء اللعبة"""
-        return self.current_round >= self.total_rounds
+    def add_player(self, user_id):
+        """
+        إضافة لاعب
+        
+        Args:
+            user_id: معرف المستخدم
+        """
+        if user_id not in self.players_scores:
+            self.players_scores[user_id] = 0
+    
+    def update_score(self, user_id, points):
+        """
+        تحديث نقاط اللاعب
+        
+        Args:
+            user_id: معرف المستخدم
+            points: النقاط المضافة
+        """
+        self.add_player(user_id)
+        self.players_scores[user_id] += points
+    
+    def get_score(self, user_id):
+        """
+        الحصول على نقاط اللاعب
+        
+        Args:
+            user_id: معرف المستخدم
+            
+        Returns:
+            النقاط
+        """
+        return self.players_scores.get(user_id, 0)
+    
+    def get_state(self):
+        """
+        الحصول على حالة اللعبة
+        
+        Returns:
+            dict مع حالة اللعبة
+        """
+        return {
+            'name': self.name,
+            'current_round': self.current_round,
+            'total_rounds': self.total_rounds,
+            'is_active': self.is_active,
+            'supports_hint': self.supports_hint,
+            'players_count': len(self.players_scores),
+            'started_at': self.started_at.isoformat()
+        }
+    
+    def is_game_ended(self):
+        """
+        التحقق من انتهاء اللعبة
+        
+        Returns:
+            True إذا انتهت اللعبة
+        """
+        return self.current_round >= self.total_rounds or not self.is_active
+    
+    def get_winner(self):
+        """
+        الحصول على الفائز
+        
+        Returns:
+            معرف الفائز أو None
+        """
+        if not self.players_scores:
+            return None
+        
+        return max(self.players_scores.items(), key=lambda x: x[1])[0]
+    
+    def reset(self):
+        """إعادة تعيين اللعبة"""
+        self.current_round = 0
+        self.players_scores = {}
+        self.current_question = None
+        self.current_answer = None
+        self.is_active = True
+        self.started_at = datetime.now()
