@@ -1,176 +1,205 @@
-# games/game_ai.py
+# ============================================
+# games/game_ai.py - محادثة ذكية مع AI
+# ============================================
+
 """
-لعبة المحادثة الذكية (AI Chat)
+محادثة AI
+=========
 محادثة قصيرة مع الذكاء الاصطناعي
+لعبة ترفيهية بدون تلميح أو إظهار إجابة
+جولة واحدة فقط
 """
 
 import random
-import logging
+from .base import BaseGame
+from rules import POINTS, GAMES_INFO
 
-logger = logging.getLogger(__name__)
 
-class AI_Game:
-    """لعبة المحادثة مع AI"""
+class AiChat(BaseGame):
+    """محادثة ذكية مع AI (نسخة بسيطة)"""
     
     def __init__(self):
-        self.name = "AI Chat"
-        self.name_ar = "محادثة ذكية"
-        self.description = "تحدث مع الذكاء الاصطناعي واحصل على ردود ذكية"
+        game_info = GAMES_INFO['ai']
+        super().__init__(
+            name=game_info['name'],
+            rounds=game_info['rounds'],  # جولة واحدة
+            supports_hint=game_info['supports_hint']  # False
+        )
         
-        # ردود جاهزة لمواضيع مختلفة
-        self.responses = {
-            'مرحبا': ['مرحباً بك! كيف يمكنني مساعدتك اليوم؟', 'أهلاً وسهلاً! أنا هنا للمساعدة'],
-            'السلام': ['وعليكم السلام ورحمة الله وبركاته', 'السلام عليكم! كيف حالك؟'],
-            'هاي': ['هاي! كيف أقدر أساعدك؟', 'هلا! وش اللي تبغاه؟'],
-            'هلا': ['هلا والله! تفضل', 'هلا فيك! كيف أقدر أخدمك؟'],
-            
-            'كيف حالك': ['الحمدلله بخير! وأنت كيف حالك؟', 'تمام والحمدلله! شكراً على السؤال'],
-            'وش اخبارك': ['أخباري طيبة! وأنت وش أخبارك؟', 'كله تمام! شكراً'],
-            'شلونك': ['زين الحمدلله! وانت شلونك؟', 'بخير وصحة!'],
-            
-            'اسمك': ['اسمي بوت الحوت!', 'يمكنك مناداتي بـ "بوت الحوت"'],
-            'من انت': ['أنا بوت ذكي للألعاب والترفيه!', 'بوت الحوت في خدمتك!'],
-            'وش اسمك': ['بوت الحوت!', 'اسمي الحوت، تشرفت!'],
-            
-            'وش تقدر تسوي': ['أقدر ألعب معك 9 ألعاب مختلفة! جرب اكتب "ابدأ"', 'ألعاب، نقاط، صدارة، وأشياء كثيرة!'],
-            'ساعدني': ['تفضل! كيف أقدر أساعدك؟ اكتب "مساعدة" لرؤية الأوامر', 'أنا هنا! وش اللي تحتاجه؟'],
-            
-            'الطقس': ['الطقس اليوم جميل!', 'ما عندي معلومات عن الطقس، بس أقدر ألعب معك!'],
-            'الوقت': ['الوقت دائماً مناسب للعب!', 'ما أعرف الوقت بالضبط، بس وقتنا معك يمر بسرعة!'],
-            
-            'لماذا': ['سؤال فلسفي! الجواب يعتمد على السياق', 'لأن كل شيء له سبب!'],
-            'كيف': ['بطرق مختلفة! وش اللي تحتاج تعرفه بالضبط؟', 'الطريقة تعتمد على الموقف'],
-            
-            'احبك': ['وأنا أحب أن ألعب معك!', 'شكراً! أنت رائع!'],
-            'شكرا': ['العفو! دائماً في الخدمة', 'لا شكر على واجب!'],
-            'جميل': ['أنت الأجمل!', 'شكراً! أنت لطيف جداً'],
-            'رائع': ['أنت الرائع!', 'سعيد أنك أعجبت!'],
-            
-            'سيء': ['آسف على ذلك، كيف أقدر أحسّن؟', 'دعني أحاول مرة أخرى!'],
-            'غبي': ['آسف إذا أخطأت، أنا أتعلم دائماً', 'أحاول أن أكون أفضل!'],
-            
-            'لون': ['الأزرق! مثل البحر والحوت', 'كل الألوان جميلة!'],
-            'رقم': ['رقمي المفضل 9 - عدد ألعابنا!', '7 رقم محظوظ!'],
-            'طعام': ['البيتزا! بس أنا ما آكل، أنا بوت', 'الكبسة رائعة!'],
-            
-            'العب': ['يلا! اكتب "ابدأ" ونبدأ اللعب!', 'تمام! جاهز؟ اكتب "ابدأ"'],
-            'لعبة': ['عندنا 9 ألعاب! اكتب "ابدأ"', 'يلا نلعب!'],
-            
-            'باي': ['باي باي! ارجع لنا قريب', 'مع السلامة! نلتقي قريباً'],
-            'مع السلامة': ['الله يسلمك!', 'في أمان الله!'],
+        # قاعدة بيانات الردود الذكية
+        self.responses_db = {
+            'greeting': [
+                'مرحباً! كيف يمكنني مساعدتك اليوم؟',
+                'أهلاً وسهلاً! سعيد بالحديث معك',
+                'مرحباً بك! ما الذي تود الحديث عنه؟'
+            ],
+            'how_are_you': [
+                'أنا بخير، شكراً لسؤالك! كيف حالك أنت؟',
+                'أنا روبوت، لكني أعمل بشكل رائع! وأنت؟',
+                'بخير والحمد لله، وأنت كيف حالك؟'
+            ],
+            'thanks': [
+                'العفو! سعيد بمساعدتك',
+                'لا شكر على واجب',
+                'تسرني خدمتك دائماً'
+            ],
+            'game': [
+                'الألعاب ممتعة! هل تريد لعب شيء معين؟',
+                'أحب الألعاب! ما هي لعبتك المفضلة؟',
+                'هناك العديد من الألعاب الممتعة هنا'
+            ],
+            'help': [
+                'يمكنني مساعدتك! ماذا تحتاج؟',
+                'بالتأكيد، أخبرني كيف أساعدك',
+                'أنا هنا للمساعدة، ما المشكلة؟'
+            ],
+            'joke': [
+                'لماذا لا يثق الناس بالسلالم؟ لأنها دائماً تخطط لشيء!',
+                'ما الذي يقوله البحر للشاطئ؟ لا شيء، هو فقط يلوح!',
+                'لماذا الأسماك ذكية جداً؟ لأنها تعيش في مدارس!'
+            ],
+            'weather': [
+                'لست متأكداً من الطقس، لكني آمل أن يكون جميلاً!',
+                'الطقس خارج معرفتي، لكن أتمنى أن يكون مناسباً لك',
+                'لا أستطيع معرفة الطقس، لكن أتمنى لك يوماً جميلاً'
+            ],
+            'name': [
+                'اسمي بوت الحوت! سعيد بمعرفتك',
+                'يمكنك مناداتي بوت الحوت',
+                'أنا بوت الحوت، مساعدك الذكي'
+            ],
+            'goodbye': [
+                'وداعاً! أتمنى أن ألقاك قريباً',
+                'إلى اللقاء! كان من الرائع الحديث معك',
+                'مع السلامة! استمتع بوقتك'
+            ],
+            'default': [
+                'هذا مثير للاهتمام! أخبرني المزيد',
+                'أفهم ما تقول، هل يمكنك التوضيح أكثر؟',
+                'رائع! ماذا أيضاً؟',
+                'مممم، مثير للتفكير!',
+                'أجل، أفهم ذلك'
+            ]
         }
         
-        self.smart_responses = [
-            'مثير للاهتمام! أخبرني المزيد',
-            'فهمت! هل تريد أن نلعب؟',
-            'رائع! ماذا تريد أن تفعل الآن؟',
-            'حسناً! جرب اكتب "ابدأ" للعب',
-            'ممتاز! عندي فكرة - لنلعب لعبة!',
-            'أنت محق! وش رأيك نلعب شوية؟',
-            'صحيح! اكتب "ابدأ" ونبدأ المتعة',
-            'هذا جيد! هل تريد تجربة لعبة؟',
-            'فكرة جميلة! جرب ألعابنا الـ9',
-            'عندنا ألعاب كثيرة، جربها!',
-        ]
-        
-        self.confused_responses = [
-            'معليش ما فهمت! جرب تكتب بطريقة ثانية',
-            'اعذرني! ممكن توضح أكثر؟',
-            'ما قدرت أفهم، جرب كلمات أبسط',
-            'همم... ممكن تعيد السؤال؟',
-            'صعبة شوي! وش اللي تقصده؟',
-        ]
-    
-    def start(self, group_id, user_id, user_name):
-        """بدء المحادثة مع AI"""
-        game_data = {
-            'type': 'ai',
-            'mode': 'chat',
-            'user_id': user_id,
-            'user_name': user_name,
-            'conversation_count': 0
+        # كلمات مفتاحية
+        self.keywords = {
+            'greeting': ['مرحبا', 'أهلا', 'هلا', 'السلام', 'صباح', 'مساء', 'هاي', 'هلو'],
+            'how_are_you': ['كيف حالك', 'كيفك', 'شلونك', 'ايش اخبارك', 'وش اخبارك'],
+            'thanks': ['شكرا', 'شكراً', 'تسلم', 'يعطيك العافية', 'مشكور'],
+            'game': ['لعبة', 'العاب', 'ألعاب', 'لعب'],
+            'help': ['مساعدة', 'ساعدني', 'help'],
+            'joke': ['نكتة', 'اضحكني', 'طرفة'],
+            'weather': ['طقس', 'جو', 'حرارة', 'مطر'],
+            'name': ['اسمك', 'شنو اسمك', 'وش اسمك', 'من انت'],
+            'goodbye': ['وداعا', 'باي', 'سلام', 'مع السلامة']
         }
         
-        message = f"""**محادثة ذكية**
-
-مرحباً {user_name}!
-
-أنا هنا للدردشة معك! تكلم معي عن أي شيء:
-• اسألني أي سؤال
-• شاركني أفكارك
-• أو فقط سلّم عليّ
-
-نصيحة: اكتب "ابدأ" في أي وقت للعب!
-"""
+        self.conversation_count = 0
+        self.max_messages = 5
+    
+    def generate_question(self):
+        """
+        توليد سؤال جديد (رسالة ترحيب)
         
-        return {
-            'game_data': game_data,
-            'message': message
+        Returns:
+            نص السؤال
+        """
+        welcome_message = random.choice(self.responses_db['greeting'])
+        question = f"{welcome_message}\n\nيمكنك إرسال 5 رسائل كحد أقصى"
+        
+        return question
+    
+    def detect_intent(self, message):
+        """
+        تحديد نية المستخدم من الرسالة
+        
+        Args:
+            message: رسالة المستخدم
+            
+        Returns:
+            نوع النية
+        """
+        message_lower = message.lower()
+        
+        for intent, keywords in self.keywords.items():
+            for keyword in keywords:
+                if keyword in message_lower:
+                    return intent
+        
+        return 'default'
+    
+    def generate_response(self, user_message):
+        """
+        توليد رد على رسالة المستخدم
+        
+        Args:
+            user_message: رسالة المستخدم
+            
+        Returns:
+            الرد المناسب
+        """
+        # تحديد النية
+        intent = self.detect_intent(user_message)
+        
+        # اختيار رد عشوائي من القائمة
+        responses = self.responses_db.get(intent, self.responses_db['default'])
+        response = random.choice(responses)
+        
+        return response
+    
+    def check_answer(self, user_id, answer):
+        """
+        التحقق من الإجابة (معالجة الرسالة)
+        
+        Args:
+            user_id: معرف المستخدم
+            answer: رسالة المستخدم
+            
+        Returns:
+            dict مع النتيجة
+        """
+        self.conversation_count += 1
+        
+        # توليد رد
+        ai_response = self.generate_response(answer)
+        
+        # التحقق من انتهاء المحادثة
+        game_ended = self.conversation_count >= self.max_messages
+        
+        if game_ended:
+            ai_response += "\n\nانتهت المحادثة! شكراً لوقتك الممتع"
+            self.is_active = False
+        
+        result = {
+            'correct': True,
+            'ai_response': ai_response,
+            'message_count': self.conversation_count,
+            'max_messages': self.max_messages,
+            'points_earned': 0,
+            'total_points': 0,
+            'current_round': 1,
+            'total_rounds': 1,
+            'game_ended': game_ended,
+            'next_question': None
         }
+        
+        return result
     
-    def check_answer(self, game_data, answer, user_id, user_name, group_id, active_games):
-        """معالجة رسالة المستخدم وإرجاع رد"""
-        if not answer or len(answer.strip()) == 0:
-            return {'correct': False}
+    def get_hint(self):
+        """
+        لا تدعم التلميح
         
-        game_data['conversation_count'] = game_data.get('conversation_count', 0) + 1
-        answer_lower = answer.lower().strip()
-        response = self._find_response(answer_lower)
-        
-        if game_data['conversation_count'] >= 5:
-            response += '\n\nجربت ألعابنا؟ اكتب "ابدأ" !'
-        
-        return {
-            'correct': False,
-            'message': response,
-            'game_over': False
-        }
+        Returns:
+            None
+        """
+        return None
     
-    def _find_response(self, text):
-        """البحث عن أفضل رد"""
-        for keyword, responses in self.responses.items():
-            if keyword in text:
-                return random.choice(responses)
+    def show_answer(self):
+        """
+        لا تدعم إظهار الإجابة
         
-        words = text.split()
-        for word in words:
-            for keyword, responses in self.responses.items():
-                if word == keyword or word in keyword or keyword in word:
-                    return random.choice(responses)
-        
-        return random.choice(self.smart_responses if random.random() < 0.7 else self.confused_responses)
-    
-    def get_hint(self, game_data):
-        """لا يوجد تلميح في المحادثة"""
-        return "هذه محادثة حرة! تكلم معي عن أي شيء أو اكتب 'ابدأ' لبدء لعبة جديدة"
-    
-    def show_answer(self, game_data, group_id, active_games):
-        """إنهاء المحادثة"""
-        conversation_count = game_data.get('conversation_count', 0)
-        message = f"""**انتهت المحادثة**
-
-تحدثنا {conversation_count} مرة!
-
-هل تريد:
-• محادثة جديدة → اكتب "اي"
-• لعبة مختلفة → اكتب "ابدأ"
-"""
-        if group_id in active_games:
-            del active_games[group_id]
-        
-        return {'message': message}
-    
-    def create_flex_message(self, title, content, color='#00D9FF'):
-        """إنشاء Flex Message للمحادثة"""
-        return {
-            "type": "bubble",
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "contents": [
-                    {"type": "text", "text": f"{title}", "weight": "bold", "size": "xl", "color": color},
-                    {"type": "separator", "margin": "md"},
-                    {"type": "text", "text": content, "wrap": True, "margin": "md", "size": "sm"}
-                ]
-            }
-        }
+        Returns:
+            None
+        """
+        return None
