@@ -1,93 +1,172 @@
+# ============================================
+# games/game_opposite.py - لعبة ضد
+# ============================================
+
+"""
+لعبة ضد
+========
+إيجاد عكس الكلمة المعطاة
+تدعم التلميح وإظهار الإجابة
+"""
+
 import random
-from linebot.models import FlexSendMessage
-from utils import normalize_text, create_game_card, create_hint_card, create_answer_card, create_results_card
+from .base import BaseGame
+from rules import POINTS, GAMES_INFO
+from utils import normalize_text
 
-class OppositeGame:
+
+class OppositeGame(BaseGame):
+    """لعبة إيجاد عكس الكلمة"""
+    
     def __init__(self):
-        self.all_words = [
-            {"word": "كبير", "opposite": "صغير"},
-            {"word": "طويل", "opposite": "قصير"},
-            {"word": "سريع", "opposite": "بطيء"},
-            {"word": "حار", "opposite": "بارد"},
-            {"word": "قوي", "opposite": "ضعيف"},
-            {"word": "غني", "opposite": "فقير"},
-            {"word": "سعيد", "opposite": "حزين"},
-            {"word": "نظيف", "opposite": "وسخ"},
-            {"word": "جديد", "opposite": "قديم"},
-            {"word": "صعب", "opposite": "سهل"},
-            {"word": "ثقيل", "opposite": "خفيف"},
-            {"word": "واسع", "opposite": "ضيق"},
-            {"word": "عميق", "opposite": "ضحل"},
-            {"word": "شجاع", "opposite": "جبان"},
-            {"word": "ذكي", "opposite": "غبي"},
-            {"word": "نشيط", "opposite": "كسول"},
-            {"word": "جميل", "opposite": "قبيح"},
-            {"word": "مظلم", "opposite": "مضيء"},
-            {"word": "عالي", "opposite": "منخفض"},
-            {"word": "رطب", "opposite": "جاف"}
-        ]
-        self.questions = []
+        game_info = GAMES_INFO['ضد']
+        super().__init__(
+            name=game_info['name'],
+            rounds=game_info['rounds'],
+            supports_hint=game_info['supports_hint']
+        )
+        
+        # قاعدة بيانات الكلمات وأضدادها
+        self.opposites = {
+            'كبير': 'صغير',
+            'طويل': 'قصير',
+            'سريع': 'بطيء',
+            'حار': 'بارد',
+            'نظيف': 'وسخ',
+            'قوي': 'ضعيف',
+            'غني': 'فقير',
+            'سعيد': 'حزين',
+            'جميل': 'قبيح',
+            'صعب': 'سهل',
+            'ثقيل': 'خفيف',
+            'مظلم': 'مضيء',
+            'عالي': 'منخفض',
+            'واسع': 'ضيق',
+            'جديد': 'قديم',
+            'نهار': 'ليل',
+            'شمس': 'قمر',
+            'أبيض': 'أسود',
+            'فوق': 'تحت',
+            'داخل': 'خارج',
+            'قريب': 'بعيد',
+            'يمين': 'يسار',
+            'أمام': 'خلف',
+            'شرق': 'غرب',
+            'شمال': 'جنوب',
+            'حي': 'ميت',
+            'صحيح': 'خاطئ',
+            'موجود': 'معدوم',
+            'ممكن': 'مستحيل',
+            'مفيد': 'ضار',
+            'محبوب': 'مكروه',
+            'جاف': 'رطب',
+            'ناعم': 'خشن',
+            'صلب': 'لين',
+            'مفتوح': 'مغلق',
+            'واضح': 'غامض',
+            'بداية': 'نهاية',
+            'دخول': 'خروج',
+            'صعود': 'هبوط',
+            'ربح': 'خسارة',
+            'نجاح': 'فشل',
+            'صدق': 'كذب',
+            'أمانة': 'خيانة',
+            'عدل': 'ظلم',
+            'سلام': 'حرب',
+            'محبة': 'كراهية',
+            'شجاعة': 'جبن',
+            'كرم': 'بخل',
+            'علم': 'جهل',
+            'نور': 'ظلام',
+            'حياة': 'موت'
+        }
+        
         self.current_word = None
-        self.hints_used = 0
-        self.question_number = 0
-        self.total_questions = 5
-        self.player_scores = {}
-
-    def start_game(self):
-        self.questions = random.sample(self.all_words, min(self.total_questions, len(self.all_words)))
-        self.question_number = 0
-        self.player_scores = {}
-        self.hints_used = 0
-        return self.next_question()
-
-    def next_question(self):
-        if self.question_number >= self.total_questions:
-            return None
-        self.current_word = self.questions[self.question_number]
-        self.question_number += 1
-        self.hints_used = 0
+    
+    def generate_question(self):
+        """
+        توليد سؤال جديد
         
-        content = [{
-            "type": "box",
-            "layout": "vertical",
-            "backgroundColor": "#1a1f3a90",
-            "cornerRadius": "20px",
-            "paddingAll": "28px",
-            "borderWidth": "2px",
-            "borderColor": "#00D9FF50",
-            "contents": [
-                {"type": "text", "text": "ما هو عكس:", "size": "lg", "color": "#8FB9D8", "align": "center"},
-                {"type": "text", "text": self.current_word['word'], "size": "xxl", "weight": "bold", "color": "#00D9FF", "align": "center", "margin": "lg"}
-            ]
-        }]
+        Returns:
+            نص السؤال
+        """
+        # اختيار كلمة عشوائية
+        self.current_word = random.choice(list(self.opposites.keys()))
         
-        card = create_game_card("🎯 لعبة الضد", self.question_number, self.total_questions, content)
-        return FlexSendMessage(alt_text=f"السؤال {self.question_number} - لعبة الضد", contents=card)
-
+        # حفظ الإجابة (الضد)
+        self.current_answer = self.opposites[self.current_word]
+        
+        # إنشاء السؤال
+        question = f'ما هو ضد كلمة: {self.current_word}؟'
+        
+        return question
+    
+    def check_answer(self, user_id, answer):
+        """
+        التحقق من الإجابة
+        
+        Args:
+            user_id: معرف المستخدم
+            answer: إجابة المستخدم
+            
+        Returns:
+            dict مع النتيجة
+        """
+        user_answer = normalize_text(answer).lower()
+        correct_answer = normalize_text(self.current_answer).lower()
+        
+        # التحقق من التطابق
+        is_correct = user_answer == correct_answer
+        
+        # حساب النقاط
+        points_earned = 0
+        if is_correct:
+            points_earned = POINTS['correct']
+            self.update_score(user_id, points_earned)
+        
+        # الانتقال للسؤال التالي
+        game_continues = self.next_question()
+        
+        result = {
+            'correct': is_correct,
+            'correct_answer': self.current_answer,
+            'original_word': self.current_word,
+            'points_earned': points_earned,
+            'total_points': self.get_score(user_id),
+            'current_round': self.current_round,
+            'total_rounds': self.total_rounds,
+            'game_ended': not game_continues,
+            'next_question': self.current_question if game_continues else None
+        }
+        
+        return result
+    
     def get_hint(self):
-        if not self.current_word:
-            return None
-        opposite = self.current_word['opposite']
-        hint_text = f"أول حرف: {opposite[0]} " + "_ " * (len(opposite) - 1)
-        extra = f"عدد الحروف: {len(opposite)}"
-        self.hints_used += 1
-        return FlexSendMessage(alt_text="تلميح", contents=create_hint_card(hint_text, extra))
-
+        """
+        الحصول على تلميح
+        
+        Returns:
+            التلميح
+        """
+        if not self.current_answer:
+            return "لا يوجد تلميح متاح"
+        
+        answer = self.current_answer
+        
+        # تلميح: الحرف الأول وعدد الأحرف
+        first_letter = answer[0]
+        length = len(answer)
+        hint_word = first_letter + ('_' * (length - 1))
+        
+        hint = f"التلميح: {hint_word} ({length} أحرف)"
+        
+        return hint
+    
     def show_answer(self):
-        if not self.current_word:
-            return None
-        return FlexSendMessage(alt_text="الإجابة الصحيحة", contents=create_answer_card(self.current_word['opposite']))
-
-    def check_answer(self, answer, user_id, display_name):
-        if not self.current_word:
-            return None
-        if normalize_text(answer) == normalize_text(self.current_word['opposite']):
-            points = 2 if self.hints_used == 0 else 1
-            if user_id not in self.player_scores:
-                self.player_scores[user_id] = {'name': display_name, 'score': 0}
-            self.player_scores[user_id]['score'] += points
-            return {'correct': True, 'points': points}
-        return None
-
-    def get_final_results(self):
-        return create_results_card(self.player_scores)
+        """
+        إظهار الإجابة الصحيحة
+        
+        Returns:
+            الإجابة
+        """
+        return f'ضد {self.current_word} هو: {self.current_answer}'
