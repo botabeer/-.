@@ -1,11 +1,39 @@
-Flask
-line-bot-sdk
-python-dotenv
-google-generativeai
-gunicorn
-APScheduler
-redis
-pillow
-pandas
-matplotlib
-Werkzeug
+# ============================================
+# requirements.txt - المكتبات المطلوبة
+# ============================================
+
+# Flask - إطار عمل الويب
+Flask==3.0.0
+Werkzeug==3.0.1
+
+# LINE Bot SDK
+line-bot-sdk==3.5.0
+
+# متغيرات البيئة
+python-dotenv==1.0.0
+
+# خادم WSGI للإنتاج
+gunicorn==21.2.0
+
+# أدوات إضافية
+requests==2.31.0
+urllib3==2.1.0
+certifi==2023.11.17
+
+# معالجة JSON
+simplejson==3.19.2
+
+# دعم العربية
+python-bidi==0.4.2
+arabic-reshaper==3.0.0
+
+# أدوات الوقت والتاريخ
+pytz==2023.3.post1
+
+# قاعدة البيانات (SQLite مدمج في Python)
+# لا حاجة لمكتبات إضافية
+
+# أدوات التطوير (اختيارية في الإنتاج)
+# pytest==7.4.3
+# black==23.12.0
+# flake8==6.1.0
