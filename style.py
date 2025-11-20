@@ -1,255 +1,401 @@
 # ============================================
-# style.py
-# ملف الستايل الكامل للبوت
-# بدون أي رموز أو ايموجي
+# style.py - الستايل والألوان والتصاميم
 # ============================================
 
-# --------------------------------------------
-# 1) ألوان البوت (مبنية على ألوان الشعار)
-# --------------------------------------------
+"""
+ستايل بوت الحوت
+================
+هذا الملف يحتوي على:
+- الألوان المستخدمة
+- تصاميم Flex Messages
+- الأزرار
+- القوالب الجاهزة
+"""
+
+# الألوان الرئيسية
 COLORS = {
-    "primary": "#4C00FF",
-    "primary_dark": "#3100A8",
-    "secondary": "#DCC4FF",
-    "background": "#FFFFFF",
-    "text": "#1E1E1E",
-    "subtext": "#666666",
-    "success": "#48C774",
-    "danger": "#FF3860",
-    "warning": "#FFDD57",
+    'bg': '#0A0E27',           # خلفية داكنة
+    'card': '#0F2440',         # خلفية الكارد
+    'text': '#E0F2FF',         # نص أبيض مائل للأزرق
+    'text2': '#7FB3D5',        # نص ثانوي
+    'cyan': '#00D9FF',         # سماوي مضيء
+    'glow': '#5EEBFF',         # توهج
+    'sep': '#2C5F8D',          # فاصل
+    'border': '#00D9FF40',     # حدود شفافة
+    'success': '#00FF88',      # نجاح
+    'error': '#FF4466',        # خطأ
+    'warning': '#FFB800'       # تحذير
 }
 
-# --------------------------------------------
-# 2) روابط الصور والشعارات
-# --------------------------------------------
-ASSETS = {
-    "logo": "https://i.imgur.com/qcWILGi.jpeg"
-}
+# رابط الشعار
+LOGO_URL = "https://i.imgur.com/qcWILGi.jpeg"
 
-# --------------------------------------------
-# 3) الأزرار الثابتة — ألعاب رئيسية
-# --------------------------------------------
-MAIN_GAMES_BUTTONS = [
-    {"label": "أسرع", "command": "أسرع"},
-    {"label": "لعبة", "command": "لعبة"},
-    {"label": "سلسلة", "command": "سلسلة"},
-    {"label": "أغنية", "command": "أغنية"},
-    {"label": "ضد", "command": "ضد"},
-    {"label": "ترتيب", "command": "ترتيب"},
-    {"label": "تكوين", "command": "تكوين"},
-    {"label": "توافق", "command": "توافق"},
-    {"label": "Ai", "command": "Ai"},
+# الأزرار الرئيسية
+BUTTONS_MAIN = [
+    {"label": "ابدأ", "text": "ابدأ", "style": "primary", "color": COLORS['cyan']},
+    {"label": "انضم", "text": "انضم", "style": "secondary", "color": COLORS['text']},
+    {"label": "انسحب", "text": "انسحب", "style": "secondary", "color": COLORS['text']},
+    {"label": "إيقاف", "text": "إيقاف", "style": "secondary", "color": COLORS['error']}
 ]
 
-# --------------------------------------------
-# 4) أزرار المحتوى الإضافي
-# --------------------------------------------
-EXTRA_BUTTONS = [
-    {"label": "سؤال", "command": "سؤال"},
-    {"label": "منشن", "command": "منشن"},
-    {"label": "اعتراف", "command": "اعتراف"},
-    {"label": "تحدي", "command": "تحدي"},
+# أزرار التلميح والإجابة
+BUTTONS_HINT_ANSWER = [
+    {"label": "لمح", "text": "لمح", "style": "secondary", "color": COLORS['warning']},
+    {"label": "جاوب", "text": "جاوب", "style": "primary", "color": COLORS['cyan']}
 ]
 
-# ------------------------------------------------
-# مولّد أزرار موحد
-# ------------------------------------------------
-def generate_buttons(buttons_list):
-    btns = []
-    for b in buttons_list:
-        btns.append({
-            "type": "button",
-            "style": "primary",
-            "color": COLORS["primary"],
-            "action": {
-                "type": "message",
-                "label": b["label"],
-                "text": b["command"]
-            }
-        })
-    return btns
+# أزرار الإحصائيات
+BUTTONS_STATS = [
+    {"label": "نقاطي", "text": "نقاطي", "style": "secondary", "color": COLORS['text']},
+    {"label": "الصدارة", "text": "الصدارة", "style": "primary", "color": COLORS['cyan']}
+]
 
-# ------------------------------------------------
-# بطاقة ترحيب
-# ------------------------------------------------
-def welcome_flex():
-    return {
-        "type": "bubble",
-        "hero": {
-            "type": "image",
-            "url": ASSETS["logo"],
-            "size": "full",
-            "aspectRatio": "20:9",
-            "aspectMode": "cover"
-        },
-        "body": {
-            "type": "box",
-            "layout": "vertical",
-            "contents": [
-                {
-                    "type": "text",
-                    "text": "مرحباً بك",
-                    "weight": "bold",
-                    "size": "xl",
-                    "color": COLORS["primary"]
-                },
-                {
-                    "type": "text",
-                    "text": "اختر أحد الألعاب أو المحتوى المتاح",
-                    "size": "sm",
-                    "color": COLORS["subtext"],
-                    "wrap": True
-                },
-            ]
-        },
-        "footer": {
-            "type": "box",
-            "layout": "vertical",
-            "contents": generate_buttons(MAIN_GAMES_BUTTONS + EXTRA_BUTTONS)
-        }
-    }
 
-# ------------------------------------------------
-# قوانين البوت
-# ------------------------------------------------
-def rules_flex(rules_text):
+def create_welcome_card():
+    """
+    كارد الترحيب الأولي
+    """
     return {
         "type": "bubble",
         "size": "mega",
         "body": {
             "type": "box",
             "layout": "vertical",
-            "spacing": "md",
             "contents": [
                 {
-                    "type": "text",
-                    "text": "قوانين البوت",
-                    "weight": "bold",
-                    "size": "xl",
-                    "color": COLORS["primary"]
+                    "type": "image",
+                    "url": LOGO_URL,
+                    "size": "full",
+                    "aspectMode": "cover",
+                    "aspectRatio": "2:1",
+                    "gravity": "top"
                 },
                 {
-                    "type": "text",
-                    "text": rules_text,
-                    "wrap": True,
-                    "color": COLORS["text"]
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": "مرحباً بك في بوت الحوت",
+                            "weight": "bold",
+                            "size": "xl",
+                            "color": COLORS['text'],
+                            "align": "center"
+                        },
+                        {
+                            "type": "separator",
+                            "margin": "md",
+                            "color": COLORS['sep']
+                        },
+                        {
+                            "type": "text",
+                            "text": "اختر لعبة أو محتوى ترفيهي",
+                            "size": "sm",
+                            "color": COLORS['text2'],
+                            "align": "center",
+                            "margin": "md"
+                        }
+                    ],
+                    "spacing": "sm",
+                    "paddingAll": "13px"
                 }
-            ]
+            ],
+            "paddingAll": "0px",
+            "backgroundColor": COLORS['card']
         }
     }
 
-# ------------------------------------------------
-# عرض البروفايل
-# ------------------------------------------------
-def profile_flex(username, total_games, best_game, last_active):
-    return {
-        "type": "bubble",
-        "hero": {
-            "type": "image",
-            "url": ASSETS["logo"],
-            "size": "full",
-            "aspectRatio": "20:9",
-            "aspectMode": "cover"
-        },
-        "body": {
-            "layout": "vertical",
-            "type": "box",
-            "contents": [
-                {"type": "text", "text": username, "weight": "bold", "size": "lg"},
-                {"type": "separator", "margin": "md"},
-                {"type": "text", "text": f"عدد الألعاب: {total_games}", "margin": "md"},
-                {"type": "text", "text": f"أفضل لعبة: {best_game}"},
-                {"type": "text", "text": f"آخر نشاط: {last_active}", "margin": "sm"},
-            ]
-        }
-    }
 
-# ------------------------------------------------
-# عرض الترتيب
-# ------------------------------------------------
-def leaderboard_flex(top_players):
-    rows = []
-
-    for i, p in enumerate(top_players):
-        rank_color = COLORS["primary"]
-        if i == 0:
-            rank_color = "#FFD700"
-        elif i == 1:
-            rank_color = "#C0C0C0"
-        elif i == 2:
-            rank_color = "#CD7F32"
-
-        rows.append({
+def create_game_question_card(game_name, question_text, round_num, total_rounds, supports_hint=True):
+    """
+    كارد السؤال في اللعبة
+    
+    Args:
+        game_name: اسم اللعبة
+        question_text: نص السؤال
+        round_num: رقم الجولة الحالية
+        total_rounds: إجمالي الجولات
+        supports_hint: هل اللعبة تدعم التلميح والإجابة
+    """
+    contents = [
+        {
             "type": "box",
             "layout": "horizontal",
             "contents": [
-                {"type": "text", "text": f"{i+1}", "color": rank_color, "weight": "bold"},
-                {"type": "text", "text": p["name"], "margin": "sm", "flex": 3},
-                {"type": "text", "text": str(p["score"]), "align": "end", "color": COLORS["primary_dark"]}
+                {
+                    "type": "text",
+                    "text": game_name,
+                    "weight": "bold",
+                    "size": "lg",
+                    "color": COLORS['cyan']
+                },
+                {
+                    "type": "text",
+                    "text": f"{round_num}/{total_rounds}",
+                    "size": "sm",
+                    "color": COLORS['text2'],
+                    "align": "end"
+                }
             ]
-        })
-
-    return {
-        "type": "bubble",
-        "body": {
-            "layout": "vertical",
-            "type": "box",
-            "contents": [
-                {"type": "text", "text": "ترتيب اللاعبين", "weight": "bold", "size": "xl", "color": COLORS["primary"]},
-                {"type": "separator", "margin": "md"},
-                *rows
-            ]
+        },
+        {
+            "type": "separator",
+            "margin": "md",
+            "color": COLORS['sep']
+        },
+        {
+            "type": "text",
+            "text": question_text,
+            "wrap": True,
+            "color": COLORS['text'],
+            "size": "md",
+            "margin": "lg"
         }
-    }
-
-# ------------------------------------------------
-# بداية لعبة
-# ------------------------------------------------
-def start_game_flex(game_name, description):
-    return {
-        "type": "bubble",
-        "size": "mega",
-        "hero": {
-            "type": "image",
-            "url": ASSETS["logo"],
-            "size": "full",
-            "aspectMode": "cover",
-            "aspectRatio": "20:9"
-        },
-        "body": {
-            "layout": "vertical",
+    ]
+    
+    if supports_hint:
+        contents.append({
             "type": "box",
-            "contents": [
-                {"type": "text", "text": game_name, "color": COLORS["primary"], "weight": "bold", "size": "xl"},
-                {"type": "text", "text": description, "wrap": True, "color": COLORS["subtext"], "margin": "md"},
-            ]
-        },
-        "footer": {
-            "layout": "vertical",
-            "type": "box",
+            "layout": "horizontal",
             "contents": [
                 {
                     "type": "button",
+                    "action": {
+                        "type": "message",
+                        "label": "لمح",
+                        "text": "لمح"
+                    },
+                    "style": "secondary",
+                    "color": COLORS['warning']
+                },
+                {
+                    "type": "button",
+                    "action": {
+                        "type": "message",
+                        "label": "جاوب",
+                        "text": "جاوب"
+                    },
                     "style": "primary",
-                    "color": COLORS["primary"],
-                    "action": {"type": "message", "label": "ابدأ", "text": f"ابدأ {game_name}"}
+                    "color": COLORS['cyan']
                 }
-            ]
+            ],
+            "spacing": "sm",
+            "margin": "lg"
+        })
+    
+    return {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": contents,
+            "backgroundColor": COLORS['card'],
+            "paddingAll": "20px"
         }
     }
 
-# ------------------------------------------------
-# عرض محتوى الملفات النصية
-# ------------------------------------------------
-def content_display_flex(title, text):
+
+def create_result_card(title, message, points=None, is_success=True):
+    """
+    كارد النتيجة
+    """
+    color = COLORS['success'] if is_success else COLORS['error']
+    
+    contents = [
+        {
+            "type": "text",
+            "text": title,
+            "weight": "bold",
+            "size": "xl",
+            "color": color,
+            "align": "center"
+        },
+        {
+            "type": "separator",
+            "margin": "md",
+            "color": COLORS['sep']
+        },
+        {
+            "type": "text",
+            "text": message,
+            "wrap": True,
+            "color": COLORS['text'],
+            "size": "md",
+            "margin": "md",
+            "align": "center"
+        }
+    ]
+    
+    if points is not None:
+        contents.append({
+            "type": "text",
+            "text": f"النقاط: {points:+d}",
+            "color": COLORS['cyan'],
+            "size": "lg",
+            "margin": "md",
+            "align": "center",
+            "weight": "bold"
+        })
+    
+    return {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": contents,
+            "backgroundColor": COLORS['card'],
+            "paddingAll": "20px"
+        }
+    }
+
+
+def create_leaderboard_card(players):
+    """
+    كارد المتصدرين
+    
+    Args:
+        players: قائمة اللاعبين [(name, points, rank), ...]
+    """
+    contents = [
+        {
+            "type": "text",
+            "text": "المتصدرون",
+            "weight": "bold",
+            "size": "xl",
+            "color": COLORS['cyan'],
+            "align": "center"
+        },
+        {
+            "type": "separator",
+            "margin": "md",
+            "color": COLORS['sep']
+        }
+    ]
+    
+    for name, points, rank in players[:10]:
+        rank_colors = {1: COLORS['warning'], 2: COLORS['text'], 3: COLORS['text2']}
+        rank_color = rank_colors.get(rank, COLORS['text2'])
+        
+        contents.append({
+            "type": "box",
+            "layout": "horizontal",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": f"{rank}.",
+                    "size": "sm",
+                    "color": rank_color,
+                    "flex": 1
+                },
+                {
+                    "type": "text",
+                    "text": name,
+                    "size": "sm",
+                    "color": COLORS['text'],
+                    "flex": 4
+                },
+                {
+                    "type": "text",
+                    "text": str(points),
+                    "size": "sm",
+                    "color": COLORS['cyan'],
+                    "align": "end",
+                    "flex": 2
+                }
+            ],
+            "margin": "md"
+        })
+    
+    return {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": contents,
+            "backgroundColor": COLORS['card'],
+            "paddingAll": "20px"
+        }
+    }
+
+
+def create_stats_card(name, points, games_played, games_won):
+    """
+    كارد الإحصائيات الشخصية
+    """
+    win_rate = (games_won / games_played * 100) if games_played > 0 else 0
+    
     return {
         "type": "bubble",
         "body": {
             "type": "box",
             "layout": "vertical",
             "contents": [
-                {"type": "text", "text": title, "weight": "bold", "size": "xl", "color": COLORS["primary"]},
-                {"type": "text", "text": text, "wrap": True, "margin": "md"},
-            ]
+                {
+                    "type": "text",
+                    "text": "إحصائياتك",
+                    "weight": "bold",
+                    "size": "xl",
+                    "color": COLORS['cyan'],
+                    "align": "center"
+                },
+                {
+                    "type": "separator",
+                    "margin": "md",
+                    "color": COLORS['sep']
+                },
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                        {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "contents": [
+                                {"type": "text", "text": "الاسم:", "color": COLORS['text2'], "flex": 2},
+                                {"type": "text", "text": name, "color": COLORS['text'], "flex": 3}
+                            ]
+                        },
+                        {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "contents": [
+                                {"type": "text", "text": "النقاط:", "color": COLORS['text2'], "flex": 2},
+                                {"type": "text", "text": str(points), "color": COLORS['cyan'], "flex": 3, "weight": "bold"}
+                            ],
+                            "margin": "md"
+                        },
+                        {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "contents": [
+                                {"type": "text", "text": "الألعاب:", "color": COLORS['text2'], "flex": 2},
+                                {"type": "text", "text": str(games_played), "color": COLORS['text'], "flex": 3}
+                            ],
+                            "margin": "md"
+                        },
+                        {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "contents": [
+                                {"type": "text", "text": "الفوز:", "color": COLORS['text2'], "flex": 2},
+                                {"type": "text", "text": str(games_won), "color": COLORS['success'], "flex": 3}
+                            ],
+                            "margin": "md"
+                        },
+                        {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "contents": [
+                                {"type": "text", "text": "نسبة الفوز:", "color": COLORS['text2'], "flex": 2},
+                                {"type": "text", "text": f"{win_rate:.1f}%", "color": COLORS['warning'], "flex": 3}
+                            ],
+                            "margin": "md"
+                        }
+                    ],
+                    "margin": "lg"
+                }
+            ],
+            "backgroundColor": COLORS['card'],
+            "paddingAll": "20px"
         }
     }
