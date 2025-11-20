@@ -1,1090 +1,663 @@
-from flask import Flask, request, abort, jsonify
-from linebot import LineBotApi, WebhookHandler
-from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage, FlexSendMessage
-import os
-import sqlite3
-import logging
-import random
-import time
-from collections import defaultdict
-from datetime import datetime, timedelta
-from contextlib import contextmanager
+# ============================================
+# app.py - الملف الرئيسي لبوت الحوت
+# ============================================
 
-# إعداد Logging المحسّن
+"""
+بوت الحوت - LINE Bot
+====================
+بوت تفاعلي للألعاب والمحتوى الترفيهي
+"""
+
+import os
+import sys
+import logging
+from datetime import datetime
+from flask import Flask, request, abort
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError, LineBotApiError
+from linebot.models import (
+    MessageEvent, TextMessage, TextSendMessage,
+    FlexSendMessage, QuickReply, QuickReplyButton,
+    MessageAction
+)
+
+# استيراد الوحدات المخصصة
+from config import *
+from rules import POINTS, GAME_SETTINGS, GAMES_INFO, COMMANDS, SYSTEM_MESSAGES, GAME_RULES
+from style import (
+    COLORS, create_welcome_card, create_game_question_card,
+    create_result_card, create_leaderboard_card, create_stats_card
+)
+from games import (
+    start_game, get_active_game, stop_game, check_game_answer,
+    get_hint, show_answer, get_game_state, GAME_CLASSES
+)
+from utils import (
+    random_choice_from_file, validate_answer, sanitize_input,
+    is_valid_user_id, parse_command, normalize_text
+)
+from init_db import init_database, verify_database
+
+# إعداد السجل
 logging.basicConfig(
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    level=logging.INFO,
-    handlers=[
-        logging.FileHandler('whale_bot.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
+    level=getattr(logging, LOG_LEVEL),
+    format=LOG_FORMAT
 )
 logger = logging.getLogger(__name__)
 
-# ══════════════════════════════════════════════════════════════
-# الإعدادات الافتراضية (تُحمّل دائماً أولاً)
-# ══════════════════════════════════════════════════════════════
-DB_NAME = 'whale_bot.db'
-C = {
-    'bg': '#0A0E27',
-    'topbg': '#88AEE0',
-    'card': '#0F2440',
-    'cyan': '#00D9FF',
-    'text': '#E0F2FF',
-    'text2': '#7FB3D5',
-    'sep': '#1F3A53'
-}
-POINTS = {'correct': 2, 'hint': -1}
-RATE_LIMIT = {'max_requests': 20, 'window': 60}
-CMDS = {
-    'start': ['ابدأ', 'start', 'بدء', 'هاي'],
-    'help': ['مساعدة', 'help'],
-    'stats': ['نقاطي', 'احصائياتي'],
-    'leaderboard': ['الصدارة', 'المتصدرين'],
-    'stop': ['إيقاف', 'stop', 'ايقاف'],
-    'hint': ['لمح', 'تلميح'],
-    'answer': ['جاوب', 'الجواب'],
-    'join': ['انضم', 'join'],
-    'leave': ['انسحب', 'leave'],
-    'replay': ['إعادة', 'اعادة']
-}
-RANK_EMOJIS = {1: '🥇', 2: '🥈', 3: '🥉', 4: '4️⃣', 5: '5️⃣', 6: '6️⃣', 7: '7️⃣', 8: '8️⃣', 9: '9️⃣', 10: '🔟'}
-
-# محاولة استيراد الإعدادات من config.py (اختياري)
-try:
-    from config import *
-    logger.info("✓ تم تحميل config.py وتحديث الإعدادات")
-except ImportError:
-    logger.info("ℹ️ ملف config.py غير موجود - استخدام الإعدادات الافتراضية")
-except Exception as e:
-    logger.warning(f"⚠️ خطأ في تحميل config.py: {e} - استخدام الإعدادات الافتراضية")
-
-# رابط اللوجو الجديد
-LOGO_URL = "https://i.imgur.com/qcWILGi.jpeg"
-
-# تحميل الألعاب
-GAMES_LOADED = False
-try:
-    from games import start_game, check_game_answer, get_hint, show_answer
-    GAMES_LOADED = True
-    logger.info("✓ تم تحميل games.py بنجاح")
-except Exception as e:
-    logger.error(f"✗ خطأ في تحميل games.py: {e}")
-
+# إنشاء تطبيق Flask
 app = Flask(__name__)
 
-# التحقق من المتغيرات البيئية
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
-LINE_CHANNEL_SECRET = os.getenv('LINE_CHANNEL_SECRET')
+# إعداد LINE Bot API
+try:
+    line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+    handler = WebhookHandler(LINE_CHANNEL_SECRET)
+    logger.info("LINE Bot API initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize LINE Bot API: {e}")
+    sys.exit(1)
 
-if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_CHANNEL_SECRET:
-    logger.error("⚠️ متغيرات LINE غير موجودة!")
-    raise ValueError("LINE credentials required")
+# تهيئة قاعدة البيانات
+try:
+    if not verify_database(DATABASE_PATH):
+        logger.info("Initializing database...")
+        init_database(DATABASE_PATH)
+    logger.info("Database ready")
+except Exception as e:
+    logger.error(f"Database initialization failed: {e}")
+    sys.exit(1)
 
-line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
-handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# المتغيرات العامة
-active_games = {}
-rate_limiter = defaultdict(list)
+# ============================================
+# دوال قاعدة البيانات
+# ============================================
 
-# قاعدة البيانات
-DB_SCHEMA = '''
-CREATE TABLE IF NOT EXISTS players (
-    user_id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    points INTEGER DEFAULT 0,
-    games_played INTEGER DEFAULT 0,
-    games_won INTEGER DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+import sqlite3
 
-CREATE INDEX IF NOT EXISTS idx_points ON players(points DESC);
-CREATE INDEX IF NOT EXISTS idx_games_won ON players(games_won DESC);
-CREATE INDEX IF NOT EXISTS idx_last_active ON players(last_active DESC);
-'''
-
-@contextmanager
 def get_db_connection():
-    """Context manager لإدارة اتصال قاعدة البيانات"""
-    conn = None
-    try:
-        conn = sqlite3.connect(DB_NAME, timeout=10)
-        conn.row_factory = sqlite3.Row
-        yield conn
-        conn.commit()
-    except sqlite3.Error as e:
-        if conn:
-            conn.rollback()
-        logger.error(f"خطأ في قاعدة البيانات: {e}")
-        raise
-    finally:
-        if conn:
-            conn.close()
+    """الحصول على اتصال بقاعدة البيانات"""
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-def init_db():
-    """تهيئة قاعدة البيانات"""
+
+def get_or_create_player(user_id, name):
+    """الحصول على أو إنشاء لاعب"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
     try:
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.executescript(DB_SCHEMA)
-            logger.info("✓ قاعدة البيانات جاهزة")
+        # التحقق من وجود اللاعب
+        cursor.execute('SELECT * FROM players WHERE user_id = ?', (user_id,))
+        player = cursor.fetchone()
+        
+        if not player:
+            # إنشاء لاعب جديد
+            cursor.execute('''
+                INSERT INTO players (user_id, name)
+                VALUES (?, ?)
+            ''', (user_id, name))
+            conn.commit()
+            logger.info(f"New player created: {name} ({user_id})")
+        else:
+            # تحديث آخر نشاط
+            cursor.execute('''
+                UPDATE players 
+                SET last_active = CURRENT_TIMESTAMP 
+                WHERE user_id = ?
+            ''', (user_id,))
+            conn.commit()
+        
+        # الحصول على بيانات اللاعب
+        cursor.execute('SELECT * FROM players WHERE user_id = ?', (user_id,))
+        return dict(cursor.fetchone())
+        
+    except Exception as e:
+        logger.error(f"Database error in get_or_create_player: {e}")
+        conn.rollback()
+        return None
+    finally:
+        conn.close()
+
+
+def update_player_points(user_id, points_change):
+    """تحديث نقاط اللاعب"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute('''
+            UPDATE players 
+            SET points = points + ? 
+            WHERE user_id = ?
+        ''', (points_change, user_id))
+        conn.commit()
         return True
     except Exception as e:
-        logger.error(f"✗ خطأ في تهيئة قاعدة البيانات: {e}")
+        logger.error(f"Error updating points: {e}")
+        conn.rollback()
         return False
+    finally:
+        conn.close()
 
-# تهيئة قاعدة البيانات عند بدء التطبيق
-init_db()
-
-def db_execute(query, params=(), fetch=False):
-    """تنفيذ استعلام SQL مع معالجة الأخطاء"""
-    try:
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(query, params)
-            if fetch:
-                return cursor.fetchall()
-            return True
-    except sqlite3.OperationalError as e:
-        if "no such table" in str(e):
-            logger.warning("⚠ إعادة تهيئة قاعدة البيانات...")
-            if init_db():
-                return db_execute(query, params, fetch)
-        logger.error(f"خطأ في التنفيذ: {e}")
-        return None if fetch else False
-    except Exception as e:
-        logger.error(f"خطأ في قاعدة البيانات: {e}")
-        return None if fetch else False
-
-# دوال إدارة المستخدمين
-def register_user(user_id, name):
-    """تسجيل مستخدم جديد أو تحديثه"""
-    return db_execute(
-        'INSERT OR REPLACE INTO players (user_id, name, last_active) VALUES (?, ?, CURRENT_TIMESTAMP)',
-        (user_id, name)
-    )
-
-def update_user_activity(user_id, name):
-    """تحديث آخر نشاط للمستخدم"""
-    db_execute(
-        'UPDATE players SET name = ?, last_active = CURRENT_TIMESTAMP WHERE user_id = ?',
-        (name, user_id)
-    )
-
-def is_registered(user_id):
-    """التحقق من تسجيل المستخدم"""
-    result = db_execute('SELECT user_id FROM players WHERE user_id = ?', (user_id,), fetch=True)
-    return result is not None and len(result) > 0
-
-def update_points(user_id, points):
-    """تحديث نقاط المستخدم"""
-    if points != 0:
-        db_execute(
-            'UPDATE players SET points = points + ?, last_active = CURRENT_TIMESTAMP WHERE user_id = ?',
-            (points, user_id)
-        )
 
 def update_game_stats(user_id, won=False):
     """تحديث إحصائيات الألعاب"""
-    if won:
-        db_execute(
-            'UPDATE players SET games_played = games_played + 1, games_won = games_won + 1, last_active = CURRENT_TIMESTAMP WHERE user_id = ?',
-            (user_id,)
-        )
-    else:
-        db_execute(
-            'UPDATE players SET games_played = games_played + 1, last_active = CURRENT_TIMESTAMP WHERE user_id = ?',
-            (user_id,)
-        )
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        if won:
+            cursor.execute('''
+                UPDATE players 
+                SET games_played = games_played + 1,
+                    games_won = games_won + 1
+                WHERE user_id = ?
+            ''', (user_id,))
+        else:
+            cursor.execute('''
+                UPDATE players 
+                SET games_played = games_played + 1
+                WHERE user_id = ?
+            ''', (user_id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"Error updating game stats: {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
 
-def get_user_stats(user_id):
-    """الحصول على إحصائيات المستخدم"""
-    result = db_execute(
-        'SELECT name, points, games_played, games_won FROM players WHERE user_id = ?',
-        (user_id,), fetch=True
-    )
-    if result and len(result) > 0:
-        row = result[0]
-        return {
-            'name': row[0],
-            'points': row[1],
-            'games_played': row[2],
-            'games_won': row[3]
-        }
-    return None
 
 def get_leaderboard(limit=10):
-    """الحصول على لوحة الصدارة"""
-    result = db_execute(
-        'SELECT name, points, games_won FROM players ORDER BY points DESC, games_won DESC LIMIT ?',
-        (limit,), fetch=True
-    )
-    return result if result else []
-
-def clean_inactive_users():
-    """حذف المستخدمين غير النشطين (45+ يوم)"""
+    """الحصول على قائمة المتصدرين"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
     try:
-        cutoff_date = datetime.now() - timedelta(days=45)
-        db_execute(
-            'DELETE FROM players WHERE last_active < ?',
-            (cutoff_date.isoformat(),)
-        )
-        logger.info("✓ تم تنظيف المستخدمين غير النشطين")
+        cursor.execute('''
+            SELECT name, points, 
+                   ROW_NUMBER() OVER (ORDER BY points DESC) as rank
+            FROM players 
+            WHERE points > 0
+            ORDER BY points DESC 
+            LIMIT ?
+        ''', (limit,))
+        
+        return [dict(row) for row in cursor.fetchall()]
     except Exception as e:
-        logger.error(f"خطأ في التنظيف: {e}")
+        logger.error(f"Error getting leaderboard: {e}")
+        return []
+    finally:
+        conn.close()
 
-# Rate Limiter
-def check_rate_limit(user_id):
-    """فحص حد الطلبات للمستخدم"""
-    now = time.time()
-    user_requests = rate_limiter[user_id]
-    user_requests[:] = [t for t in user_requests if now - t < RATE_LIMIT['window']]
+
+def get_player_stats(user_id):
+    """الحصول على إحصائيات اللاعب"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
     
-    if len(user_requests) >= RATE_LIMIT['max_requests']:
-        return False
+    try:
+        cursor.execute('''
+            SELECT name, points, games_played, games_won 
+            FROM players 
+            WHERE user_id = ?
+        ''', (user_id,))
+        
+        result = cursor.fetchone()
+        return dict(result) if result else None
+    except Exception as e:
+        logger.error(f"Error getting player stats: {e}")
+        return None
+    finally:
+        conn.close()
+
+
+# ============================================
+# معالجات الأوامر
+# ============================================
+
+def handle_start_command(user_id, user_name):
+    """معالجة أمر البدء"""
+    # التأكد من تسجيل المستخدم
+    player = get_or_create_player(user_id, user_name)
     
-    user_requests.append(now)
-    return True
+    # إنشاء رسالة الترحيب
+    welcome_flex = FlexSendMessage(
+        alt_text="مرحباً بك في بوت الحوت",
+        contents=create_welcome_card()
+    )
+    
+    # إنشاء Quick Reply للألعاب
+    quick_reply_items = []
+    for game_key, game_info in GAMES_INFO.items():
+        quick_reply_items.append(
+            QuickReplyButton(
+                action=MessageAction(
+                    label=game_info['name'],
+                    text=game_key
+                )
+            )
+        )
+    
+    quick_reply = QuickReply(items=quick_reply_items[:13])  # حد أقصى 13 عنصر
+    
+    # رسالة نصية مع Quick Reply
+    text_message = TextSendMessage(
+        text="اختر لعبة من القائمة:",
+        quick_reply=quick_reply
+    )
+    
+    return [welcome_flex, text_message]
 
-# دوال Flex Messages
-def create_welcome_card():
-    """إنشاء بطاقة الترحيب"""
-    return {
-        "type": "bubble",
-        "size": "mega",
-        "body": {
-            "type": "box",
-            "layout": "vertical",
-            "backgroundColor": C['bg'],
-            "paddingAll": "0px",
-            "contents": [
-                {
-                    "type": "box",
-                    "layout": "vertical",
-                    "backgroundColor": C['topbg'],
-                    "paddingTop": "40px",
-                    "paddingBottom": "150px",
-                    "contents": [
-                        {
-                            "type": "box",
-                            "layout": "vertical",
-                            "cornerRadius": "25px",
-                            "backgroundColor": C['bg'],
-                            "paddingAll": "25px",
-                            "offsetTop": "70px",
-                            "contents": [
-                                {
-                                    "type": "image",
-                                    "url": LOGO_URL,
-                                    "size": "120px",
-                                    "align": "center"
-                                },
-                                {
-                                    "type": "text",
-                                    "text": "بوت الحوت",
-                                    "weight": "bold",
-                                    "size": "xxl",
-                                    "align": "center",
-                                    "margin": "md",
-                                    "color": C['cyan']
-                                },
-                                {
-                                    "type": "separator",
-                                    "color": C['sep'],
-                                    "margin": "md"
-                                },
-                                {
-                                    "type": "text",
-                                    "text": "الألعاب المتوفرة",
-                                    "align": "center",
-                                    "size": "lg",
-                                    "weight": "bold",
-                                    "color": C['text'],
-                                    "margin": "md"
-                                },
-                                {
-                                    "type": "box",
-                                    "layout": "vertical",
-                                    "cornerRadius": "15px",
-                                    "backgroundColor": C['card'],
-                                    "paddingAll": "20px",
-                                    "margin": "md",
-                                    "contents": [
-                                        {"type": "text", "text": "1. أسرع\n- أول من يكتب الكلمة أو الدعاء الصحيح يفوز", "size": "sm", "color": C['text'], "wrap": True},
-                                        {"type": "text", "text": "2. لعبة\n- إنسان، حيوان، نبات، بلد", "size": "sm", "color": C['text'], "wrap": True, "margin": "md"},
-                                        {"type": "text", "text": "3. سلسلة الكلمات\n- كلمة تبدأ بالحرف الأخير من السابقة", "size": "sm", "color": C['text'], "wrap": True, "margin": "md"},
-                                        {"type": "text", "text": "4. أغنية\n- تخمين المغني من كلمات الأغنية", "size": "sm", "color": C['text'], "wrap": True, "margin": "md"},
-                                        {"type": "text", "text": "5. ضد\n- اعكس الكلمة المعطاة", "size": "sm", "color": C['text'], "wrap": True, "margin": "md"},
-                                        {"type": "text", "text": "6. ترتيب\n- ترتيب العناصر حسب المطلوب", "size": "sm", "color": C['text'], "wrap": True, "margin": "md"},
-                                        {"type": "text", "text": "7. تكوين كلمات\n- تكوين 3 كلمات من 6 حروف", "size": "sm", "color": C['text'], "wrap": True, "margin": "md"},
-                                        {"type": "text", "text": "8. توافق\n- حساب نسبة التوافق بين اسمين", "size": "sm", "color": C['text'], "wrap": True, "margin": "md"},
-                                        {"type": "text", "text": "9. Ai (AiChat)\n- محادثة ذكية قصيرة", "size": "sm", "color": C['text'], "wrap": True, "margin": "md"}
-                                    ]
-                                },
-                                {
-                                    "type": "text",
-                                    "text": "محتوى ترفيهي\nسؤال • منشن • اعتراف • تحدي",
-                                    "align": "center",
-                                    "size": "md",
-                                    "color": C['text2'],
-                                    "margin": "lg",
-                                    "wrap": True
-                                },
-                                {
-                                    "type": "box",
-                                    "layout": "vertical",
-                                    "spacing": "sm",
-                                    "margin": "lg",
-                                    "contents": [
-                                        {"type": "button", "style": "primary", "color": C['cyan'], "action": {"type": "message", "label": "ابدأ", "text": "ابدأ"}},
-                                        {"type": "button", "style": "secondary", "color": "#F1F1F1", "action": {"type": "message", "label": "نقاطي", "text": "نقاطي"}},
-                                        {"type": "button", "style": "secondary", "color": "#F1F1F1", "action": {"type": "message", "label": "الصدارة", "text": "الصدارة"}}
-                                    ]
-                                }
-                            ]
-                        }
-                    ]
-                }
-            ]
-        }
-    }
 
-def create_help_card():
-    """إنشاء بطاقة المساعدة"""
-    return {
-        "type": "bubble",
-        "size": "mega",
-        "body": {
-            "type": "box",
-            "layout": "vertical",
-            "backgroundColor": C['bg'],
-            "paddingAll": "0px",
-            "contents": [
-                {
-                    "type": "box",
-                    "layout": "vertical",
-                    "backgroundColor": C['topbg'],
-                    "paddingTop": "40px",
-                    "paddingBottom": "150px",
-                    "contents": [
-                        {
-                            "type": "box",
-                            "layout": "vertical",
-                            "cornerRadius": "25px",
-                            "backgroundColor": C['bg'],
-                            "paddingAll": "25px",
-                            "offsetTop": "70px",
-                            "contents": [
-                                {"type": "text", "text": "المساعدة", "weight": "bold", "size": "xxl", "align": "center", "color": C['cyan']},
-                                {"type": "text", "text": "الأوامر المتاحة", "align": "center", "size": "md", "color": C['text'], "margin": "md"},
-                                {"type": "separator", "color": C['sep'], "margin": "md"},
-                                {
-                                    "type": "box",
-                                    "layout": "vertical",
-                                    "cornerRadius": "15px",
-                                    "backgroundColor": C['card'],
-                                    "paddingAll": "18px",
-                                    "margin": "md",
-                                    "contents": [
-                                        {"type": "text", "text": "• لمح → تلميح ذكي للسؤال", "size": "sm", "color": C['text'], "wrap": True},
-                                        {"type": "text", "text": "• جاوب → يعرض الإجابة ثم ينتقل للسؤال التالي", "size": "sm", "color": C['text'], "wrap": True, "margin": "xs"},
-                                        {"type": "text", "text": "• إعادة → يعيد تشغيل اللعبة الحالية", "size": "sm", "color": C['text'], "wrap": True, "margin": "xs"},
-                                        {"type": "text", "text": "• إيقاف → ينهي اللعبة الجارية فوراً", "size": "sm", "color": C['text'], "wrap": True, "margin": "xs"},
-                                        {"type": "text", "text": "• انضم → يسجل اللاعب في الجولة", "size": "sm", "color": C['text'], "wrap": True, "margin": "xs"},
-                                        {"type": "text", "text": "• انسحب → يلغي تسجيل اللاعب", "size": "sm", "color": C['text'], "wrap": True, "margin": "xs"},
-                                        {"type": "text", "text": "• نقاطي → عرض نقاطك الحالية", "size": "sm", "color": C['text'], "wrap": True, "margin": "xs"},
-                                        {"type": "text", "text": "• الصدارة → عرض أفضل اللاعبين", "size": "sm", "color": C['text'], "wrap": True, "margin": "xs"}
-                                    ]
-                                },
-                                {
-                                    "type": "box",
-                                    "layout": "horizontal",
-                                    "spacing": "sm",
-                                    "margin": "lg",
-                                    "contents": [
-                                        {"type": "button", "style": "secondary", "color": "#F1F1F1", "action": {"type": "message", "label": "نقاطي", "text": "نقاطي"}},
-                                        {"type": "button", "style": "secondary", "color": "#F1F1F1", "action": {"type": "message", "label": "الصدارة", "text": "الصدارة"}}
-                                    ]
-                                },
-                                {"type": "text", "text": "© بوت الحوت 2025", "align": "center", "size": "xs", "color": C['text2'], "margin": "md"}
-                            ]
-                        }
-                    ]
-                }
-            ]
-        }
-    }
+def handle_stats_command(user_id):
+    """معالجة أمر الإحصائيات"""
+    stats = get_player_stats(user_id)
+    
+    if not stats:
+        return [TextSendMessage(text=SYSTEM_MESSAGES['not_registered'])]
+    
+    stats_flex = FlexSendMessage(
+        alt_text="إحصائياتك",
+        contents=create_stats_card(
+            stats['name'],
+            stats['points'],
+            stats['games_played'],
+            stats['games_won']
+        )
+    )
+    
+    return [stats_flex]
 
-def create_stats_card(stats):
-    """إنشاء بطاقة الإحصائيات"""
-    return {
-        "type": "bubble",
-        "size": "mega",
-        "body": {
-            "type": "box",
-            "layout": "vertical",
-            "backgroundColor": C['bg'],
-            "paddingAll": "20px",
-            "contents": [
-                {"type": "text", "text": "📊 إحصائياتك", "weight": "bold", "size": "xl", "color": C['cyan'], "align": "center"},
-                {"type": "separator", "color": C['sep'], "margin": "md"},
-                {
-                    "type": "box",
-                    "layout": "vertical",
-                    "backgroundColor": C['card'],
-                    "cornerRadius": "12px",
-                    "paddingAll": "18px",
-                    "margin": "md",
-                    "contents": [
-                        {"type": "text", "text": f"👤 {stats['name']}", "size": "lg", "color": C['text'], "weight": "bold", "wrap": True},
-                        {"type": "text", "text": f"⭐ النقاط: {stats['points']}", "size": "md", "color": C['text'], "margin": "md"},
-                        {"type": "text", "text": f"🎮 الألعاب: {stats['games_played']}", "size": "md", "color": C['text'], "margin": "sm"},
-                        {"type": "text", "text": f"🏆 الانتصارات: {stats['games_won']}", "size": "md", "color": C['text'], "margin": "sm"}
-                    ]
-                }
-            ]
-        }
-    }
 
-def create_leaderboard_card(leaderboard):
-    """إنشاء بطاقة لوحة الصدارة"""
-    contents = [
-        {"type": "text", "text": "🏆 لوحة الصدارة", "weight": "bold", "size": "xl", "color": C['cyan'], "align": "center"},
-        {"type": "separator", "color": C['sep'], "margin": "md"}
+def handle_leaderboard_command():
+    """معالجة أمر المتصدرين"""
+    players = get_leaderboard(10)
+    
+    if not players:
+        return [TextSendMessage(text="لا يوجد لاعبون في القائمة بعد")]
+    
+    # تحويل البيانات للفورمات المطلوب
+    leaderboard_data = [
+        (p['name'], p['points'], p['rank']) 
+        for p in players
     ]
     
-    for i, row in enumerate(leaderboard[:10], 1):
-        emoji = RANK_EMOJIS.get(i, f"{i}.")
-        name, points, wins = row[0], row[1], row[2]
-        contents.append({
-            "type": "box",
-            "layout": "horizontal",
-            "backgroundColor": C['card'],
-            "cornerRadius": "10px",
-            "paddingAll": "12px",
-            "margin": "sm",
-            "contents": [
-                {"type": "text", "text": f"{emoji} {name}", "size": "sm", "color": C['text'], "flex": 3, "wrap": True},
-                {"type": "text", "text": f"{points} نقطة", "size": "xs", "color": C['text2'], "align": "end", "flex": 2}
-            ]
-        })
+    leaderboard_flex = FlexSendMessage(
+        alt_text="قائمة المتصدرين",
+        contents=create_leaderboard_card(leaderboard_data)
+    )
     
-    return {
-        "type": "bubble",
-        "size": "mega",
-        "body": {
-            "type": "box",
-            "layout": "vertical",
-            "backgroundColor": C['bg'],
-            "paddingAll": "20px",
-            "contents": contents
-        }
-    }
+    return [leaderboard_flex]
 
-# معالج Webhook
+
+def handle_help_command():
+    """معالجة أمر المساعدة"""
+    help_text = f"""مرحباً بك في بوت الحوت
+
+الألعاب المتاحة:
+{chr(10).join([f'- {info["name"]}: {info["description"]}' for info in GAMES_INFO.values()])}
+
+{GAME_RULES}
+
+للبدء، اختر لعبة من القائمة أو اكتب اسمها."""
+    
+    return [TextSendMessage(text=help_text)]
+
+
+def handle_game_start(user_id, game_key):
+    """بدء لعبة جديدة"""
+    # التحقق من وجود اللعبة
+    if game_key not in GAMES_INFO:
+        return [TextSendMessage(text="لعبة غير موجودة")]
+    
+    game_info = GAMES_INFO[game_key]
+    game_class_name = AVAILABLE_GAMES.get(game_key)
+    
+    if not game_class_name:
+        return [TextSendMessage(text="اللعبة غير متاحة حالياً")]
+    
+    # التحقق من وجود لعبة نشطة
+    if get_active_game(user_id):
+        return [TextSendMessage(text="يوجد لعبة نشطة بالفعل. استخدم 'إيقاف' لإنهائها أولاً.")]
+    
+    # بدء اللعبة
+    game = start_game(game_class_name, user_id)
+    
+    if not game:
+        return [TextSendMessage(text="فشل بدء اللعبة")]
+    
+    # الحصول على السؤال الأول
+    try:
+        question = game.get_current_question()
+        
+        if not question:
+            return [TextSendMessage(text="فشل تحميل السؤال")]
+        
+        # إنشاء كارد السؤال
+        question_flex = FlexSendMessage(
+            alt_text=f"{game_info['name']} - السؤال 1",
+            contents=create_game_question_card(
+                game_info['name'],
+                question,
+                1,
+                game_info['rounds'],
+                game_info['supports_hint']
+            )
+        )
+        
+        return [question_flex]
+        
+    except Exception as e:
+        logger.error(f"Error starting game: {e}")
+        stop_game(user_id)
+        return [TextSendMessage(text="حدث خطأ في بدء اللعبة")]
+
+
+def handle_game_answer(user_id, user_name, answer):
+    """معالجة إجابة اللعبة"""
+    game = get_active_game(user_id)
+    
+    if not game:
+        return [TextSendMessage(text=SYSTEM_MESSAGES['no_active_game'])]
+    
+    # التحقق من الإجابة
+    result = check_game_answer(user_id, user_id, answer)
+    
+    if not result:
+        return [TextSendMessage(text="فشل التحقق من الإجابة")]
+    
+    messages = []
+    
+    # رسالة النتيجة
+    if result.get('correct'):
+        points_change = POINTS['correct']
+        update_player_points(user_id, points_change)
+        
+        result_flex = FlexSendMessage(
+            alt_text="إجابة صحيحة",
+            contents=create_result_card(
+                "إجابة صحيحة",
+                f"أحسنت يا {user_name}",
+                points_change,
+                True
+            )
+        )
+        messages.append(result_flex)
+    else:
+        result_message = TextSendMessage(
+            text=f"إجابة خاطئة. الإجابة الصحيحة: {result.get('correct_answer', 'غير متوفرة')}"
+        )
+        messages.append(result_message)
+    
+    # التحقق من انتهاء اللعبة
+    if result.get('game_ended'):
+        total_points = result.get('total_points', 0)
+        update_game_stats(user_id, won=(total_points > 0))
+        
+        final_message = TextSendMessage(
+            text=f"انتهت اللعبة!\nمجموع نقاطك: {total_points}"
+        )
+        messages.append(final_message)
+        
+        # Quick Reply للعب مرة أخرى
+        replay_message = TextSendMessage(
+            text="هل تريد اللعب مرة أخرى؟",
+            quick_reply=QuickReply(items=[
+                QuickReplyButton(action=MessageAction(label="نعم", text="إعادة")),
+                QuickReplyButton(action=MessageAction(label="لا", text="نقاطي"))
+            ])
+        )
+        messages.append(replay_message)
+    else:
+        # السؤال التالي
+        try:
+            next_question = game.get_current_question()
+            current_round = result.get('current_round', 1)
+            total_rounds = result.get('total_rounds', 5)
+            
+            question_flex = FlexSendMessage(
+                alt_text=f"السؤال {current_round}",
+                contents=create_game_question_card(
+                    game.name,
+                    next_question,
+                    current_round,
+                    total_rounds,
+                    hasattr(game, 'get_hint')
+                )
+            )
+            messages.append(question_flex)
+        except Exception as e:
+            logger.error(f"Error getting next question: {e}")
+    
+    return messages
+
+
+def handle_hint_command(user_id):
+    """معالجة أمر التلميح"""
+    game = get_active_game(user_id)
+    
+    if not game:
+        return [TextSendMessage(text=SYSTEM_MESSAGES['no_active_game'])]
+    
+    hint = get_hint(user_id)
+    
+    if not hint:
+        return [TextSendMessage(text="التلميح غير متوفر لهذه اللعبة")]
+    
+    # خصم نقطة
+    update_player_points(user_id, POINTS['hint'])
+    
+    hint_message = TextSendMessage(text=f"تلميح: {hint}\n(تم خصم نقطة واحدة)")
+    
+    return [hint_message]
+
+
+def handle_show_answer_command(user_id):
+    """معالجة أمر إظهار الإجابة"""
+    game = get_active_game(user_id)
+    
+    if not game:
+        return [TextSendMessage(text=SYSTEM_MESSAGES['no_active_game'])]
+    
+    answer = show_answer(user_id)
+    
+    if not answer:
+        return [TextSendMessage(text="فشل عرض الإجابة")]
+    
+    answer_message = TextSendMessage(text=f"الإجابة الصحيحة: {answer}")
+    
+    # السؤال التالي
+    try:
+        next_question = game.get_current_question()
+        
+        if next_question:
+            current_state = get_game_state(user_id)
+            
+            question_flex = FlexSendMessage(
+                alt_text="السؤال التالي",
+                contents=create_game_question_card(
+                    game.name,
+                    next_question,
+                    current_state.get('current_round', 1),
+                    current_state.get('total_rounds', 5),
+                    hasattr(game, 'get_hint')
+                )
+            )
+            return [answer_message, question_flex]
+        else:
+            # انتهت اللعبة
+            stop_game(user_id)
+            return [answer_message, TextSendMessage(text="انتهت اللعبة!")]
+    except Exception as e:
+        logger.error(f"Error in show answer: {e}")
+        return [answer_message]
+
+
+def handle_stop_command(user_id):
+    """معالجة أمر الإيقاف"""
+    if stop_game(user_id):
+        return [TextSendMessage(text=SYSTEM_MESSAGES['game_stopped'])]
+    else:
+        return [TextSendMessage(text=SYSTEM_MESSAGES['no_active_game'])]
+
+
+def handle_entertainment_command(command):
+    """معالجة أوامر المحتوى الترفيهي"""
+    file_path = ENTERTAINMENT_COMMANDS.get(command)
+    
+    if not file_path:
+        return [TextSendMessage(text="محتوى غير موجود")]
+    
+    content = random_choice_from_file(file_path)
+    
+    if not content:
+        return [TextSendMessage(text="فشل تحميل المحتوى")]
+    
+    return [TextSendMessage(text=content)]
+
+
+# ============================================
+# معالجات LINE
+# ============================================
+
 @app.route("/callback", methods=['POST'])
 def callback():
-    """معالج webhook من LINE"""
-    signature = request.headers.get('X-Line-Signature', '')
+    """نقطة استقبال رسائل LINE"""
+    signature = request.headers['X-Line-Signature']
     body = request.get_data(as_text=True)
     
     try:
         handler.handle(body, signature)
-        return 'OK', 200
     except InvalidSignatureError:
-        logger.error("توقيع غير صحيح")
+        logger.error("Invalid signature")
         abort(400)
     except Exception as e:
-        logger.error(f"خطأ في callback: {e}", exc_info=True)
-        abort(500)
+        logger.error(f"Error in callback: {e}")
+    
+    return 'OK'
+
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    """معالج الرسائل النصية"""
-    try:
-        user_id = event.source.user_id
-        text = event.message.text.strip()
-        group_id = getattr(event.source, 'group_id', user_id)
-        
-        # فحص Rate Limit
-        if not check_rate_limit(user_id):
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="⏳ الرجاء الانتظار قليلاً\nلقد وصلت للحد الأقصى من الطلبات")
-            )
-            return
-        
-        # الحصول على معلومات المستخدم
-        try:
-            profile = line_bot_api.get_profile(user_id)
-            user_name = profile.display_name
-        except Exception as e:
-            logger.warning(f"لم يتم الحصول على الملف الشخصي: {e}")
-            user_name = "مستخدم"
-        
-        # التسجيل التلقائي أو التحديث
-        if not is_registered(user_id):
-            register_user(user_id, user_name)
-            logger.info(f"تم تسجيل مستخدم جديد: {user_name} ({user_id})")
-        else:
-            update_user_activity(user_id, user_name)
-        
-        text_lower = text.lower()
-        
-        # أوامر البداية والترحيب
-        if any(cmd in text_lower for cmd in CMDS.get('start', ['ابدأ']) + ['بوت', 'whale', 'مرحبا', 'السلام', 'هلا']):
-            flex = FlexSendMessage(alt_text="بوت الحوت", contents=create_welcome_card())
-            line_bot_api.reply_message(event.reply_token, flex)
-            return
-        
-        # المساعدة
-        if any(cmd in text_lower for cmd in CMDS.get('help', ['مساعدة'])):
-            flex = FlexSendMessage(alt_text="المساعدة", contents=create_help_card())
-            line_bot_api.reply_message(event.reply_token, flex)
-            return
-        
-        # الإحصائيات
-        if any(cmd in text_lower for cmd in CMDS.get('stats', ['نقاطي'])):
-            stats = get_user_stats(user_id)
-            if stats:
-                flex = FlexSendMessage(alt_text="إحصائياتك", contents=create_stats_card(stats))
-                line_bot_api.reply_message(event.reply_token, flex)
-            else:
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="❌ لم يتم العثور على إحصائيات\nاكتب 'ابدأ' لبدء اللعب")
-                )
-            return
-        
-        # الصدارة
-        if any(cmd in text_lower for cmd in CMDS.get('leaderboard', ['الصدارة'])):
-            leaderboard = get_leaderboard()
-            if leaderboard:
-                flex = FlexSendMessage(alt_text="لوحة الصدارة", contents=create_leaderboard_card(leaderboard))
-                line_bot_api.reply_message(event.reply_token, flex)
-            else:
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="❌ لا توجد بيانات للصدارة حتى الآن")
-                )
-            return
-        
-        # إيقاف اللعبة
-        if any(cmd in text_lower for cmd in CMDS.get('stop', ['إيقاف'])):
-            if group_id in active_games:
-                del active_games[group_id]
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="🛑 تم إيقاف اللعبة\nاكتب 'ابدأ' لبدء لعبة جديدة")
-                )
-            else:
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="❌ لا توجد لعبة نشطة حالياً")
-                )
-            return
-        
-        # بدء لعبة عشوائية
-        if text in ['ابدأ', 'start', 'بدء']:
-            if group_id in active_games:
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="⚠️ يوجد لعبة نشطة حالياً!\nأكمل اللعبة أو اكتب 'إيقاف' لإنهائها")
-                )
-                return
-            
-            if GAMES_LOADED:
-                # اختيار لعبة عشوائية من الألعاب الأساسية (أول 8)
-                game_types = ['اسرع', 'لعبة', 'سلسلة', 'اغنية', 'ضد', 'ترتيب', 'تكوين', 'توافق']
-                game_type = random.choice(game_types)
-                
-                result = start_game(group_id, game_type, user_id, user_name)
-                active_games[group_id] = result['game_data']
-                
-                if result.get('flex'):
-                    flex = FlexSendMessage(alt_text=result['message'], contents=result['flex'])
-                    line_bot_api.reply_message(event.reply_token, flex)
-                else:
-                    line_bot_api.reply_message(
-                        event.reply_token,
-                        TextSendMessage(text=result['message'])
-                    )
-            else:
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="❌ الألعاب غير متوفرة حالياً\nيرجى المحاولة لاحقاً")
-                )
-            return
-        
-        # إعادة اللعبة
-        if any(cmd in text_lower for cmd in CMDS.get('replay', ['إعادة', 'اعادة'])):
-            if group_id in active_games and GAMES_LOADED:
-                game = active_games[group_id]
-                game_type = game.get('type', 'اسرع')
-                
-                # إعادة تشغيل نفس اللعبة
-                result = start_game(group_id, game_type, user_id, user_name)
-                active_games[group_id] = result['game_data']
-                
-                if result.get('flex'):
-                    flex = FlexSendMessage(alt_text=result['message'], contents=result['flex'])
-                    line_bot_api.reply_message(event.reply_token, flex)
-                else:
-                    line_bot_api.reply_message(
-                        event.reply_token,
-                        TextSendMessage(text=result['message'])
-                    )
-            else:
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="❌ لا توجد لعبة لإعادتها\nاكتب 'ابدأ' لبدء لعبة جديدة")
-                )
-            return
-        
-        # التلميح
-        if any(cmd in text_lower for cmd in CMDS.get('hint', ['لمح'])):
-            if group_id in active_games and GAMES_LOADED:
-                game = active_games[group_id]
-                hint_text = get_hint(game)
-                
-                if hint_text:
-                    # خصم نقطة عند طلب التلميح
-                    update_points(user_id, POINTS['hint'])
-                    line_bot_api.reply_message(
-                        event.reply_token,
-                        TextSendMessage(text=hint_text)
-                    )
-                else:
-                    line_bot_api.reply_message(
-                        event.reply_token,
-                        TextSendMessage(text="❌ التلميح غير متوفر لهذه اللعبة")
-                    )
-            else:
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="❌ لا توجد لعبة نشطة حالياً\nاكتب 'ابدأ' لبدء لعبة جديدة")
-                )
-            return
-        
-        # عرض الإجابة والانتقال
-        if any(cmd in text_lower for cmd in CMDS.get('answer', ['جاوب'])):
-            if group_id in active_games and GAMES_LOADED:
-                game = active_games[group_id]
-                answer_result = show_answer(game, group_id, active_games)
-                
-                if answer_result.get('flex'):
-                    flex = FlexSendMessage(alt_text=answer_result['message'], contents=answer_result['flex'])
-                    line_bot_api.reply_message(event.reply_token, flex)
-                else:
-                    line_bot_api.reply_message(
-                        event.reply_token,
-                        TextSendMessage(text=answer_result['message'])
-                    )
-            else:
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="❌ لا توجد لعبة نشطة حالياً")
-                )
-            return
-        
-        # الانضمام للعبة
-        if any(cmd in text_lower for cmd in CMDS.get('join', ['انضم'])):
-            if group_id in active_games:
-                game = active_games[group_id]
-                if 'players' not in game:
-                    game['players'] = []
-                
-                if user_id not in game['players']:
-                    game['players'].append(user_id)
-                    line_bot_api.reply_message(
-                        event.reply_token,
-                        TextSendMessage(text=f"✅ تم تسجيلك في اللعبة يا {user_name}!\nعدد اللاعبين: {len(game['players'])}")
-                    )
-                else:
-                    line_bot_api.reply_message(
-                        event.reply_token,
-                        TextSendMessage(text=f"⚠️ أنت مسجل بالفعل يا {user_name}")
-                    )
-            else:
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="❌ لا توجد لعبة نشطة للانضمام إليها\nاكتب 'ابدأ' لبدء لعبة جديدة")
-                )
-            return
-        
-        # الانسحاب من اللعبة
-        if any(cmd in text_lower for cmd in CMDS.get('leave', ['انسحب'])):
-            if group_id in active_games:
-                game = active_games[group_id]
-                if 'players' in game and user_id in game['players']:
-                    game['players'].remove(user_id)
-                    line_bot_api.reply_message(
-                        event.reply_token,
-                        TextSendMessage(text=f"👋 تم انسحابك من اللعبة يا {user_name}")
-                    )
-                else:
-                    line_bot_api.reply_message(
-                        event.reply_token,
-                        TextSendMessage(text="⚠️ أنت لست مسجلاً في اللعبة")
-                    )
-            else:
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text="❌ لا توجد لعبة نشطة حالياً")
-                )
-            return
-        
-        # التحقق من الإجابة
-        if group_id in active_games and GAMES_LOADED:
-            game = active_games[group_id]
-            result = check_game_answer(game, text, user_id, user_name, group_id, active_games)
-            
-            # تحديث النقاط والإحصائيات إذا كانت الإجابة صحيحة
-            if result.get('correct'):
-                update_points(user_id, POINTS['correct'])
-                
-                # إذا انتهت اللعبة، تحديث إحصائيات الفوز
-                if result.get('game_over'):
-                    update_game_stats(user_id, won=True)
-            
-            # إرسال الرد
-            if result.get('flex'):
-                flex = FlexSendMessage(alt_text=result.get('message', 'رد من اللعبة'), contents=result['flex'])
-                line_bot_api.reply_message(event.reply_token, flex)
-            elif result.get('message'):
-                line_bot_api.reply_message(
-                    event.reply_token,
-                    TextSendMessage(text=result['message'])
-                )
+    """معالجة الرسائل النصية"""
+    user_id = event.source.user_id
+    message_text = event.message.text.strip()
     
-    except Exception as e:
-        logger.error(f"خطأ في معالجة الرسالة: {e}", exc_info=True)
-        try:
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="❌ حدث خطأ، يرجى المحاولة مرة أخرى")
-            )
-        except Exception as reply_error:
-            logger.error(f"فشل إرسال رسالة الخطأ: {reply_error}")
+    # تنظيف المدخلات
+    message_text = sanitize_input(message_text)
+    
+    # الحصول على اسم المستخدم
+    try:
+        profile = line_bot_api.get_profile(user_id)
+        user_name = profile.display_name
+    except LineBotApiError:
+        user_name = "مستخدم"
+    
+    logger.info(f"Message from {user_name} ({user_id}): {message_text}")
+    
+    # تحديد نوع الأمر
+    messages = []
+    
+    # أوامر البدء
+    if any(cmd in message_text for cmd in COMMANDS['start']):
+        messages = handle_start_command(user_id, user_name)
+    
+    # أوامر المساعدة
+    elif any(cmd in message_text for cmd in COMMANDS['help']):
+        messages = handle_help_command()
+    
+    # أوامر الإحصائيات
+    elif any(cmd in message_text for cmd in COMMANDS['stats']):
+        messages = handle_stats_command(user_id)
+    
+    # أوامر المتصدرين
+    elif any(cmd in message_text for cmd in COMMANDS['leaderboard']):
+        messages = handle_leaderboard_command()
+    
+    # أوامر الإيقاف
+    elif any(cmd in message_text for cmd in COMMANDS['stop']):
+        messages = handle_stop_command(user_id)
+    
+    # أوامر التلميح
+    elif any(cmd in message_text for cmd in COMMANDS['hint']):
+        messages = handle_hint_command(user_id)
+    
+    # أوامر الإجابة
+    elif any(cmd in message_text for cmd in COMMANDS['answer']):
+        messages = handle_show_answer_command(user_id)
+    
+    # بدء لعبة جديدة
+    elif message_text in AVAILABLE_GAMES:
+        messages = handle_game_start(user_id, message_text)
+    
+    # محتوى ترفيهي
+    elif message_text in ENTERTAINMENT_COMMANDS:
+        messages = handle_entertainment_command(message_text)
+    
+    # إجابة على سؤال في لعبة نشطة
+    elif get_active_game(user_id):
+        messages = handle_game_answer(user_id, user_name, message_text)
+    
+    # أمر غير معروف
+    else:
+        messages = [TextSendMessage(text=SYSTEM_MESSAGES['invalid_command'])]
+    
+    # إرسال الرسائل
+    try:
+        if messages:
+            line_bot_api.reply_message(event.reply_token, messages)
+    except LineBotApiError as e:
+        logger.error(f"Error sending message: {e}")
 
-# الصفحة الرئيسية
-@app.route("/")
-def index():
-    """الصفحة الرئيسية لعرض حالة البوت"""
-    status_games = "✓ متوفرة" if GAMES_LOADED else "✗ غير متوفرة"
-    color_games = "#00FF88" if GAMES_LOADED else "#FF4444"
-    
-    # التحقق من قاعدة البيانات
-    db_status = "✓ متصلة"
-    player_count = 0
-    total_games = 0
-    try:
-        result = db_execute('SELECT COUNT(*) FROM players', fetch=True)
-        if result:
-            player_count = result[0][0]
-        
-        result2 = db_execute('SELECT SUM(games_played) FROM players', fetch=True)
-        if result2 and result2[0][0]:
-            total_games = result2[0][0]
-        
-        db_status = f"✓ متصلة ({player_count} لاعب)"
-    except:
-        db_status = "✗ غير متصلة"
-    
-    return f"""
-    <!DOCTYPE html>
-    <html dir="rtl">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>بوت الحوت - LINE Bot</title>
-        <style>
-            * {{
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }}
-            body {{
-                font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
-                background: linear-gradient(135deg, #0A0E27 0%, #1a1f3a 100%);
-                color: #E0F2FF;
-                min-height: 100vh;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                padding: 20px;
-            }}
-            .container {{
-                max-width: 700px;
-                width: 100%;
-            }}
-            .card {{
-                background: rgba(15, 36, 64, 0.9);
-                backdrop-filter: blur(10px);
-                border: 2px solid rgba(0, 217, 255, 0.3);
-                border-radius: 25px;
-                padding: 40px;
-                box-shadow: 0 10px 40px rgba(0, 217, 255, 0.2);
-            }}
-            .logo {{
-                width: 120px;
-                height: 120px;
-                margin: 0 auto 20px;
-                display: block;
-                border-radius: 50%;
-                border: 3px solid #00D9FF;
-                box-shadow: 0 0 30px rgba(0, 217, 255, 0.6);
-            }}
-            h1 {{
-                text-align: center;
-                color: #00D9FF;
-                font-size: 2.5em;
-                margin-bottom: 10px;
-                text-shadow: 0 0 20px rgba(0, 217, 255, 0.5);
-            }}
-            .subtitle {{
-                text-align: center;
-                color: #7FB3D5;
-                margin-bottom: 30px;
-                font-size: 1.1em;
-            }}
-            .grid {{
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 15px;
-                margin-top: 25px;
-            }}
-            .stat {{
-                background: rgba(0, 217, 255, 0.15);
-                border: 1px solid rgba(0, 217, 255, 0.3);
-                border-radius: 15px;
-                padding: 20px;
-                text-align: center;
-                transition: transform 0.3s ease;
-            }}
-            .stat:hover {{
-                transform: translateY(-5px);
-                box-shadow: 0 5px 20px rgba(0, 217, 255, 0.3);
-            }}
-            .stat-value {{
-                font-size: 2em;
-                font-weight: bold;
-                color: #00D9FF;
-                display: block;
-                margin-bottom: 8px;
-            }}
-            .stat-label {{
-                color: #7FB3D5;
-                font-size: 0.9em;
-            }}
-            .footer {{
-                text-align: center;
-                margin-top: 30px;
-                color: #7FB3D5;
-                font-size: 0.9em;
-            }}
-            @keyframes pulse {{
-                0%, 100% {{ opacity: 1; }}
-                50% {{ opacity: 0.5; }}
-            }}
-            .indicator {{
-                display: inline-block;
-                width: 10px;
-                height: 10px;
-                background: {color_games};
-                border-radius: 50%;
-                margin-left: 8px;
-                animation: pulse 2s infinite;
-            }}
-            .features {{
-                background: rgba(0, 217, 255, 0.1);
-                border-radius: 15px;
-                padding: 20px;
-                margin-top: 25px;
-            }}
-            .features h3 {{
-                color: #00D9FF;
-                margin-bottom: 15px;
-                text-align: center;
-            }}
-            .features ul {{
-                list-style: none;
-                padding: 0;
-            }}
-            .features li {{
-                color: #E0F2FF;
-                padding: 8px 0;
-                border-bottom: 1px solid rgba(0, 217, 255, 0.2);
-            }}
-            .features li:last-child {{
-                border-bottom: none;
-            }}
-            .features li::before {{
-                content: "✓ ";
-                color: #00D9FF;
-                font-weight: bold;
-                margin-left: 10px;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="card">
-                <img src="{LOGO_URL}" alt="بوت الحوت" class="logo">
-                <h1>بوت الحوت</h1>
-                <p class="subtitle">
-                    <span class="indicator"></span>
-                    البوت يعمل بنجاح
-                </p>
-                
-                <div class="grid">
-                    <div class="stat">
-                        <span class="stat-value">9</span>
-                        <span class="stat-label">ألعاب متوفرة</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-value">{player_count}</span>
-                        <span class="stat-label">لاعب مسجل</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-value">{total_games}</span>
-                        <span class="stat-label">لعبة منتهية</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-value">{len(active_games)}</span>
-                        <span class="stat-label">لعبة نشطة</span>
-                    </div>
-                </div>
-                
-                <div class="features">
-                    <h3>المميزات</h3>
-                    <ul>
-                        <li>8 ألعاب تفاعلية مثيرة</li>
-                        <li>نظام نقاط وتصنيفات</li>
-                        <li>محادثة AI ذكية</li>
-                        <li>محتوى ترفيهي متنوع</li>
-                        <li>واجهات Flex Messages جميلة</li>
-                        <li>تسجيل تلقائي للاعبين</li>
-                    </ul>
-                </div>
-                
-                <div class="grid" style="margin-top: 20px;">
-                    <div class="stat">
-                        <span class="stat-value"><span class="indicator"></span></span>
-                        <span class="stat-label">{status_games}</span>
-                    </div>
-                    <div class="stat">
-                        <span class="stat-value">✓</span>
-                        <span class="stat-label">{db_status}</span>
-                    </div>
-                </div>
-                
-                <div class="footer">
-                    <p>© بوت الحوت 2025 - جميع الحقوق محفوظة</p>
-                    <p style="margin-top: 10px; font-size: 0.8em;">
-                        Powered by LINE Bot SDK & Flask
-                    </p>
-                </div>
-            </div>
-        </div>
-    </body>
+
+# ============================================
+# نقاط النهاية الإضافية
+# ============================================
+
+@app.route("/", methods=['GET'])
+def home():
+    """الصفحة الرئيسية"""
+    return """
+    <html>
+        <head>
+            <title>بوت الحوت</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    background: #0A0E27;
+                    color: #E0F2FF;
+                    text-align: center;
+                    padding: 50px;
+                }
+                h1 { color: #00D9FF; }
+            </style>
+        </head>
+        <body>
+            <h1>🐋 بوت الحوت</h1>
+            <p>البوت يعمل بنجاح</p>
+            <p>أضف البوت على LINE لبدء اللعب</p>
+        </body>
     </html>
     """
 
-@app.route("/health")
+
+@app.route("/health", methods=['GET'])
 def health():
-    """نقطة فحص صحة التطبيق"""
-    try:
-        # فحص قاعدة البيانات
-        result = db_execute('SELECT COUNT(*) FROM players', fetch=True)
-        db_ok = result is not None
-        
-        player_count = result[0][0] if db_ok and result else 0
-        
-        status = {
-            "status": "healthy" if db_ok and GAMES_LOADED else "degraded",
-            "timestamp": datetime.now().isoformat(),
-            "database": {
-                "status": "connected" if db_ok else "disconnected",
-                "players": player_count
-            },
-            "games": {
-                "status": "loaded" if GAMES_LOADED else "not_loaded",
-                "active_sessions": len(active_games)
-            },
-            "system": {
-                "rate_limiter_active_users": len(rate_limiter)
-            }
-        }
-        
-        return jsonify(status), 200 if status["status"] == "healthy" else 503
-    except Exception as e:
-        logger.error(f"فشل فحص الصحة: {e}")
-        return jsonify({
-            "status": "error",
-            "message": str(e),
-            "timestamp": datetime.now().isoformat()
-        }), 500
+    """فحص صحة الخادم"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "database": verify_database(DATABASE_PATH)
+    }
 
-@app.route("/stats")
-def stats():
-    """إحصائيات عامة عن البوت"""
-    try:
-        player_count = db_execute('SELECT COUNT(*) FROM players', fetch=True)
-        total_games = db_execute('SELECT SUM(games_played) FROM players', fetch=True)
-        total_wins = db_execute('SELECT SUM(games_won) FROM players', fetch=True)
-        
-        return jsonify({
-            "total_players": player_count[0][0] if player_count else 0,
-            "total_games_played": total_games[0][0] if total_games and total_games[0][0] else 0,
-            "total_wins": total_wins[0][0] if total_wins and total_wins[0][0] else 0,
-            "active_games": len(active_games),
-            "games_loaded": GAMES_LOADED,
-            "timestamp": datetime.now().isoformat()
-        })
-    except Exception as e:
-        logger.error(f"خطأ في الإحصائيات: {e}")
-        return jsonify({"error": str(e)}), 500
 
-@app.route("/clean", methods=['POST'])
-def clean_users():
-    """تنظيف المستخدمين غير النشطين (يدوي)"""
-    try:
-        clean_inactive_users()
-        return jsonify({"message": "تم تنظيف المستخدمين غير النشطين"}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# معالجة الأخطاء
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({"error": "Not found"}), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    logger.error(f"خطأ داخلي في الخادم: {error}")
-    return jsonify({"error": "Internal server error"}), 500
-
+# ============================================
 # تشغيل التطبيق
+# ============================================
+
 if __name__ == "__main__":
-    print("=" * 60)
-    print("🐋 بوت الحوت - LINE Bot")
-    print("=" * 60)
-    print(f"{'✓' if GAMES_LOADED else '✗'} الألعاب: {'محملة' if GAMES_LOADED else 'غير محملة'}")
-    print(f"✓ قاعدة البيانات: جاهزة")
-    print(f"✓ Webhook: جاهز")
-    print("=" * 60)
-    
-    port = int(os.getenv("PORT", 5000))
-    print(f"🚀 البوت يعمل على المنفذ {port}")
-    print(f"🌐 الصفحة الرئيسية: http://localhost:{port}")
-    print(f"❤️ فحص الصحة: http://localhost:{port}/health")
-    print(f"📊 الإحصائيات: http://localhost:{port}/stats")
-    print("=" * 60)
-    print("⚠️ ملاحظة: البوت يرد فقط على المستخدمين المسجلين")
-    print("=" * 60)
-    
-    app.run(host="0.0.0.0", port=port)
+    logger.info(f"Starting Whale Bot on port {PORT}")
+    app.run(host=HOST, port=PORT, debug=DEBUG)
