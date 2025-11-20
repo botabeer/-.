@@ -1,87 +1,35 @@
-# ============================================
-# .gitignore - ملفات يجب تجاهلها في Git
-# ============================================
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
 
-# قاعدة البيانات
+.env
+.env.local
+
 *.db
 *.sqlite
 *.sqlite3
-whale_bot.db
 
-# بيئة Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# البيئة الافتراضية
-venv/
-ENV/
-env/
-.venv
-
-# متغيرات البيئة
-.env
-.env.local
-.env.*.local
-
-# IDE
+.DS_Store
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
-.DS_Store
 
-# السجلات
 *.log
 logs/
 
-# ملفات مؤقتة
-tmp/
-temp/
-*.tmp
-*.bak
-*.cache
+node_modules/
+npm-debug.log
 
-# ملفات النظام
-Thumbs.db
-.DS_Store
-
-# اختبارات
 .pytest_cache/
 .coverage
 htmlcov/
-.tox/
 
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# التوثيق
-docs/_build/
-
-# ملفات الضغط
-*.zip
-*.tar.gz
-*.rar
-
-# Node (إذا كان هناك frontend)
-node_modules/
-npm-debug.log
-yarn-error.log
+data/*.txt
+!data/.gitkeep
