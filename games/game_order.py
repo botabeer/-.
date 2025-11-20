@@ -1,87 +1,189 @@
+# ============================================
+# games/game_order.py - لعبة الترتيب
+# ============================================
+
+"""
+لعبة الترتيب
+============
+ترتيب العناصر حسب المطلوب
+تدعم التلميح وإظهار الإجابة
+"""
+
 import random
-from linebot.models import FlexSendMessage
-from utils import normalize_text, create_game_card, create_hint_card, create_answer_card, create_results_card
+from .base import BaseGame
+from rules import POINTS, GAMES_INFO
+from utils import normalize_text
 
-class OrderGame:
+
+class OrderGame(BaseGame):
+    """لعبة ترتيب العناصر"""
+    
     def __init__(self):
-        self.all_questions = [
-            {"items": ["ثانية", "دقيقة", "ساعة", "يوم"], "order": ["ثانية", "دقيقة", "ساعة", "يوم"], "type": "من الاصغر للاكبر"},
-            {"items": ["كيلو", "جرام", "ملي", "طن"], "order": ["ملي", "جرام", "كيلو", "طن"], "type": "من الاصغر للاكبر"},
-            {"items": ["قرن", "عام", "شهر", "اسبوع"], "order": ["اسبوع", "شهر", "عام", "قرن"], "type": "من الاصغر للاكبر"},
-            {"items": ["محيط", "بحر", "نهر", "جدول"], "order": ["جدول", "نهر", "بحر", "محيط"], "type": "من الاصغر للاكبر"},
-            {"items": ["جبل", "هضبة", "تل", "سهل"], "order": ["سهل", "تل", "هضبة", "جبل"], "type": "من الاصغر للاكبر"},
-            {"items": ["كوكب", "نجم", "مجرة", "قمر"], "order": ["قمر", "كوكب", "نجم", "مجرة"], "type": "من الاصغر للاكبر"},
-            {"items": ["بحيرة", "بركة", "محيط", "خليج"], "order": ["بركة", "بحيرة", "خليج", "محيط"], "type": "من الاصغر للاكبر"}
-        ]
-        self.questions = []
-        self.current_question = None
-        self.hints_used = 0
-        self.question_number = 0
-        self.total_questions = 5
-        self.player_scores = {}
-
-    def start_game(self):
-        self.questions = random.sample(self.all_questions, min(self.total_questions, len(self.all_questions)))
-        self.question_number = 0
-        self.player_scores = {}
-        self.hints_used = 0
-        return self.next_question()
-
-    def next_question(self):
-        if self.question_number >= self.total_questions:
-            return None
-        self.current_question = self.questions[self.question_number]
-        self.question_number += 1
-        self.hints_used = 0
-        shuffled = random.sample(self.current_question['items'], len(self.current_question['items']))
+        game_info = GAMES_INFO['ترتيب']
+        super().__init__(
+            name=game_info['name'],
+            rounds=game_info['rounds'],
+            supports_hint=game_info['supports_hint']
+        )
         
-        content = [
-            {"type": "text", "text": f"📊 رتب العناصر {self.current_question['type']}", "size": "lg", "color": "#E8F4FF", "align": "center", "wrap": True},
+        # قاعدة بيانات أسئلة الترتيب
+        self.order_questions = [
             {
-                "type": "box",
-                "layout": "vertical",
-                "backgroundColor": "#1a1f3a90",
-                "cornerRadius": "20px",
-                "paddingAll": "28px",
-                "margin": "lg",
-                "borderWidth": "2px",
-                "borderColor": "#00D9FF50",
-                "contents": [
-                    {"type": "text", "text": " - ".join(shuffled), "size": "xl", "weight": "bold", "color": "#00D9FF", "align": "center", "wrap": True}
-                ]
+                'question': 'رتب الأشهر الهجرية:',
+                'items': ['محرم', 'صفر', 'ربيع الأول', 'ربيع الثاني'],
+                'type': 'months'
             },
-            {"type": "text", "text": "اكتب الترتيب مفصولا بفواصل", "size": "sm", "color": "#8FB9D8", "align": "center", "margin": "lg", "wrap": True}
+            {
+                'question': 'رتب الأرقام من الأصغر للأكبر:',
+                'items': ['5', '2', '9', '1'],
+                'answer': ['1', '2', '5', '9'],
+                'type': 'numbers'
+            },
+            {
+                'question': 'رتب حسب الحجم (من الأصغر للأكبر):',
+                'items': ['فيل', 'نملة', 'قط', 'أسد'],
+                'answer': ['نملة', 'قط', 'أسد', 'فيل'],
+                'type': 'size'
+            },
+            {
+                'question': 'رتب الدول حسب المساحة (من الأكبر للأصغر):',
+                'items': ['البحرين', 'السعودية', 'قطر', 'الإمارات'],
+                'answer': ['السعودية', 'الإمارات', 'قطر', 'البحرين'],
+                'type': 'area'
+            },
+            {
+                'question': 'رتب مراحل حياة الإنسان:',
+                'items': ['شيخوخة', 'طفولة', 'شباب', 'مراهقة'],
+                'answer': ['طفولة', 'مراهقة', 'شباب', 'شيخوخة'],
+                'type': 'life'
+            },
+            {
+                'question': 'رتب الوجبات حسب الوقت:',
+                'items': ['عشاء', 'فطور', 'غداء'],
+                'answer': ['فطور', 'غداء', 'عشاء'],
+                'type': 'meals'
+            },
+            {
+                'question': 'رتب الكواكب حسب البعد عن الشمس:',
+                'items': ['المريخ', 'الأرض', 'عطارد', 'الزهرة'],
+                'answer': ['عطارد', 'الزهرة', 'الأرض', 'المريخ'],
+                'type': 'planets'
+            },
+            {
+                'question': 'رتب الفصول:',
+                'items': ['خريف', 'صيف', 'ربيع', 'شتاء'],
+                'answer': ['ربيع', 'صيف', 'خريف', 'شتاء'],
+                'type': 'seasons'
+            },
+            {
+                'question': 'رتب حسب السرعة (من الأبطأ للأسرع):',
+                'items': ['طائرة', 'سيارة', 'دراجة', 'شخص يمشي'],
+                'answer': ['شخص يمشي', 'دراجة', 'سيارة', 'طائرة'],
+                'type': 'speed'
+            },
+            {
+                'question': 'رتب الألوان حسب ألوان قوس قزح:',
+                'items': ['أزرق', 'أحمر', 'أصفر', 'أخضر'],
+                'answer': ['أحمر', 'أصفر', 'أخضر', 'أزرق'],
+                'type': 'colors'
+            }
         ]
         
-        card = create_game_card("📊 لعبة الترتيب", self.question_number, self.total_questions, content)
-        return FlexSendMessage(alt_text=f"السؤال {self.question_number} - لعبة الترتيب", contents=card)
-
+        self.current_question_data = None
+        self.shuffled_items = []
+    
+    def generate_question(self):
+        """
+        توليد سؤال جديد
+        
+        Returns:
+            نص السؤال
+        """
+        # اختيار سؤال عشوائي
+        self.current_question_data = random.choice(self.order_questions)
+        
+        # خلط العناصر
+        self.shuffled_items = self.current_question_data['items'].copy()
+        random.shuffle(self.shuffled_items)
+        
+        # حفظ الإجابة الصحيحة
+        if 'answer' in self.current_question_data:
+            self.current_answer = self.current_question_data['answer']
+        else:
+            self.current_answer = self.current_question_data['items']
+        
+        # إنشاء السؤال
+        question = f"{self.current_question_data['question']}\n"
+        question += ', '.join(self.shuffled_items)
+        question += "\n\nأجب بترتيب العناصر مفصولة بفواصل"
+        
+        return question
+    
+    def check_answer(self, user_id, answer):
+        """
+        التحقق من الإجابة
+        
+        Args:
+            user_id: معرف المستخدم
+            answer: إجابة المستخدم
+            
+        Returns:
+            dict مع النتيجة
+        """
+        # تنظيف وتقسيم إجابة المستخدم
+        user_items = [normalize_text(item.strip()).lower() 
+                      for item in answer.split(',')]
+        
+        # تنظيف الإجابة الصحيحة
+        correct_items = [normalize_text(item).lower() 
+                        for item in self.current_answer]
+        
+        # التحقق من التطابق
+        is_correct = user_items == correct_items
+        
+        # حساب النقاط
+        points_earned = 0
+        if is_correct:
+            points_earned = POINTS['correct']
+            self.update_score(user_id, points_earned)
+        
+        # الانتقال للسؤال التالي
+        game_continues = self.next_question()
+        
+        result = {
+            'correct': is_correct,
+            'correct_answer': ', '.join(self.current_answer),
+            'user_answer': ', '.join(user_items),
+            'points_earned': points_earned,
+            'total_points': self.get_score(user_id),
+            'current_round': self.current_round,
+            'total_rounds': self.total_rounds,
+            'game_ended': not game_continues,
+            'next_question': self.current_question if game_continues else None
+        }
+        
+        return result
+    
     def get_hint(self):
-        if not self.current_question:
-            return None
-        first_two = self.current_question['order'][:2]
-        hint_text = f"اول عنصرين: {first_two[0]}، {first_two[1]}"
-        self.hints_used += 1
-        return FlexSendMessage(alt_text="تلميح", contents=create_hint_card(hint_text))
-
+        """
+        الحصول على تلميح
+        
+        Returns:
+            التلميح
+        """
+        if not self.current_answer or len(self.current_answer) < 2:
+            return "لا يوجد تلميح متاح"
+        
+        # تلميح: أول عنصرين في الترتيب الصحيح
+        hint = f"التلميح: يبدأ الترتيب بـ: {self.current_answer[0]}, {self.current_answer[1]}"
+        
+        return hint
+    
     def show_answer(self):
-        if not self.current_question:
-            return None
-        answer = "، ".join(self.current_question['order'])
-        return FlexSendMessage(alt_text="الاجابة الصحيحة", contents=create_answer_card(answer))
-
-    def check_answer(self, answer, user_id, display_name):
-        if not self.current_question:
-            return None
-        user_order = [normalize_text(item.strip()) for item in answer.replace('،', ',').split(',')]
-        correct_order = [normalize_text(item) for item in self.current_question['order']]
-        if user_order == correct_order:
-            points = 2 if self.hints_used == 0 else 1
-            if user_id not in self.player_scores:
-                self.player_scores[user_id] = {'name': display_name, 'score': 0}
-            self.player_scores[user_id]['score'] += points
-            return {'correct': True, 'points': points}
-        return None
-
-    def get_final_results(self):
-        return create_results_card(self.player_scores)
+        """
+        إظهار الإجابة الصحيحة
+        
+        Returns:
+            الإجابة
+        """
+        return f'الترتيب الصحيح: {", ".join(self.current_answer)}'
