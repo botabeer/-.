@@ -1,23 +1,31 @@
-# render.yaml - إعدادات Render الكاملة
+# ============================================
+# render.yaml - إعدادات النشر على Render
+# ============================================
 
 services:
   - type: web
     name: whale-bot
-    runtime: python
-    plan: free
+    env: python
     region: singapore
+    plan: free
+    branch: main
     buildCommand: |
       pip install --upgrade pip
       pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120
+      python init_db.py
+    startCommand: gunicorn app:app
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
-      - key: PORT
-        generateValue: true
       - key: LINE_CHANNEL_ACCESS_TOKEN
         sync: false
       - key: LINE_CHANNEL_SECRET
         sync: false
-    healthCheckPath: /
+      - key: PORT
+        value: 10000
+      - key: DEBUG
+        value: False
+      - key: LOG_LEVEL
+        value: INFO
+      - key: PYTHON_VERSION
+        value: 3.11.7
+    healthCheckPath: /health
     autoDeploy: true
