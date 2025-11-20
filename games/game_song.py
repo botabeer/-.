@@ -1,91 +1,224 @@
+# ============================================
+# games/game_song.py - لعبة الأغنية
+# ============================================
+
+"""
+لعبة الأغنية
+============
+تخمين المغني من كلمات الأغنية
+تدعم التلميح وإظهار الإجابة
+"""
+
 import random
-from linebot.models import FlexSendMessage
-from utils import normalize_text, create_game_card, create_hint_card, create_answer_card, create_results_card
+from .base import BaseGame
+from rules import POINTS, GAMES_INFO
+from utils import normalize_text
 
-class SongGame:
+
+class SongGame(BaseGame):
+    """لعبة تخمين المغني"""
+    
     def __init__(self):
-        self.all_songs = [
-            {"lyrics": "قولي احبك كي تزيد وسامتي", "singer": "كاظم الساهر"},
-            {"lyrics": "يا طيور الطايرة فوق الحدود", "singer": "عبد المجيد عبدالله"},
-            {"lyrics": "انا لو عشقت حبيبي بجنون", "singer": "نجوى كرم"},
-            {"lyrics": "حبيبي يا نور العين", "singer": "عمرو دياب"},
-            {"lyrics": "على مودك يا بعد عمري", "singer": "محمد عبده"},
-            {"lyrics": "تعبت من الصبر والانتظار", "singer": "راشد الماجد"},
-            {"lyrics": "يا حبيبي كل اللي ودك فيه", "singer": "اصالة"},
-            {"lyrics": "كل عام وانت حبيبي", "singer": "وائل كفوري"},
-            {"lyrics": "ما بلاش تبعد عني", "singer": "اليسا"},
-            {"lyrics": "يا قمر يا قمر يا قمر", "singer": "نانسي عجرم"},
-            {"lyrics": "احبك موت وانت قاسي", "singer": "ماجد المهندس"},
-            {"lyrics": "زي العسل ماحلاه", "singer": "حسين الجسمي"},
-            {"lyrics": "انت معلم يا معلم", "singer": "شيرين عبد الوهاب"},
-            {"lyrics": "قلبي اختارك من الناس", "singer": "كارول سماحة"},
-            {"lyrics": "بحبك انا كتير", "singer": "اصيل ابو بكر"}
-        ]
-        self.questions = []
-        self.current_song = None
-        self.hints_used = 0
-        self.question_number = 0
-        self.total_questions = 5
-        self.player_scores = {}
-
-    def start_game(self):
-        self.questions = random.sample(self.all_songs, min(self.total_questions, len(self.all_songs)))
-        self.question_number = 0
-        self.player_scores = {}
-        self.hints_used = 0
-        return self.next_question()
-
-    def next_question(self):
-        if self.question_number >= self.total_questions:
-            return None
-        self.current_song = self.questions[self.question_number]
-        self.question_number += 1
-        self.hints_used = 0
+        game_info = GAMES_INFO['اغنية']
+        super().__init__(
+            name=game_info['name'],
+            rounds=game_info['rounds'],
+            supports_hint=game_info['supports_hint']
+        )
         
-        content = [
+        # قاعدة بيانات الأغاني والمغنيين
+        self.songs_database = [
             {
-                "type": "box",
-                "layout": "vertical",
-                "backgroundColor": "#1a1f3a90",
-                "cornerRadius": "20px",
-                "paddingAll": "28px",
-                "borderWidth": "2px",
-                "borderColor": "#00D9FF50",
-                "contents": [
-                    {"type": "text", "text": "🎵 كلمات الاغنية:", "size": "lg", "color": "#8FB9D8", "align": "center"},
-                    {"type": "text", "text": self.current_song['lyrics'], "size": "xl", "weight": "bold", "color": "#00D9FF", "align": "center", "margin": "lg", "wrap": True}
-                ]
+                'lyrics': 'قلبي اطمأن، قلبي ارتاح',
+                'singer': 'حسين الجسمي',
+                'song': 'قلبي اطمأن'
             },
-            {"type": "text", "text": "من المغني؟ 🎤", "size": "lg", "color": "#E8F4FF", "align": "center", "margin": "lg"}
+            {
+                'lyrics': 'أنا لو عشقت، ما عرفت أخون',
+                'singer': 'محمد عبده',
+                'song': 'أنا لو عشقت'
+            },
+            {
+                'lyrics': 'تعالى أقولك، أنا باحبك',
+                'singer': 'عمرو دياب',
+                'song': 'تعالى'
+            },
+            {
+                'lyrics': 'يا طيرة طيري، وقولي له',
+                'singer': 'فيروز',
+                'song': 'يا طيرة طيري'
+            },
+            {
+                'lyrics': 'كل ما أقول التوبة، يرجعني الهوى',
+                'singer': 'محمد عبده',
+                'song': 'كل ما أقول التوبة'
+            },
+            {
+                'lyrics': 'قالوا نسيت، قلت معقولة',
+                'singer': 'كاظم الساهر',
+                'song': 'معقولة'
+            },
+            {
+                'lyrics': 'اشتقت لك، يا حبيبي اشتقت',
+                'singer': 'ماجد المهندس',
+                'song': 'اشتقت لك'
+            },
+            {
+                'lyrics': 'يا أيها الطفل، يا ابن الحبايب',
+                'singer': 'فيروز',
+                'song': 'يا أيها الطفل'
+            },
+            {
+                'lyrics': 'سيبك من الحب، سيبك',
+                'singer': 'عمرو دياب',
+                'song': 'سيبك'
+            },
+            {
+                'lyrics': 'على بالي، ما يغيب',
+                'singer': 'شيرين',
+                'song': 'على بالي'
+            },
+            {
+                'lyrics': 'بشرة خير، يا عيني بشرة خير',
+                'singer': 'حسين الجسمي',
+                'song': 'بشرة خير'
+            },
+            {
+                'lyrics': 'أنا ليه بحبك، مش عارف ليه',
+                'singer': 'تامر حسني',
+                'song': 'أنا ليه'
+            },
+            {
+                'lyrics': 'يا مسهرني، يا عذابي',
+                'singer': 'راشد الماجد',
+                'song': 'يا مسهرني'
+            },
+            {
+                'lyrics': 'نسيني الدنيا، ونسيت النوم',
+                'singer': 'عبدالمجيد عبدالله',
+                'song': 'نسيني الدنيا'
+            },
+            {
+                'lyrics': 'أهواك، وأتمنى أنساك',
+                'singer': 'عبدالحليم حافظ',
+                'song': 'أهواك'
+            },
+            {
+                'lyrics': 'ولا ليلة، من الليالي',
+                'singer': 'نانسي عجرم',
+                'song': 'ولا ليلة'
+            },
+            {
+                'lyrics': 'يا ليل يا عين، يا ليلي',
+                'singer': 'أم كلثوم',
+                'song': 'يا ليل يا عين'
+            },
+            {
+                'lyrics': 'زي العسل، يا حلو',
+                'singer': 'إليسا',
+                'song': 'زي العسل'
+            },
+            {
+                'lyrics': 'حبيبي يا نور العين',
+                'singer': 'عمرو دياب',
+                'song': 'نور العين'
+            },
+            {
+                'lyrics': 'تعبت من الحب، تعبت',
+                'singer': 'ماجد المهندس',
+                'song': 'تعبت'
+            }
         ]
         
-        card = create_game_card("🎵 لعبة الاغنية", self.question_number, self.total_questions, content)
-        return FlexSendMessage(alt_text=f"السؤال {self.question_number} - لعبة الاغنية", contents=card)
-
+        self.current_song = None
+    
+    def generate_question(self):
+        """
+        توليد سؤال جديد
+        
+        Returns:
+            نص السؤال
+        """
+        # اختيار أغنية عشوائية
+        self.current_song = random.choice(self.songs_database)
+        
+        # حفظ الإجابة
+        self.current_answer = self.current_song['singer']
+        
+        # إنشاء السؤال
+        question = f'من المغني؟\n"{self.current_song["lyrics"]}"'
+        
+        return question
+    
+    def check_answer(self, user_id, answer):
+        """
+        التحقق من الإجابة
+        
+        Args:
+            user_id: معرف المستخدم
+            answer: إجابة المستخدم
+            
+        Returns:
+            dict مع النتيجة
+        """
+        user_answer = normalize_text(answer).lower()
+        correct_answer = normalize_text(self.current_answer).lower()
+        
+        # التحقق من التطابق (مع السماح ببعض الاختلافات البسيطة)
+        is_correct = user_answer == correct_answer or \
+                     user_answer in correct_answer or \
+                     correct_answer in user_answer
+        
+        # حساب النقاط
+        points_earned = 0
+        if is_correct:
+            points_earned = POINTS['correct']
+            self.update_score(user_id, points_earned)
+        
+        # الانتقال للسؤال التالي
+        game_continues = self.next_question()
+        
+        result = {
+            'correct': is_correct,
+            'correct_answer': self.current_answer,
+            'song_name': self.current_song.get('song', ''),
+            'points_earned': points_earned,
+            'total_points': self.get_score(user_id),
+            'current_round': self.current_round,
+            'total_rounds': self.total_rounds,
+            'game_ended': not game_continues,
+            'next_question': self.current_question if game_continues else None
+        }
+        
+        return result
+    
     def get_hint(self):
-        if not self.current_song:
-            return None
-        singer = self.current_song['singer']
-        hint_text = f"اول حرف: {singer[0]} " + "_ " * (len(singer) - 1)
-        extra = f"عدد الحروف: {len(singer)}"
-        self.hints_used += 1
-        return FlexSendMessage(alt_text="تلميح", contents=create_hint_card(hint_text, extra))
-
+        """
+        الحصول على تلميح
+        
+        Returns:
+            التلميح
+        """
+        if not self.current_answer:
+            return "لا يوجد تلميح متاح"
+        
+        singer = self.current_answer
+        
+        # تلميح: الحرف الأول وعدد الأحرف
+        first_letter = singer[0]
+        length = len(singer)
+        
+        hint = f"التلميح: يبدأ بحرف '{first_letter}' وعدد الأحرف: {length}"
+        
+        return hint
+    
     def show_answer(self):
-        if not self.current_song:
-            return None
-        return FlexSendMessage(alt_text="الاجابة الصحيحة", contents=create_answer_card(self.current_song['singer']))
-
-    def check_answer(self, answer, user_id, display_name):
-        if not self.current_song:
-            return None
-        if normalize_text(answer) == normalize_text(self.current_song['singer']):
-            points = 2 if self.hints_used == 0 else 1
-            if user_id not in self.player_scores:
-                self.player_scores[user_id] = {'name': display_name, 'score': 0}
-            self.player_scores[user_id]['score'] += points
-            return {'correct': True, 'points': points}
-        return None
-
-    def get_final_results(self):
-        return create_results_card(self.player_scores)
+        """
+        إظهار الإجابة الصحيحة
+        
+        Returns:
+            الإجابة
+        """
+        if self.current_song:
+            return f'{self.current_answer} - أغنية: {self.current_song.get("song", "")}'
+        return self.current_answer
