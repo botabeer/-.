@@ -1,172 +1,62 @@
-# ============================================
-# games/game_opposite.py - لعبة ضد
-# ============================================
-
-"""
-لعبة ضد
-========
-إيجاد عكس الكلمة المعطاة
-تدعم التلميح وإظهار الإجابة
-"""
-
+from games.base import BaseGame
+import utils
 import random
-from .base import BaseGame
-from rules import POINTS, GAMES_INFO
-from utils import normalize_text
-
 
 class OppositeGame(BaseGame):
-    """لعبة إيجاد عكس الكلمة"""
-    
     def __init__(self):
-        game_info = GAMES_INFO['ضد']
-        super().__init__(
-            name=game_info['name'],
-            rounds=game_info['rounds'],
-            supports_hint=game_info['supports_hint']
-        )
-        
-        # قاعدة بيانات الكلمات وأضدادها
+        super().__init__('ضد', rounds=5, supports_hint=True, supports_skip=True)
         self.opposites = {
             'كبير': 'صغير',
             'طويل': 'قصير',
             'سريع': 'بطيء',
-            'حار': 'بارد',
-            'نظيف': 'وسخ',
+            'ساخن': 'بارد',
             'قوي': 'ضعيف',
-            'غني': 'فقير',
-            'سعيد': 'حزين',
             'جميل': 'قبيح',
-            'صعب': 'سهل',
-            'ثقيل': 'خفيف',
-            'مظلم': 'مضيء',
-            'عالي': 'منخفض',
-            'واسع': 'ضيق',
-            'جديد': 'قديم',
-            'نهار': 'ليل',
-            'شمس': 'قمر',
-            'أبيض': 'أسود',
-            'فوق': 'تحت',
-            'داخل': 'خارج',
+            'نظيف': 'قذر',
+            'غني': 'فقير',
+            'سهل': 'صعب',
             'قريب': 'بعيد',
-            'يمين': 'يسار',
-            'أمام': 'خلف',
-            'شرق': 'غرب',
+            'ثقيل': 'خفيف',
+            'واسع': 'ضيق',
+            'عالي': 'منخفض',
+            'جديد': 'قديم',
+            'مبكر': 'متأخر',
+            'نهار': 'ليل',
             'شمال': 'جنوب',
+            'شرق': 'غرب',
+            'صيف': 'شتاء',
+            'ذكر': 'انثى',
+            'ابيض': 'اسود',
+            'حلو': 'مر',
+            'صح': 'خطأ',
             'حي': 'ميت',
-            'صحيح': 'خاطئ',
-            'موجود': 'معدوم',
-            'ممكن': 'مستحيل',
-            'مفيد': 'ضار',
-            'محبوب': 'مكروه',
-            'جاف': 'رطب',
-            'ناعم': 'خشن',
-            'صلب': 'لين',
-            'مفتوح': 'مغلق',
-            'واضح': 'غامض',
-            'بداية': 'نهاية',
-            'دخول': 'خروج',
-            'صعود': 'هبوط',
-            'ربح': 'خسارة',
-            'نجاح': 'فشل',
-            'صدق': 'كذب',
-            'أمانة': 'خيانة',
-            'عدل': 'ظلم',
-            'سلام': 'حرب',
-            'محبة': 'كراهية',
-            'شجاعة': 'جبن',
-            'كرم': 'بخل',
-            'علم': 'جهل',
-            'نور': 'ظلام',
-            'حياة': 'موت'
+            'اول': 'اخير'
         }
-        
-        self.current_word = None
     
     def generate_question(self):
-        """
-        توليد سؤال جديد
-        
-        Returns:
-            نص السؤال
-        """
-        # اختيار كلمة عشوائية
-        self.current_word = random.choice(list(self.opposites.keys()))
-        
-        # حفظ الإجابة (الضد)
-        self.current_answer = self.opposites[self.current_word]
-        
-        # إنشاء السؤال
-        question = f'ما هو ضد كلمة: {self.current_word}؟'
-        
-        return question
+        word = random.choice(list(self.opposites.keys()))
+        self.current_question = f"ما هو عكس:\n{word}"
+        self.current_answer = self.opposites[word]
+        return {
+            'text': self.current_question,
+            'answer': self.current_answer
+        }
     
     def check_answer(self, user_id, answer):
-        """
-        التحقق من الإجابة
+        answer = answer.strip()
         
-        Args:
-            user_id: معرف المستخدم
-            answer: إجابة المستخدم
-            
-        Returns:
-            dict مع النتيجة
-        """
-        user_answer = normalize_text(answer).lower()
-        correct_answer = normalize_text(self.current_answer).lower()
-        
-        # التحقق من التطابق
-        is_correct = user_answer == correct_answer
-        
-        # حساب النقاط
-        points_earned = 0
-        if is_correct:
-            points_earned = POINTS['correct']
-            self.update_score(user_id, points_earned)
-        
-        # الانتقال للسؤال التالي
-        game_continues = self.next_question()
-        
-        result = {
-            'correct': is_correct,
-            'correct_answer': self.current_answer,
-            'original_word': self.current_word,
-            'points_earned': points_earned,
-            'total_points': self.get_score(user_id),
-            'current_round': self.current_round,
-            'total_rounds': self.total_rounds,
-            'game_ended': not game_continues,
-            'next_question': self.current_question if game_continues else None
-        }
-        
-        return result
+        if utils.normalize_text(answer) == utils.normalize_text(self.current_answer):
+            return {
+                'correct': True,
+                'message': 'صحيح! اجابة ممتازة',
+                'points': 2
+            }
+        else:
+            return {
+                'correct': False,
+                'message': f'خطأ! العكس هو: {self.current_answer}',
+                'points': 0
+            }
     
-    def get_hint(self):
-        """
-        الحصول على تلميح
-        
-        Returns:
-            التلميح
-        """
-        if not self.current_answer:
-            return "لا يوجد تلميح متاح"
-        
-        answer = self.current_answer
-        
-        # تلميح: الحرف الأول وعدد الأحرف
-        first_letter = answer[0]
-        length = len(answer)
-        hint_word = first_letter + ('_' * (length - 1))
-        
-        hint = f"التلميح: {hint_word} ({length} أحرف)"
-        
-        return hint
-    
-    def show_answer(self):
-        """
-        إظهار الإجابة الصحيحة
-        
-        Returns:
-            الإجابة
-        """
-        return f'ضد {self.current_word} هو: {self.current_answer}'
+    def _generate_hint(self):
+        return f"يبدأ بحرف '{self.current_answer[0]}' وعدد الاحرف: {len(self.current_answer)}"
