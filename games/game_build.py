@@ -1,114 +1,198 @@
-import random
-from linebot.models import FlexSendMessage
-from utils import normalize_text, create_game_card, create_hint_card, create_answer_card, create_results_card
+# ============================================
+# games/game_build.py - لعبة تكوين الكلمات
+# ============================================
 
-class BuildGame:
+"""
+لعبة تكوين الكلمات
+==================
+تكوين 3 كلمات من 6 حروف معطاة
+تدعم التلميح وإظهار الإجابة
+"""
+
+import random
+from .base import BaseGame
+from rules import POINTS, GAMES_INFO
+from utils import normalize_text
+
+
+class LettersWordsGame(BaseGame):
+    """لعبة تكوين كلمات من حروف"""
+    
     def __init__(self):
-        self.all_questions = [
+        game_info = GAMES_INFO['تكوين']
+        super().__init__(
+            name=game_info['name'],
+            rounds=game_info['rounds'],
+            supports_hint=game_info['supports_hint']
+        )
+        
+        # قاعدة بيانات التحديات
+        self.challenges = [
             {
-                "letters": ["م", "ح", "م", "د", "ل", "ح"],
-                "words": ["محمد", "لحم", "حمد"]
+                'letters': 'ب ر م ح د ل',
+                'words': ['برد', 'حمل', 'مدح']
             },
             {
-                "letters": ["س", "ا", "ل", "م", "ع", "ل"],
-                "words": ["سالم", "علم", "عسل"]
+                'letters': 'س ر ف ح ن م',
+                'words': ['سحر', 'فرح', 'نصر']
             },
             {
-                "letters": ["ن", "و", "ر", "ق", "م", "ر"],
-                "words": ["نور", "قمر", "رمق"]
+                'letters': 'ج ل م ر س ن',
+                'words': ['جمل', 'رسم', 'نجم']
             },
             {
-                "letters": ["ب", "ح", "ر", "ح", "ب", "ر"],
-                "words": ["بحر", "حرب", "برح"]
+                'letters': 'ك ت ب ل م ي',
+                'words': ['كتب', 'ليل', 'يمل']
             },
             {
-                "letters": ["ك", "ت", "ا", "ب", "ت", "ك"],
-                "words": ["كتاب", "باتك", "تكب"]
+                'letters': 'ق ل ب ح ر ن',
+                'words': ['قلب', 'بحر', 'نحل']
             },
             {
-                "letters": ["ج", "ب", "ل", "ب", "ل", "ج"],
-                "words": ["جبل", "بلج", "جلب"]
+                'letters': 'ع ل م س ي ر',
+                'words': ['علم', 'سير', 'يسر']
             },
             {
-                "letters": ["ش", "م", "س", "م", "س", "ش"],
-                "words": ["شمس", "مسش", "شسم"]
+                'letters': 'ن و ر ح ب م',
+                'words': ['نور', 'حب', 'رمح']
+            },
+            {
+                'letters': 'ص خ ر د ق ل',
+                'words': ['صخر', 'قدر', 'خلد']
+            },
+            {
+                'letters': 'ط ر ح ل ب س',
+                'words': ['طرح', 'لبس', 'حرب']
+            },
+            {
+                'letters': 'ف ج ر س ل م',
+                'words': ['فجر', 'سلم', 'رجل']
+            },
+            {
+                'letters': 'ش م س ر ق ن',
+                'words': ['شمس', 'رقص', 'نشر']
+            },
+            {
+                'letters': 'ذ ه ب ر ك م',
+                'words': ['ذهب', 'ركب', 'مذهب']
+            },
+            {
+                'letters': 'غ ي ر ب د ل',
+                'words': ['غير', 'بدل', 'لغة']
+            },
+            {
+                'letters': 'ظ ل م ن ف ر',
+                'words': ['ظلم', 'نفر', 'رمل']
+            },
+            {
+                'letters': 'ث و ب ر م ن',
+                'words': ['ثوب', 'رمن', 'بنت']
             }
         ]
-        self.questions = []
-        self.current_question = None
-        self.hints_used = 0
-        self.question_number = 0
-        self.total_questions = 5
-        self.player_scores = {}
-
-    def start_game(self):
-        self.questions = random.sample(self.all_questions, min(self.total_questions, len(self.all_questions)))
-        self.question_number = 0
-        self.player_scores = {}
-        self.hints_used = 0
-        return self.next_question()
-
-    def next_question(self):
-        if self.question_number >= self.total_questions:
-            return None
-        self.current_question = self.questions[self.question_number]
-        self.question_number += 1
-        self.hints_used = 0
         
-        letters_display = " - ".join(self.current_question['letters'])
+        self.current_challenge = None
+        self.expected_words_count = 3
+        self.found_words = []
+    
+    def generate_question(self):
+        """
+        توليد سؤال جديد
         
-        content = [
-            {"type": "text", "text": "🔤 كون 3 كلمات من الحروف التالية:", "size": "lg", "color": "#E8F4FF", "align": "center", "wrap": True},
-            {
-                "type": "box",
-                "layout": "vertical",
-                "backgroundColor": "#1a1f3a90",
-                "cornerRadius": "20px",
-                "paddingAll": "28px",
-                "margin": "lg",
-                "borderWidth": "2px",
-                "borderColor": "#00D9FF50",
-                "contents": [
-                    {"type": "text", "text": letters_display, "size": "xxl", "weight": "bold", "color": "#00D9FF", "align": "center", "wrap": True}
-                ]
-            },
-            {"type": "text", "text": "اكتب الكلمات الثلاث (كل كلمة في سطر منفصل)", "size": "sm", "color": "#8FB9D8", "align": "center", "margin": "lg", "wrap": True}
-        ]
+        Returns:
+            نص السؤال
+        """
+        # اختيار تحدي عشوائي
+        self.current_challenge = random.choice(self.challenges)
+        self.found_words = []
         
-        card = create_game_card("🔤 تكوين كلمات", self.question_number, self.total_questions, content)
-        return FlexSendMessage(alt_text=f"السؤال {self.question_number} - تكوين كلمات", contents=card)
-
+        # حفظ الكلمات المطلوبة
+        self.current_answer = self.current_challenge['words']
+        
+        # إنشاء السؤال
+        question = f"كون {self.expected_words_count} كلمات من الحروف التالية:\n"
+        question += self.current_challenge['letters']
+        question += "\n\nأجب بالكلمات مفصولة بفواصل"
+        
+        return question
+    
+    def check_answer(self, user_id, answer):
+        """
+        التحقق من الإجابة
+        
+        Args:
+            user_id: معرف المستخدم
+            answer: إجابة المستخدم
+            
+        Returns:
+            dict مع النتيجة
+        """
+        # تنظيف وتقسيم إجابة المستخدم
+        user_words = [normalize_text(word.strip()).lower() 
+                      for word in answer.split(',') if word.strip()]
+        
+        # تنظيف الكلمات المطلوبة
+        required_words = [normalize_text(word).lower() 
+                         for word in self.current_answer]
+        
+        # حساب عدد الكلمات الصحيحة
+        correct_count = 0
+        for word in user_words:
+            if word in required_words and word not in self.found_words:
+                self.found_words.append(word)
+                correct_count += 1
+        
+        # التحقق من الإجابة الكاملة
+        is_correct = len(self.found_words) >= self.expected_words_count
+        
+        # حساب النقاط
+        points_earned = 0
+        if is_correct:
+            points_earned = POINTS['correct']
+            self.update_score(user_id, points_earned)
+        
+        # الانتقال للسؤال التالي
+        game_continues = self.next_question()
+        
+        result = {
+            'correct': is_correct,
+            'correct_answer': ', '.join(self.current_answer),
+            'found_words': ', '.join(self.found_words) if self.found_words else 'لا يوجد',
+            'correct_count': len(self.found_words),
+            'required_count': self.expected_words_count,
+            'points_earned': points_earned,
+            'total_points': self.get_score(user_id),
+            'current_round': self.current_round,
+            'total_rounds': self.total_rounds,
+            'game_ended': not game_continues,
+            'next_question': self.current_question if game_continues else None
+        }
+        
+        return result
+    
     def get_hint(self):
-        if not self.current_question:
-            return None
-        first_word = self.current_question['words'][0]
-        hint_text = f"الكلمة الأولى: {first_word[0]} " + "_ " * (len(first_word) - 1)
-        extra = f"عدد حروفها: {len(first_word)}"
-        self.hints_used += 1
-        return FlexSendMessage(alt_text="تلميح", contents=create_hint_card(hint_text, extra))
-
+        """
+        الحصول على تلميح
+        
+        Returns:
+            التلميح
+        """
+        if not self.current_answer:
+            return "لا يوجد تلميح متاح"
+        
+        # تلميح: إظهار أول كلمة بشكل جزئي
+        first_word = self.current_answer[0]
+        hint_length = max(1, len(first_word) // 2)
+        hint_word = first_word[:hint_length] + ('_' * (len(first_word) - hint_length))
+        
+        hint = f"التلميح: إحدى الكلمات تبدأ بـ: {hint_word}"
+        
+        return hint
+    
     def show_answer(self):
-        if not self.current_question:
-            return None
-        answer = "\n".join(self.current_question['words'])
-        return FlexSendMessage(alt_text="الإجابة الصحيحة", contents=create_answer_card(answer))
-
-    def check_answer(self, answer, user_id, display_name):
-        if not self.current_question:
-            return None
+        """
+        إظهار الإجابة الصحيحة
         
-        # تقسيم الإجابة إلى كلمات
-        user_words = [normalize_text(word.strip()) for word in answer.split('\n') if word.strip()]
-        correct_words = [normalize_text(word) for word in self.current_question['words']]
-        
-        # التحقق من أن جميع الكلمات صحيحة
-        if len(user_words) == 3 and set(user_words) == set(correct_words):
-            points = 2 if self.hints_used == 0 else 1
-            if user_id not in self.player_scores:
-                self.player_scores[user_id] = {'name': display_name, 'score': 0}
-            self.player_scores[user_id]['score'] += points
-            return {'correct': True, 'points': points}
-        return None
-
-    def get_final_results(self):
-        return create_results_card(self.player_scores)
+        Returns:
+            الإجابة
+        """
+        return f'الكلمات المطلوبة: {", ".join(self.current_answer)}
