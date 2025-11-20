@@ -1,190 +1,61 @@
-# ============================================
-# games/base.py - الكلاس الأساسي للألعاب
-# ============================================
-
-"""
-الكلاس الأساسي للألعاب
-======================
-جميع الألعاب ترث من هذا الكلاس
-"""
-
 from abc import ABC, abstractmethod
-from datetime import datetime
-
 
 class BaseGame(ABC):
-    """الكلاس الأساسي لجميع الألعاب"""
-    
-    def __init__(self, name, rounds=5, supports_hint=True):
-        """
-        تهيئة اللعبة
-        
-        Args:
-            name: اسم اللعبة
-            rounds: عدد الجولات
-            supports_hint: هل تدعم التلميح
-        """
+    def __init__(self, name, rounds=5, supports_hint=True, supports_skip=True):
         self.name = name
-        self.total_rounds = rounds
-        self.current_round = 0
+        self.rounds = rounds
         self.supports_hint = supports_hint
-        self.players_scores = {}
+        self.supports_skip = supports_skip
+        self.current_round = 1
         self.current_question = None
         self.current_answer = None
-        self.started_at = datetime.now()
-        self.is_active = True
+        self.hint_used = False
     
     @abstractmethod
     def generate_question(self):
-        """
-        توليد سؤال جديد
-        يجب تنفيذها في كل لعبة
-        
-        Returns:
-            السؤال الجديد
-        """
         pass
     
     @abstractmethod
     def check_answer(self, user_id, answer):
-        """
-        التحقق من الإجابة
-        يجب تنفيذها في كل لعبة
-        
-        Args:
-            user_id: معرف المستخدم
-            answer: الإجابة
-            
-        Returns:
-            dict مع النتيجة
-        """
         pass
     
-    def get_current_question(self):
-        """
-        الحصول على السؤال الحالي أو توليد جديد
-        
-        Returns:
-            السؤال الحالي
-        """
-        if not self.current_question or self.current_round == 0:
-            self.next_question()
-        
-        return self.current_question
-    
-    def next_question(self):
-        """الانتقال للسؤال التالي"""
-        if self.current_round < self.total_rounds:
-            self.current_round += 1
-            self.current_question = self.generate_question()
-            return True
-        else:
-            self.is_active = False
-            return False
-    
     def get_hint(self):
-        """
-        الحصول على تلميح
-        يمكن تخصيصها في كل لعبة
+        if not self.supports_hint:
+            return "التلميح غير متاح في هذه اللعبة"
         
-        Returns:
-            التلميح أو None
-        """
-        if not self.supports_hint or not self.current_answer:
-            return None
+        if self.hint_used:
+            return "لقد استخدمت التلميح بالفعل لهذا السؤال"
         
-        # تلميح افتراضي: إظهار بعض الأحرف
-        answer = str(self.current_answer)
-        hint_length = max(1, len(answer) // 3)
+        self.hint_used = True
+        return self._generate_hint()
+    
+    def _generate_hint(self):
+        if not self.current_answer:
+            return "لا يوجد تلميح متاح"
         
-        hint = answer[:hint_length] + ('_' * (len(answer) - hint_length))
-        return hint
+        hint_length = max(1, len(self.current_answer) // 3)
+        return f"الحل يبدأ بـ: {self.current_answer[:hint_length]}..."
     
     def show_answer(self):
-        """
-        إظهار الإجابة الصحيحة
-        
-        Returns:
-            الإجابة الصحيحة
-        """
-        return self.current_answer
+        return self.current_answer if self.current_answer else "لا توجد اجابة"
     
-    def add_player(self, user_id):
-        """
-        إضافة لاعب
-        
-        Args:
-            user_id: معرف المستخدم
-        """
-        if user_id not in self.players_scores:
-            self.players_scores[user_id] = 0
-    
-    def update_score(self, user_id, points):
-        """
-        تحديث نقاط اللاعب
-        
-        Args:
-            user_id: معرف المستخدم
-            points: النقاط المضافة
-        """
-        self.add_player(user_id)
-        self.players_scores[user_id] += points
-    
-    def get_score(self, user_id):
-        """
-        الحصول على نقاط اللاعب
-        
-        Args:
-            user_id: معرف المستخدم
-            
-        Returns:
-            النقاط
-        """
-        return self.players_scores.get(user_id, 0)
+    def next_question(self):
+        self.current_round += 1
+        self.hint_used = False
+        return self.generate_question()
     
     def get_state(self):
-        """
-        الحصول على حالة اللعبة
-        
-        Returns:
-            dict مع حالة اللعبة
-        """
         return {
             'name': self.name,
-            'current_round': self.current_round,
-            'total_rounds': self.total_rounds,
-            'is_active': self.is_active,
-            'supports_hint': self.supports_hint,
-            'players_count': len(self.players_scores),
-            'started_at': self.started_at.isoformat()
+            'round': self.current_round,
+            'total_rounds': self.rounds,
+            'question': self.current_question,
+            'answer': self.current_answer,
+            'hint_used': self.hint_used
         }
     
-    def is_game_ended(self):
-        """
-        التحقق من انتهاء اللعبة
-        
-        Returns:
-            True إذا انتهت اللعبة
-        """
-        return self.current_round >= self.total_rounds or not self.is_active
-    
-    def get_winner(self):
-        """
-        الحصول على الفائز
-        
-        Returns:
-            معرف الفائز أو None
-        """
-        if not self.players_scores:
-            return None
-        
-        return max(self.players_scores.items(), key=lambda x: x[1])[0]
-    
     def reset(self):
-        """إعادة تعيين اللعبة"""
-        self.current_round = 0
-        self.players_scores = {}
+        self.current_round = 1
         self.current_question = None
         self.current_answer = None
-        self.is_active = True
-        self.started_at = datetime.now()
+        self.hint_used = False
