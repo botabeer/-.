@@ -1,174 +1,72 @@
-# ============================================
-# games/game_compatibility.py - لعبة التوافق
-# ============================================
-
-"""
-لعبة التوافق
-============
-حساب نسبة التوافق بين اسمين
-لعبة ترفيهية بدون تلميح أو إظهار إجابة
-جولة واحدة فقط
-"""
-
+from games.base import BaseGame
 import random
-from .base import BaseGame
-from rules import POINTS, GAMES_INFO
-from utils import normalize_text
-
 
 class CompatibilityGame(BaseGame):
-    """لعبة حساب التوافق بين الأسماء"""
-    
     def __init__(self):
-        game_info = GAMES_INFO['توافق']
-        super().__init__(
-            name=game_info['name'],
-            rounds=game_info['rounds'],  # جولة واحدة فقط
-            supports_hint=game_info['supports_hint']  # False
-        )
-        
-        self.name1 = None
-        self.name2 = None
-        self.compatibility_percentage = 0
-        self.waiting_for_names = True
+        super().__init__('توافق', rounds=1, supports_hint=False, supports_skip=False)
     
     def generate_question(self):
-        """
-        توليد سؤال جديد
-        
-        Returns:
-            نص السؤال
-        """
-        question = "أدخل اسمين لحساب نسبة التوافق بينهما\nمثال: محمد, فاطمة"
-        
-        return question
-    
-    def calculate_compatibility(self, name1, name2):
-        """
-        حساب نسبة التوافق (خوارزمية ترفيهية)
-        
-        Args:
-            name1: الاسم الأول
-            name2: الاسم الثاني
-            
-        Returns:
-            نسبة التوافق (0-100)
-        """
-        # تنظيف الأسماء
-        name1 = normalize_text(name1).lower()
-        name2 = normalize_text(name2).lower()
-        
-        # خوارزمية بسيطة: حساب الأحرف المشتركة
-        common_letters = set(name1) & set(name2)
-        all_letters = set(name1) | set(name2)
-        
-        if not all_letters:
-            base_percentage = 50
-        else:
-            base_percentage = (len(common_letters) / len(all_letters)) * 100
-        
-        # إضافة عامل عشوائي للتنويع (+/- 20)
-        random_factor = random.randint(-20, 20)
-        
-        # حساب النسبة النهائية
-        percentage = int(base_percentage + random_factor)
-        
-        # التأكد من أن النسبة بين 1 و 100
-        percentage = max(1, min(100, percentage))
-        
-        return percentage
-    
-    def get_compatibility_message(self, percentage):
-        """
-        الحصول على رسالة حسب نسبة التوافق
-        
-        Args:
-            percentage: نسبة التوافق
-            
-        Returns:
-            الرسالة المناسبة
-        """
-        if percentage >= 90:
-            return "توافق ممتاز! تكاد تكونان متطابقين"
-        elif percentage >= 75:
-            return "توافق عالي جداً! علاقة رائعة"
-        elif percentage >= 60:
-            return "توافق جيد! يمكن بناء علاقة قوية"
-        elif percentage >= 45:
-            return "توافق متوسط. يحتاج إلى بعض التفاهم"
-        elif percentage >= 30:
-            return "توافق منخفض. قد تواجهان بعض التحديات"
-        else:
-            return "توافق ضعيف. شخصيات مختلفة جداً"
+        self.current_question = "اكتب اسمين مفصولين بمسافة"
+        return {
+            'text': self.current_question,
+            'answer': None
+        }
     
     def check_answer(self, user_id, answer):
-        """
-        التحقق من الإجابة (معالجة الأسماء)
+        answer = answer.strip()
+        parts = answer.split()
         
-        Args:
-            user_id: معرف المستخدم
-            answer: الأسماء المدخلة
-            
-        Returns:
-            dict مع النتيجة
-        """
-        # تقسيم الأسماء
-        names = [name.strip() for name in answer.split(',')]
-        
-        if len(names) < 2:
+        if len(parts) < 2:
             return {
                 'correct': False,
-                'error': 'يرجى إدخال اسمين مفصولين بفاصلة',
-                'game_ended': False
+                'message': 'الرجاء كتابة اسمين مفصولين بمسافة',
+                'points': 0
             }
         
-        self.name1 = names[0]
-        self.name2 = names[1]
+        name1 = parts[0]
+        name2 = ' '.join(parts[1:])
         
-        # حساب نسبة التوافق
-        self.compatibility_percentage = self.calculate_compatibility(
-            self.name1, self.name2
-        )
+        percentage = self._calculate_compatibility(name1, name2)
         
-        # الحصول على الرسالة
-        message = self.get_compatibility_message(self.compatibility_percentage)
+        emoji = self._get_emoji(percentage)
+        description = self._get_description(percentage)
         
-        # تحديث النتيجة
-        self.update_score(user_id, POINTS['skip'])  # نقاط صفر لأنها لعبة ترفيهية
+        message = f"{emoji} نسبة التوافق بين:\n{name1} و {name2}\n\n{percentage}%\n\n{description}"
         
-        # إنهاء اللعبة (جولة واحدة فقط)
-        self.is_active = False
-        
-        result = {
+        return {
             'correct': True,
-            'name1': self.name1,
-            'name2': self.name2,
-            'compatibility_percentage': self.compatibility_percentage,
             'message': message,
-            'points_earned': 0,
-            'total_points': self.get_score(user_id),
-            'current_round': 1,
-            'total_rounds': 1,
-            'game_ended': True,
-            'next_question': None
+            'points': 0
         }
-        
-        return result
     
-    def get_hint(self):
-        """
-        لا تدعم التلميح
-        
-        Returns:
-            None
-        """
-        return None
+    def _calculate_compatibility(self, name1, name2):
+        combined = name1 + name2
+        seed = sum(ord(c) for c in combined)
+        random.seed(seed)
+        percentage = random.randint(1, 100)
+        random.seed()
+        return percentage
     
-    def show_answer(self):
-        """
-        لا تدعم إظهار الإجابة
-        
-        Returns:
-            None
-        """
-        return None
+    def _get_emoji(self, percentage):
+        if percentage >= 90:
+            return ''
+        elif percentage >= 70:
+            return ''
+        elif percentage >= 50:
+            return ''
+        elif percentage >= 30:
+            return ''
+        else:
+            return ''
+    
+    def _get_description(self, percentage):
+        if percentage >= 90:
+            return 'توافق رائع! علاقة مثالية'
+        elif percentage >= 70:
+            return 'توافق ممتاز! علاقة قوية'
+        elif percentage >= 50:
+            return 'توافق جيد! علاقة متوازنة'
+        elif percentage >= 30:
+            return 'توافق متوسط! تحتاج جهد'
+        else:
+            return 'توافق ضعيف! علاقة صعبة'
